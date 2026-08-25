@@ -2,12 +2,23 @@
 
 > **核心理念**：通过**流程规范化** + **输出物标准化**，使 Agent 状态识别从"黑盒推断"转变为"约定式识别"。
 
+> **文档地位：本文档是 MACAO v2.0 的权威基准文档**，其他文档与本文档不一致时，以本文档为准。
+>
+> **文档体系**（docs/）：
+>
+> | 文档 | 角色 | 状态 |
+> |------|------|------|
+> | `SRSv1.md` | v1.0 原始设计（产品暂定名 "A"） | 历史基线，已被 v2.0 取代 |
+> | `MACAO_PRD_v2.md` | v2.0 产品方案（本文档） | **权威基准** |
+> | `EXECUTIVE_SUMMARY.md` | v2.0 执行摘要与快速参考 | 本文档的摘要 |
+> | `IMPROVEMENT_SUMMARY.md` | v1.0 → v2.0 改进对比 | 演进过程说明 |
+
 ---
 
 ## 执行摘要
 
 ### 产品定义
-**MACAO** 是一个面向 AI 软件开发团队的**跨终端 CLI 进程编排平台**，通过统一调度不同厂商的 CLI Coding Agent（Claude Code, Codex, Kimi-Code 等），实现跨物理机、多角色、多阶段的软件研发自动化协作。
+**MACAO** 是一个面向 AI 软件开发团队的**跨终端 CLI 进程编排平台**，通过统一调度不同厂商的 CLI Coding Agent（Claude Code, Codex, Kimi-Code 等），实现跨物理机、多角色、多阶段的软件研发自动化协作。（MVP 阶段聚焦单机本地场景，跨物理机/远程 SSH 支持规划于 v1.1，见 §4.1）
 
 ### 核心差异化
 - ✅ **不追求支持所有 CLI**，而是建立"标准兼容规范"
@@ -294,8 +305,8 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
   "executor": "cc-ds4",
   
   "review_round": 1,
-  "reviewers_total": 3,
-  "reviewers_responded": 3,
+  "reviewers_total": 2,
+  "reviewers_responded": 2,
   
   "votes": [
     {
@@ -305,14 +316,8 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
       "issues_count": 3
     },
     {
-      "reviewer": "qwen",
-      "vote": "YES_APPROVE",
-      "confidence": 0.88,
-      "issues_count": 0
-    },
-    {
       "reviewer": "kimi",
-      "vote": "YES_APPROVE",
+      "vote": "NO_APPROVE",
       "confidence": 0.85,
       "issues_count": 1
     }
@@ -320,8 +325,8 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
   
   "consensus_rule": "2/3_majority",
   "vote_breakdown": {
-    "approve": 2,
-    "reject": 1,
+    "approve": 0,
+    "reject": 2,
     "abstain": 0
   },
   
@@ -350,9 +355,31 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
 }
 ```
 
+**共识规则（2/3 多数）**：
+
+- 有效票 = 响应的 Reviewer 票数 − 弃权票（弃权不计入分母）
+- 赞成票 / 有效票 ≥ 2/3 → 决策 `APPROVED`（进入合并）
+- 反对票 / 有效票 ≥ 2/3 → 决策 `REWORK_REQUIRED`（进入返工）
+- 两者均未达到（如 2 Reviewer 配置下 1 赞成 + 1 反对）→ Consensus Deadlock，触发人工接管（见 §6.1），由用户裁定 `APPROVED` 或 `REWORK`
+- Reviewer 配置：MVP 阶段为 2 Reviewer（Codex + Kimi），此时 2/3 规则要求全票通过；3 Reviewer 为目标配置（如引入第二个 Codex 实例），协议本身支持 N 个 Reviewer
+
 ---
 
 ### 2.4 AEP (Agent Event Protocol) Message 规范
+
+AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关系）：
+
+| # | 消息类型 | 方向 | 用途 | v1.0 对应 |
+|---|---------|------|------|----------|
+| 1 | `DEVELOPMENT_STARTED` | MACAO → Executor | 下发开发任务与成功标准 | `TASK_ASSIGN` |
+| 2 | `REVIEW_REQUEST` | MACAO → Reviewers | 发起评审，携带完整 `review_context` | 同名 |
+| 3 | `REVIEW_RESPONSE` | Reviewer → MACAO | 返回 `.review.yml` 与投票 | `REVIEW_RESULT` |
+| 4 | `REWORK_REQUEST` | MACAO → Executor | 下发返工问题清单 | v2.0 新增 |
+| 5 | `MERGE_COMPLETED` | MACAO → 全体 | 通告共识达成与合并结果 | v2.0 新增 |
+| 6 | `STATE_CHANGED` | Agent → MACAO | Agent 上报自身状态变化 | 同名 |
+| 7 | `HUMAN_OVERRIDE_REQUEST` | MACAO → User | 请求人工接管决策 | v2.0 新增 |
+
+以下给出开发/评审主流程的 4 个核心消息类型（1-4）的详细格式示例；类型 5-7 遵循相同的信封结构（`protocol` / `message_id` / `timestamp` / `type` / `from` / `payload`）。
 
 #### Type A：开发阶段通知
 
@@ -392,7 +419,7 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
   
   "type": "REVIEW_REQUEST",
   "from": "macao",
-  "to_agents": ["cc-glm", "qwen", "kimi"],
+  "to_agents": ["cc-glm", "kimi"],
   
   "payload": {
     "project": "washdb",
@@ -570,7 +597,7 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
     
     # 根据行为推断状态（仅作参考，不改变实际状态）
     inferred_state = infer_state_from_behavior(behavior_signals)
-    log_behavior_inference(agent_id, inferred_state, confidence=0.75)
+    log_behavior_inference(agent_id, inferred_state, confidence=0.8)
     
     # 如果没有显式信号，发出预警
     if not dev_checkpoint:
@@ -582,7 +609,7 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
         logs = get_terminal_logs(agent_id, lines=300)
         diagnosis = call_llm_for_diagnosis(logs, behavior_signals)
         
-        if diagnosis.confidence < 0.6:
+        if diagnosis.confidence < 0.7:
             trigger_human_override(
                 agent_id=agent_id,
                 reason="State ambiguous, awaiting human decision",
@@ -605,7 +632,7 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 | `CONSENSUS_CHECK` | `vote_result.json` 决策字段 = `APPROVED` | `DONE` | Explicit | ✅✅✅ |
 | `CONSENSUS_CHECK` | `vote_result.json` 决策字段 = `REWORK_REQUIRED` | `REWORK` | Explicit | ✅✅✅ |
 | `REWORK` | `.dev.yml` 被重新创建 + 新 commit | `CODING` | Explicit | ✅✅✅ |
-| `*` (任意) | 60min 无进展 + Layer 3 置信度 <0.6 | `UNKNOWN` + 人工介入 | LLM | ⚠️ |
+| `*` (任意) | 60min 无进展 + Layer 3 置信度 <0.7 | `UNKNOWN` + 人工介入 | LLM | ⚠️ |
 
 ---
 
@@ -632,10 +659,12 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 ### 4.2 分期交付计划
 
 ```
-Week 1-2: Architecture & .yml Schema Design
+Week 1-2: 方案定敲 + PoC 验证
   ├─ 完成 .dev.yml, .review.yml, vote_result.json 详细设计
   ├─ 定义 AEP 消息格式
-  └─ 完成 State Recognition FSM 文档
+  ├─ 完成 State Recognition FSM 文档
+  ├─ PoC：验证 Claude Code Hook API 与 Codex/Kimi PTY 交互
+  └─ 里程碑：单 Executor + 单 Reviewer 工作流 PoC 跑通
 
 Week 3-4: Core Adapter Layer
   ├─ Claude Code Adapter (PTY + Hook)
@@ -678,7 +707,7 @@ Week 7-8: Polish & Documentation
 MACAO 在发送 `REVIEW_REQUEST` 时，必须提供完整的 Context：
 
 ```yaml
-reviewer_context:
+review_context:
   # 1. 任务背景
   task_info:
     description: "Refactored database connection pooling"
@@ -807,6 +836,18 @@ HUMAN_OVERRIDE_TRIGGERS = [
         "description": "Executor CLI crashed unexpectedly",
         "action": "Attempt restart 1x, then ask user: 'Retry or abandon?'",
         "timeout": "Immediate"
+    },
+    {
+        "condition": "Git conflict",
+        "description": "Merge failed due to git conflicts",
+        "action": "Ask user: 'Resolve conflict manually and continue?'",
+        "timeout": "Until conflict resolved"
+    },
+    {
+        "condition": "Unknown state",
+        "description": "System stuck > 60min AND Layer 3 diagnosis confidence < 0.7",
+        "action": "Ask user: 'Reset to last known state?'",
+        "timeout": "Immediate"
     }
 ]
 ```
@@ -839,7 +880,7 @@ Abort Path (Too many conflicts):
 | K8s 概念 | MACAO 对应 | 实现方式 |
 |---------|----------|--------|
 | Pod | CLI Agent Session | PTY Process + Adapter |
-| Service | Agent Registry | 本地 JSON + 远程 SSH 配置 |
+| Service | Agent Registry | 本地 JSON 配置（远程 SSH 配置预留 v1.1） |
 | ConfigMap | `.dev.yml` + `.review.yml` | YAML 文件 |
 | Event | AEP Message | agmsg Queue |
 | StatefulSet | Agent Lifecycle | LangGraph FSM |
@@ -869,18 +910,21 @@ Merge: Push to main           |    Consensus + Merge
 | KPI | Target | 测量方式 |
 |-----|--------|---------|
 | **State Recognition Accuracy** | >95% | 自动化测试覆盖 |
+| **Explicit Signal Usage Rate** | >99% | 状态转换由 .yml 驱动的比例 |
 | **Workflow Completion Rate** | >90% | 无人工介入的完成比例 |
 | **Human Override Frequency** | <10% | 总流程数中人工接管比例 |
 | **Reviewer Average Response Time** | <5min | 从消息发送到响应 |
 | **False Positive Alerts** | <5% | 不实警告占总警告比 |
+| **MACAO Recovery Time** | <30s | 从崩溃恢复（故障测试） |
 
 ### 8.2 用户 KPI
 
-| KPI | Target | 说明 |
-|-----|--------|------|
-| **Code Review Turnaround Time** | 从 2h 降至 15min | 自动化评审的加速 |
-| **Multi-Reviewer Consensus Time** | 从 3h 降至 8min | 并行评审 vs 串行 |
-| **Developer Cognitive Load** | 从 5 reviewer emails 降至 1 dashboard | 信息整合 |
+| KPI | Baseline | Target | 改善 |
+|-----|----------|--------|------|
+| **Code Review Turnaround Time** | 2 小时 | 15 分钟 | ↓ 87% |
+| **Multi-Reviewer Consensus Time** | 3 小时 | 8 分钟 | ↓ 96% |
+| **Developer Cognitive Load** | 5 封评审消息 | 1 条汇总消息 | ↓ 80% |
+| **Rework Cycles (平均)** | 2-3 轮 | <2 轮 | ↓ 30% |
 
 ---
 
@@ -909,7 +953,7 @@ Merge: Push to main           |    Consensus + Merge
 ### 立即行动项 (Next 2 weeks)
 
 - [ ] **技术 PoC**：实现 Claude Code Adapter，验证 Hook API 可用性
-- [ ] **方案评审**：与 Anthropic、ByteDance（Codex/Kimi）接洽，确认 API 承诺
+- [ ] **方案评审**：与 Anthropic、OpenAI（Codex）、Moonshot（Kimi）接洽，确认 API 承诺
 - [ ] **用户研究**：采访 5-10 个多人开发团队，验证场景真实性和痛点优先级
 - [ ] **Prototype UI**：用 `rich` 库实现简单的 CLI 交互 demo
 - [ ] **文档完善**：补全本 PRD 中的 edge cases 和错误处理细节
@@ -925,5 +969,6 @@ Merge: Push to main           |    Consensus + Merge
 ---
 
 **版本历史**
-- v1.0 (Original): 高阶架构设计
-- v2.0 (This): 规范化流程 + 标准输出物 + 改进状态识别
+- v1.0: 高阶架构设计（即 `SRSv1.md`，产品暂定名 "A"）
+- v1.5: 专家评审意见反馈（见 `IMPROVEMENT_SUMMARY.md` 第四节）
+- v2.0 (本文档): 规范化流程 + 标准输出物 + 改进状态识别

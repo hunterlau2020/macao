@@ -1,6 +1,8 @@
 # MACAO v2.0 改进对比总结
 
 > 本文档详细说明 v2.0 如何融合了评审意见、第二位专家的优化建议，以及最关键的"规范化流程"创新。
+>
+> **文档地位**：本文档对比说明 v1.0（`SRSv1.md`）→ v2.0（`MACAO_PRD_v2.md`）的改进；设计细节与口径以 `MACAO_PRD_v2.md` 为准。
 
 ---
 
@@ -456,7 +458,7 @@ MACAO 的借鉴：
 
 ### 立即行动（下周）
 - [ ] 与 Anthropic 接洽确认 Claude Code Hook API 稳定性
-- [ ] 与 ByteDance 接洽确认 Codex/Kimi PTY 交互方式
+- [ ] 与 OpenAI / Moonshot 接洽确认 Codex / Kimi PTY 交互方式
 - [ ] 完成 .dev.yml 与 .review.yml 的 Schema 定义
 - [ ] 启动 PoC：单 Executor + 单 Reviewer 流程
 
@@ -468,15 +470,15 @@ MACAO 的借鉴：
 ### 成功指标（MVP 完成）
 - ✅ 单机 Claude + 2x Reviewer 完整工作流通过
 - ✅ State Accuracy > 95%（99% 由显式信号驱动）
-- ✅ Reviewer Override < 10%（人工介入比例）
+- ✅ Human Override < 10%（人工介入比例）
 - ✅ 自动化测试覆盖 > 80%
 - ✅ 文档完备（用户手册 + 内部 API 文档）
 
 ---
 
 **版本历史**
-- v1.0: 原始高阶架构设计
+- v1.0: 原始高阶架构设计（即 `SRSv1.md`，产品暂定名 "A"）
 - v1.5: 第一位专家评审意见反馈
-- v2.0: 融合两位专家意见 + 规范化流程创新
+- v2.0: 融合两位专家意见 + 规范化流程创新（即 `MACAO_PRD_v2.md`）
 
 **下一步**：Review 本文档，反馈是否有理解偏差或遗漏之处。

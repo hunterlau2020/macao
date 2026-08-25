@@ -1,5 +1,19 @@
 # 产品方案：Multi-and-Autonomous CLI Agent Orchestrator（暂称 A）
 
+> **文档地位：v1.0 原始设计（历史基线文档）**
+>
+> 文中产品暂定名 "A" 已正式定名为 **MACAO（Multi-Agent CLI Agent Orchestrator）**。本文档为 v1.0 高阶架构设计，以下内容已在 v2.0（`MACAO_PRD_v2.md`，权威基准）中更新：
+>
+> | 本文档（v1.0） | v2.0 调整 |
+> |---|---|
+> | 状态识别第一层 = Hook/API 事件 | 改为 `.dev.yml` / `.review.yml` 显式产物信号；Layer 2/3 仅作辅助与诊断 |
+> | 第一阶段 4 CLI（含 OpenCode），架构含远程 Agent | MVP 收敛为单机 3 CLI：Claude Code（Executor）+ Codex / Kimi（Reviewers） |
+> | AEP 消息：`TASK_ASSIGN` / `REVIEW_RESULT` 等 | 统一为 7 种消息类型：`DEVELOPMENT_STARTED` / `REVIEW_RESPONSE` 等（见 PRD §2.4） |
+> | 投票规则未明确 | 明确 2/3 多数投票 + `vote_result.json` 记录（见 PRD §2.3） |
+> | 人工接管仅提概念 | 明确 6 个 HUMAN_OVERRIDE 触发条件（见 PRD §6.1） |
+>
+> **文档体系**：本文档（v1.0 基线）→ `MACAO_PRD_v2.md`（v2.0 主文档）→ `EXECUTIVE_SUMMARY.md`（执行摘要）/ `IMPROVEMENT_SUMMARY.md`（改进对比）
+
 ## 1. 产品定位
 
 ### 产品名称（暂定）

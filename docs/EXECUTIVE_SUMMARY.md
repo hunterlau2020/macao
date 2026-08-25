@@ -1,5 +1,9 @@
 # MACAO 产品设计 - 执行摘要与快速参考
 
+> **文档地位**：本文档是 `MACAO_PRD_v2.md`（v2.0 权威基准文档）的执行摘要与快速参考，细节以 PRD 为准。
+>
+> **文档体系**：`SRSv1.md`（v1.0 历史基线）→ `MACAO_PRD_v2.md`（v2.0 主文档）→ 本文档（执行摘要）+ `IMPROVEMENT_SUMMARY.md`（v1.0 → v2.0 改进对比）
+
 ---
 
 ## 📋 一句话说清楚
@@ -52,7 +56,7 @@
 ─────────────────────────────────────────────────
 状态识别可靠性          60-80% 推断       99% 显式信号
 Reviewer Context       无                 完整 review_context
-MVP 范围               4 CLI + 远程         1 CLI (local only)
+MVP 范围               4 CLI + 远程         3 CLI (local only)
 流程规范程度           隐含理解           显式 .yml 约定
 人工接管点             模糊               6 个清晰触发条件
 故障恢复难度           困难               查看 .yml 文件即可
@@ -114,6 +118,7 @@ Local CLI Processes (PTY)
 ```yaml
 version: "1.0"
 status: "ready_for_review"  # ← MACAO 读这行来判断开发是否完成
+signal: "EXPLICIT"          # ← 显式信号标记，Layer 1 无条件信任
 executor:
   id: "cc-ds4"
   cli: "claude-code"
@@ -148,7 +153,7 @@ reviewer:
   cli: "codex"
 
 opinion:
-  status: "CHANGES_REQUESTED"  # ← YES_APPROVE 或 NO_APPROVE
+  status: "CHANGES_REQUESTED"  # ← APPROVED | CHANGES_REQUESTED | REJECTED
   confidence: 0.92
   
   feedback:
@@ -170,10 +175,9 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
   "checkpoint": "a1b2c3d",
   "votes": [
     {"reviewer": "cc-glm", "vote": "NO_APPROVE"},
-    {"reviewer": "qwen", "vote": "YES_APPROVE"},
-    {"reviewer": "kimi", "vote": "YES_APPROVE"}
+    {"reviewer": "kimi", "vote": "NO_APPROVE"}
   ],
-  "decision": "REWORK_REQUIRED",  # ← 2/3 多数规则
+  "decision": "REWORK_REQUIRED",  # ← 2/3 多数规则：反对 2/2 ≥ 2/3
   "next_step": "Send REWORK_REQUEST to executor"
 }
 ```
@@ -233,7 +237,7 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 - [ ] Codex Adapter（PTY Wrapper）
 - [ ] Kimi Adapter（PTY Wrapper）
 - [ ] .dev.yml / .review.yml / vote_result.json 规范
-- [ ] LangGraph FSM（5 个主要状态）
+- [ ] LangGraph FSM（8 个主要状态，见 PRD §3.3）
 - [ ] 2/3 投票共识规则
 - [ ] AEP Message 协议（7 种消息类型）
 - [ ] CLI 交互界面（Rich + prompt_toolkit）
@@ -258,7 +262,7 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 ```
 Week 1-2: 方案定敲 + PoC 验证
 ├─ 与 Anthropic 确认 Claude Code Hook API 稳定性
-├─ 与 ByteDance 确认 Codex/Kimi PTY 可行性
+├─ 与 OpenAI / Moonshot 确认 Codex / Kimi PTY 可行性
 ├─ 完成 .yml Schema 和 AEP 格式定义
 └─ 里程碑：单 Executor + 单 Reviewer 工作流 PoC
 
@@ -303,7 +307,10 @@ Week 8: 文档与发布
 |-----|--------|---------|
 | State Recognition Accuracy | >95% | 自动化测试 |
 | Explicit Signal Usage Rate | >99% | 日志统计 |
+| Workflow Completion Rate | >90% | 无人工介入的完成比例 |
 | Human Override Frequency | <10% | 审计日志 |
+| Reviewer Average Response Time | <5min | 从消息发送到响应 |
+| False Positive Alerts | <5% | 不实警告占总警告比 |
 | MACAO Recovery Time (从崩溃恢复) | <30s | 故障测试 |
 
 ### 用户 KPI（衡量用户体验改善）
@@ -338,6 +345,8 @@ Week 8: 文档与发布
 
 **理由**：平衡效率与质量，1 个 Reviewer 的"异议"不应该卡住所有人。
 
+**补充口径**（见 PRD §2.3）：有效票 = 响应票 − 弃权票。MVP 为 2 Reviewer 配置（Codex + Kimi），2/3 规则下需全票赞成方可通过；1 赞成 + 1 反对时触发 Consensus Deadlock 人工接管。3 Reviewer 为目标配置，协议支持 N 个 Reviewer。
+
 ### 决策 3：为什么 MVP 不支持远程 SSH？
 
 | 支持方式 | 复杂度 | 交付周期 | 收益 | 选择 |
@@ -365,7 +374,7 @@ Week 8: 文档与发布
 ## 📍 立即行动项（下周）
 
 - [ ] **联系 Anthropic**：确认 Claude Code CLI Hook API 的稳定性承诺
-- [ ] **联系 ByteDance**：确认 Codex / Kimi CLI 是否支持 PTY 交互
+- [ ] **联系 OpenAI / Moonshot**：确认 Codex / Kimi CLI 是否支持 PTY 交互
 - [ ] **完成 Schema**：.dev.yml 和 .review.yml 的 YAML Schema（JSON Schema Format）
 - [ ] **启动 PoC**：搭建测试环境，跑通单 Executor → 单 Reviewer 的流程
 - [ ] **团队同步**：Review 本文档，对各模块的责任人进行分工
@@ -403,7 +412,7 @@ Week 8: 文档与发布
 ### Q: v2.0 比原方案"小"了，会不会无法解决真实问题？
 
 **A**: 不会。原方案的问题在于**过度承诺**。通过缩小范围并做到极致，我们反而能：
-- 更快交付（8 周 vs 16 周）
+- 更快交付（8 周 vs 12-16 周）
 - 质量更高（99% 可靠性 vs 60%）
 - 用户体验更好（清晰的决策链 vs 黑盒推断）
 
