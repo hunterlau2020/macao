@@ -87,7 +87,7 @@
     │  └─ 生成 .review.yml                 │
     └────────┬─────────────────────────────┘
              │
-      (所有 Reviewer 返回意见)
+      (达到法定人数或超时降级流程完成)
              │
              v
     ┌──────────────────────────────────────┐
@@ -119,7 +119,7 @@
 | **REQUIREMENT** | `IDLE` | 用户给出指令 | Executor 收到任务 | 任务描述文本 | - |
 | **DEVELOPMENT** | `CODING` | Executor 启动 CLI | `.dev.yml` 创建有效 | `.dev.yml` + Git Commit | 2h |
 | **CHECKPOINT** | `READY_FOR_REVIEW` | Git Diff 存在 + Tests Pass | `.dev.yml` 内容有效 | `.dev.yml` 文件 | 1m |
-| **REVIEW_REQUEST** | `WAITING_REVIEW` | MACAO 发送 AEP 消息 | Reviewer 全部返回意见 | 所有 `.review.yml` | 30m |
+| **REVIEW_REQUEST** | `WAITING_REVIEW` | MACAO 发送 AEP 消息 | 达到法定人数判定条件或超时降级流程完成 | 所有 `.review.yml` | 30m |
 | **REVIEWING** | `REVIEWING` | Reviewer 接收消息 | `.review.yml` 生成 | `.review.yml` | 10m/reviewer |
 | **CONSENSUS** | `CONSENSUS_CHECK` | 所有 `.review.yml` 收集完毕 | 投票结果产生 | `vote_result.json` | 1m |
 | **MERGE / REWORK** | `DONE` / `REWORK` | 共识达成 | - | 最终产物或返工清单 | - |
@@ -168,6 +168,7 @@ development:
     test_coverage: 0.87
     lint_errors: 0
     security_scan_passed: true
+    tests_exempt: false   # 项目无测试时置 true，并在 checklist 中说明原因
     
   # 关键检查清单
   checklist:
@@ -198,16 +199,26 @@ signal: "EXPLICIT"  # 显式信号，MACAO 强制认可
 
 ```python
 # MACAO 状态识别逻辑（第一层：显式信号）
-def check_explicit_signal(checkpoint_file):
-    if os.path.exists('.macao/.dev.yml'):
-        manifest = parse_yaml(checkpoint_file)
-        if (manifest['status'] == 'ready_for_review' and
-            manifest['quality_metrics']['tests_passed'] and
-            manifest['git']['latest_commit'] is not None):
-            return StateChange(from_state='CODING', 
+# 注意：字段路径必须与上方 Schema 一致 —— quality_metrics 与 git 嵌套在 development 之下
+def check_explicit_signal(path='.macao/.dev.yml'):
+    manifest = parse_yaml(path)          # 解析失败 → 视为无效产物，返回 None
+
+    # .dev.yml 最小有效性规则：
+    #   version 存在 + signal == EXPLICIT + status == ready_for_review
+    #   + tests_passed 为 true（或 tests_exempt 为 true）
+    #   + latest_commit 非空且存在于本地 git 历史
+    if (manifest.get('version') and
+        manifest.get('signal') == 'EXPLICIT' and
+        manifest.get('status') == 'ready_for_review'):
+        qm = manifest['development']['quality_metrics']
+        commit = manifest['development']['git']['latest_commit']
+        tests_ok = (qm.get('tests_passed') is True or
+                    qm.get('tests_exempt') is True)
+        if tests_ok and commit and commit_exists(commit):
+            return StateChange(from_state='CODING',
                               to_state='READY_FOR_REVIEW',
                               source='EXPLICIT_SIGNAL')
-    return None  # 无法判断，进入第二层推断
+    return None  # 无效或缺省 → 不产生状态转移，转入 Layer 2 预警流程（见 §3.2）
 ```
 
 ---
@@ -286,6 +297,17 @@ metadata:
 vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
 ```
 
+**`opinion.status` ↔ `vote` 映射与一致性校验**：
+
+| opinion.status | vote（计票字段） |
+|---------------|------------------|
+| APPROVED | YES_APPROVE |
+| CHANGES_REQUESTED | NO_APPROVE |
+| REJECTED | NO_APPROVE |
+
+- `vote` 是唯一计票依据；MACAO 解析 `.review.yml` 时按上表校验二者一致性
+- 不一致（如 status=APPROVED 但 vote=NO_APPROVE）→ 该 `.review.yml` 判为**无效产物**：不计入有效票，发出告警并记录审计日志
+
 ---
 
 ### 2.3 `vote_result.json` - Consensus Result Record
@@ -355,13 +377,29 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
 }
 ```
 
-**共识规则（2/3 多数）**：
+**共识规则（2/3 多数 + 最低法定人数）**：
 
 - 有效票 = 响应的 Reviewer 票数 − 弃权票（弃权不计入分母）
-- 赞成票 / 有效票 ≥ 2/3 → 决策 `APPROVED`（进入合并）
-- 反对票 / 有效票 ≥ 2/3 → 决策 `REWORK_REQUIRED`（进入返工）
-- 两者均未达到（如 2 Reviewer 配置下 1 赞成 + 1 反对）→ Consensus Deadlock，触发人工接管（见 §6.1），由用户裁定 `APPROVED` 或 `REWORK`
-- Reviewer 配置：MVP 阶段为 2 Reviewer（Codex + Kimi），此时 2/3 规则要求全票通过；3 Reviewer 为目标配置（如引入第二个 Codex 实例），协议本身支持 N 个 Reviewer
+- 最低法定人数 `minimum_quorum = ⌈2 × configured_reviewers / 3⌉`，2 人与 3 人配置下均为 **2**
+- 有效票 ≥ 法定人数 且 赞成占比 ≥ 2/3 → 决策 `APPROVED`（进入合并）
+- 有效票 ≥ 法定人数 且 反对占比 ≥ 2/3 → 决策 `REWORK_REQUIRED`（进入返工）
+- 其余一切情形（含 1:1、有效票低于法定人数、全弃权/全超时）→ Consensus Deadlock，触发人工接管（见 §6.1），由用户裁定 `APPROVED` / `REWORK` / 重试评审
+- Reviewer 配置：MVP 阶段为 2 Reviewer（Codex + Kimi），此时规则等价于全票通过；3 Reviewer 为目标配置（如引入第二个 Codex 实例），协议本身支持 N 个 Reviewer（N ≥ 2）
+
+**决策表**：
+
+| configured | 场景 | 有效票 | 判定 |
+|-----------|------|-------|------|
+| 2 | 2 同意 | 2 | `APPROVED` |
+| 2 | 2 反对 | 2 | `REWORK_REQUIRED` |
+| 2 | 1 同意 + 1 反对 | 2 | 双方占比均未达 2/3 → Deadlock → 人工裁定 |
+| 2 | 1 弃权 + 1 同意或反对 | 1 | 低于法定人数 → Deadlock → 人工裁定（剩余 1 票不得单独决定结果） |
+| 2 | 全弃权 / 全超时 | 0 | Deadlock → 人工裁定 |
+| 3 | ≥2 同意 | ≥2 | `APPROVED` |
+| 3 | ≥2 反对 | ≥2 | `REWORK_REQUIRED` |
+| 3 | 其他组合（如 1:1:1） | ≤2 | 未达比例 → Deadlock → 人工裁定 |
+
+> 写入约定：各 `.review.yml` 由 Reviewer Adapter 以原子方式写入（临时文件 + rename）；MACAO 收集后立即将其纳入 git 提交——第二轮返工会覆盖同名文件，但 git 历史保留每一轮记录。`vote_result.json` 生成时必须记录本轮全部输入文件的 SHA-256 与对应 AEP `message_id`，保证审计链完整。
 
 ---
 
@@ -379,7 +417,14 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
 | 6 | `STATE_CHANGED` | Agent → MACAO | Agent 上报自身状态变化 | 同名 |
 | 7 | `HUMAN_OVERRIDE_REQUEST` | MACAO → User | 请求人工接管决策 | v2.0 新增 |
 
-以下给出开发/评审主流程的 4 个核心消息类型（1-4）的详细格式示例；类型 5-7 遵循相同的信封结构（`protocol` / `message_id` / `timestamp` / `type` / `from` / `payload`）。
+以下给出开发/评审主流程的 4 个核心消息类型（1-4）的详细格式示例。
+
+**统一信封约定**（适用于全部 7 类消息）：
+
+- 信封固定字段：`protocol` / `message_id` / `timestamp` / `type` / `from` / `to` / `payload`
+- `from` 为单值字符串；接收方字段**统一为 `to`**——单接收者为字符串，多接收者为字符串数组。不使用 `to_agent` / `to_agents`
+- 所有指向被评审开发检查点 commit 的字段**统一命名为 `checkpoint_ref`**（与 `.review.yml`、`vote_result.json` 的产物 Schema 一致）
+- 下述 JSON 示例均为合法 JSON（说明性文字一律放在代码块外）
 
 #### Type A：开发阶段通知
 
@@ -391,10 +436,10 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   
   "type": "DEVELOPMENT_STARTED",
   "from": "macao",
-  "to_agent": "cc-ds4",
+  "to": "cc-ds4",
   
   "payload": {
-    "project": "washdb",
+    "project": "macao-demo",
     "task_description": "Refactor database connection pooling with configurable timeout",
     "expected_output": {
       "code_path": "src/db/connection.py",
@@ -419,23 +464,24 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   
   "type": "REVIEW_REQUEST",
   "from": "macao",
-  "to_agents": ["cc-glm", "kimi"],
+  "to": ["cc-glm", "kimi"],
   
   "payload": {
-    "project": "washdb",
+    "project": "macao-demo",
     "executor": "cc-ds4",
-    "checkpoint_id": "a1b2c3d",
+    "checkpoint_ref": "a1b2c3d",
     
-    # 核心 Context 包：Reviewer 需要的所有信息
     "review_context": {
       "dev_checkpoint": {
         "path": ".macao/.dev.yml",
-        "content_base64": "..."  # Base64 encoded .dev.yml
+        "content_base64": "..."
       },
       
       "code_changes": {
-        "diff": "git diff a1b2c3d^..a1b2c3d",
-        "summary": "5 files changed, 120 insertions, 45 deletions"
+        "base_commit": "b2c3d4e",
+        "head_commit": "a1b2c3d",
+        "diff_command": "git diff b2c3d4e..a1b2c3d",
+        "files_summary": "5 files changed, 120 insertions, 45 deletions"
       },
       
       "quality_metrics": {
@@ -464,6 +510,8 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
 }
 ```
 
+> **代码变更载体约定（重要）**：`code_changes` 只传输 **refs**（`base_commit` / `head_commit`），不内联 diff 文本或 patch 内容。`diff_command` 仅是给 Reviewer 的参考命令，不是传输内容。Reviewer 在本地工作区自行执行 `git fetch` + `git diff` 取得变更（见 §5.3）。此约定避免了消息体积上限、编码与截断问题；若未来需要离线评审再扩展内联 patch（需另行定义大小上限与摘要校验）。
+
 #### Type C：评审反馈
 
 ```json
@@ -477,12 +525,12 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   "to": "macao",
   
   "payload": {
-    "project": "washdb",
-    "checkpoint_id": "a1b2c3d",
+    "project": "macao-demo",
+    "checkpoint_ref": "a1b2c3d",
     
     "review_file": {
       "path": ".macao/.reviews/cc-glm.review.yml",
-      "content_base64": "..."  # Base64 encoded review
+      "content_base64": "..."
     },
     
     "vote_summary": {
@@ -504,11 +552,11 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   
   "type": "REWORK_REQUEST",
   "from": "macao",
-  "to_agent": "cc-ds4",
+  "to": "cc-ds4",
   
   "payload": {
-    "project": "washdb",
-    "checkpoint_id": "a1b2c3d",
+    "project": "macao-demo",
+    "checkpoint_ref": "a1b2c3d",
     "round": 1,
     
     "issues_to_fix": [
@@ -522,6 +570,68 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
     ],
     
     "next_checkpoint_deadline": "2024-01-15T12:56:00Z"
+  }
+}
+```
+
+#### Type E：合并完成通告
+
+```json
+{
+  "protocol": "AEP/1.0",
+  "message_id": "msg-20240115-005",
+  "timestamp": "2024-01-15T11:00:00Z",
+
+  "type": "MERGE_COMPLETED",
+  "from": "macao",
+  "to": ["cc-ds4", "cc-glm", "kimi"],
+
+  "payload": {
+    "project": "macao-demo",
+    "checkpoint_ref": "a1b2c3d",
+    "vote_result_path": ".macao/vote_result.json",
+    "merge_commit": "d4e5f6a"
+  }
+}
+```
+
+#### Type F：状态上报
+
+```json
+{
+  "protocol": "AEP/1.0",
+  "message_id": "msg-20240115-006",
+  "timestamp": "2024-01-15T10:20:00Z",
+
+  "type": "STATE_CHANGED",
+  "from": "cc-ds4",
+  "to": "macao",
+
+  "payload": {
+    "project": "macao-demo",
+    "state": "CODING",
+    "detail": "refactoring connection pool"
+  }
+}
+```
+
+#### Type G：人工接管请求
+
+```json
+{
+  "protocol": "AEP/1.0",
+  "message_id": "msg-20240115-007",
+  "timestamp": "2024-01-15T10:58:00Z",
+
+  "type": "HUMAN_OVERRIDE_REQUEST",
+  "from": "macao",
+  "to": "user",
+
+  "payload": {
+    "trigger": "consensus_deadlock",
+    "context": "2 Reviewer 配置下 1 弃权 + 1 反对，有效票低于法定人数 2",
+    "options": ["APPROVED", "REWORK", "RETRY_REVIEW"],
+    "deadline": "2024-01-15T11:08:00Z"
   }
 }
 ```
@@ -562,64 +672,68 @@ Layer 3: LLM Judgment (60% 可信，仅用于故障诊断)
 
 ```
 
+> 注：图中标注的可信度（100% / 80% / 60%）为设计目标值，以 PoC 实测数据为准（验收阈值见第八部分 KPI）。
+
 ### 3.2 状态识别的优先级规则
 
 ```python
 def recognize_agent_state(agent_id: str, project: str) -> AgentState:
     """
-    状态识别的决策流程：
-    1. 优先检查显式信号（.yml 文件）
-    2. 其次进行行为推断（系统监控）
-    3. 最后才调用 LLM（仅用于异常诊断）
+    状态识别的唯一规范入口（三层严格分层，只有 Layer 1 能产生业务状态转移）：
+    1. Layer 1 显式产物：三类文件逐一校验，命中即返回映射的业务状态
+    2. Layer 2 行为推断：仅写日志与预警，禁止返回业务状态（不推进状态机）
+    3. Layer 3 LLM 诊断：仅在疑似卡死时触发，产出报告供人工决策，自身不产生业务状态
     """
-    
-    # ===== Layer 1: Explicit Signal =====
-    dev_checkpoint = read_file(f'.macao/.dev.yml')
-    if dev_checkpoint and is_valid_yaml(dev_checkpoint):
-        status = dev_checkpoint.get('status')
-        signal = dev_checkpoint.get('signal')
-        
-        if signal == 'EXPLICIT':
-            # 信任开发者的显式声明
-            return map_explicit_status_to_state(status)
-    
-    # ===== Layer 2: Behavioral Inference =====
-    git_status = run_cmd('git status --porcelain')
-    test_result = run_cmd('pytest --tb=no -q')
-    pty_activity = check_pty_idle_time(agent_id)
-    
-    behavior_signals = {
-        'git_changed': len(git_status) > 0,
-        'tests_passed': test_result.returncode == 0,
-        'pty_idle': pty_activity > 60,
-        'dev_yml_exists': os.path.exists('.macao/.dev.yml')
-    }
-    
-    # 根据行为推断状态（仅作参考，不改变实际状态）
-    inferred_state = infer_state_from_behavior(behavior_signals)
-    log_behavior_inference(agent_id, inferred_state, confidence=0.8)
-    
-    # 如果没有显式信号，发出预警
-    if not dev_checkpoint:
-        emit_warning(f"Agent {agent_id}: No explicit checkpoint, "
-                     f"inferred state {inferred_state} (low confidence)")
-    
-    # ===== Layer 3: LLM Judgment (故障诊断用) =====
+
+    checkpoint_ref = current_checkpoint(project)
+
+    # ===== Layer 1a: .dev.yml（Executor 产物）→ READY_FOR_REVIEW =====
+    dev = load_and_validate('.macao/.dev.yml', DEV_YML_SCHEMA)   # 最小有效性规则见 §2.1
+    if dev.valid:
+        return map_status_to_state(dev.status)   # 'ready_for_review' → READY_FOR_REVIEW
+
+    # ===== Layer 1b: .review.yml（各 Reviewer 产物）→ CONSENSUS_CHECK =====
+    reviews = load_all_validated('.macao/.reviews/*.review.yml', REVIEW_YML_SCHEMA,
+                                 expect_checkpoint_ref=checkpoint_ref)
+    if reviews.count_valid >= minimum_quorum(reviews.configured):   # 法定人数见 §2.3
+        return AgentState.CONSENSUS_CHECK        # 有效票达到法定人数，进入共识判定
+
+    # ===== Layer 1c: vote_result.json（MACAO 产物）→ DONE / REWORK =====
+    result = load_and_validate('.macao/vote_result.json', VOTE_RESULT_SCHEMA,
+                               expect_checkpoint_ref=checkpoint_ref)
+    if result.valid:
+        return (AgentState.DONE if result.decision == 'APPROVED'
+                else AgentState.REWORK)
+
+    # ===== Layer 2: 行为推断 —— 只记录与预警，永不改变业务状态 =====
+    signals = collect_behavior_signals(agent_id)          # git / tests / pty_idle
+    inferred = infer_state_from_behavior(signals)
+    log_behavior_inference(agent_id, inferred, confidence=0.8)
+    emit_warning(f"Agent {agent_id}: 无有效显式产物，推断状态 {inferred} 仅供参考，"
+                 f"保持上一个已确认状态")   # 不返回 inferred，不推进状态机
+
+    # ===== Layer 3: LLM Judgment（仅故障诊断用，不产生业务状态）=====
     if is_agent_suspected_deadlock(agent_id):
         logs = get_terminal_logs(agent_id, lines=300)
-        diagnosis = call_llm_for_diagnosis(logs, behavior_signals)
-        
+        diagnosis = call_llm_for_diagnosis(logs, signals)
+        report_diagnosis(diagnosis)               # 只提示用户，不自动决策
+
         if diagnosis.confidence < 0.7:
             trigger_human_override(
                 agent_id=agent_id,
                 reason="State ambiguous, awaiting human decision",
                 diagnostic_info=diagnosis
             )
-            return AgentState.UNKNOWN
-    
-    # 正常情况：返回显式状态或推断状态
-    return dev_checkpoint.state if dev_checkpoint else inferred_state
+            return AgentState.UNKNOWN             # 等待用户确认后人工设定状态
+
+    # 未命中显式信号且未触发人工接管：保持上一个已确认状态（HOLD），不推进
+    return last_confirmed_state(agent_id)
 ```
+
+> **行为约定**（与 §3.1 的分层承诺严格一致）：
+> 1. 业务状态只能由三类显式产物驱动；Layer 2 的推断结果只进入日志与告警。
+> 2. 无显式信号且未触发人工接管时，系统保持（HOLD）上一个已确认状态，绝不静默推进。
+> 3. `.review.yml` / `vote_result.json` 必须校验 `checkpoint_ref` 与当前轮次匹配，防止跨轮次误读。
 
 ### 3.3 关键的状态转换表
 
@@ -628,7 +742,7 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 | `IDLE` | 用户/MACAO 发送 `DEVELOPMENT_STARTED` AEP 消息 | `CODING` | Explicit | ✅✅✅ |
 | `CODING` | `.dev.yml` 状态字段 = `ready_for_review` | `READY_FOR_REVIEW` | Explicit | ✅✅✅ |
 | `READY_FOR_REVIEW` | MACAO 发送 `REVIEW_REQUEST` AEP 消息 | `WAITING_REVIEW` | Explicit | ✅✅✅ |
-| `WAITING_REVIEW` | 所有 Reviewer 返回 `.review.yml` | `CONSENSUS_CHECK` | Explicit | ✅✅✅ |
+| `WAITING_REVIEW` | 有效票达到法定人数或超时降级完成 | `CONSENSUS_CHECK` | Explicit | ✅✅✅ |
 | `CONSENSUS_CHECK` | `vote_result.json` 决策字段 = `APPROVED` | `DONE` | Explicit | ✅✅✅ |
 | `CONSENSUS_CHECK` | `vote_result.json` 决策字段 = `REWORK_REQUIRED` | `REWORK` | Explicit | ✅✅✅ |
 | `REWORK` | `.dev.yml` 被重新创建 + 新 commit | `CODING` | Explicit | ✅✅✅ |
@@ -641,20 +755,21 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 ### 4.1 严格的 MVP 范围（第一期，6-8 周）
 
 #### 必做 (P0)
-- [x] **单机 Claude Code Adapter**（基于 PTY + Hook）
-- [x] **本地 Codex 和 Kimi 的 Wrapper Adapter**（基于 PTY 监听）
-- [x] **LangGraph Workflow 引擎**（FSM 实现）
-- [x] **`.dev.yml` 和 `.review.yml` 规范的完整实现**
-- [x] **投票与共识逻辑**（2/3 多数投票）
-- [x] **CLI 界面**（Rich + prompt_toolkit 交互）
-- [x] **本地 agmsg 集成**（Queue-based 通信）
-- [x] **单机编排的完整端到端测试**
+- [ ] **单机 Claude Code Adapter**（基于 PTY + Hook）
+- [ ] **本地 Codex 和 Kimi 的 Wrapper Adapter**（基于 PTY 监听）
+- [ ] **LangGraph Workflow 引擎**（FSM 实现）
+- [ ] **`.dev.yml` 和 `.review.yml` 规范的完整实现**
+- [ ] **投票与共识逻辑**（2/3 多数投票 + 最低法定人数，见 §2.3）
+- [ ] **CLI 界面**（Rich + prompt_toolkit 交互）
+- [ ] **本地 agmsg 集成**（Queue-based 通信）
+- [ ] **单机编排的完整端到端测试**
 
 #### 不做 (P1+)
 - [ ] ~~远程 SSH Agent 支持~~（移至 v1.1）
 - [ ] ~~Capability Registry & Scheduler~~（移至 v1.2）
 - [ ] ~~Multi-Reviewer Consensus 高级算法~~（2/3 投票先用，后续优化）
 - [ ] ~~Web Dashboard~~（CLI 先行，后续补 Web）
+- [ ] ~~扩展 CLI 支持~~（Gemini CLI / Cursor Agent 等，视需求在 v1.1+ 排期）
 
 ### 4.2 分期交付计划
 
@@ -714,13 +829,16 @@ review_context:
     business_impact: "Improves connection pool efficiency by 30%"
     timeline_info: "This is the second iteration after cc-glm feedback"
     
-  # 2. 代码变更
+  # 2. 代码变更（传 refs，Reviewer 在本地工作区自行取 diff）
   code_changes:
     summary:
       files_changed: 5
       insertions: 120
       deletions: 45
-    detailed_diff: "git diff a1b2c3d^..a1b2c3d"  # 完整 diff
+    refs:
+      base_commit: "b2c3d4e"     # 变更前 commit
+      head_commit: "a1b2c3d"     # 被评审 commit，即 checkpoint_ref
+    diff_command: "git diff b2c3d4e..a1b2c3d"   # 参考命令，非传输内容
     files_list:
       - path: "src/db/connection.py"
         status: "modified"
@@ -782,9 +900,12 @@ review_context:
 # Step 1: 提取 Context
 cat <<< "$REVIEW_REQUEST" | jq '.payload.review_context' > /tmp/context.json
 
-# Step 2: 检查代码变更
-cd <project_dir>
-git apply /tmp/code_changes.patch  # 应用变更到本地
+# Step 2: 按 refs 取得代码变更（在项目工作区内）
+cd <workspace>
+git fetch --all
+BASE=$(jq -r '.code_changes.refs.base_commit' /tmp/context.json)
+HEAD_COMMIT=$(jq -r '.code_changes.refs.head_commit' /tmp/context.json)
+git diff "$BASE".."$HEAD_COMMIT"          # 直接阅读；也可导出到临时文件辅助分析
 
 # Step 3: 运行自动检查（lint, security, test）
 pylint src/
@@ -805,6 +926,8 @@ macao send-message REVIEW_RESPONSE \
   --review-file .macao/.reviews/reviewer_id.review.yml
 ```
 
+> 注：`quality_snapshot.performance` 为可选扩展项——无性能基准数据时可省略该子块。摘要类文档的 Context 示例从简，允许省略可选字段，以本节 Schema 为准。
+
 ---
 
 ## 第六部分：人工接管点与错误恢复
@@ -817,7 +940,7 @@ HUMAN_OVERRIDE_TRIGGERS = [
         "condition": "State ambiguity",
         "description": "Layer 1 signal missing AND Layer 2 confidence < 0.7",
         "action": "Ask user: 'What should the state be?'",
-        "timeout": "5 minutes (default proceed with high-confidence state)"
+        "timeout": "5 minutes (default: HOLD last confirmed state and keep alerting — never silently proceed; state updates only after user confirmation, recorded in audit log)"
     },
     {
         "condition": "Reviewer timeout",
@@ -858,9 +981,10 @@ HUMAN_OVERRIDE_TRIGGERS = [
 Normal Path:
   Executor → Dev Complete → Review Request → Reviewers Work → Consensus → Merge
 
-Degraded Path (1 Reviewer unavailable):
-  Executor → Dev Complete → Review Request → (2/3 Reviewers) → Consensus → Merge
-  (Skip unavailable reviewer, proceed with 2/3)
+Degraded Path (1 Reviewer 超时/不可用 → 标记弃权):
+  Executor → Dev Complete → Review Request → 剩余 1 张有效票（< 法定人数 2）
+  → Consensus Deadlock → HUMAN_OVERRIDE：用户裁定 APPROVED / REWORK / 重试评审
+  (弃权票不计入分母；MVP 2 Reviewer 配置下任何自动判定都要求 ≥2 张有效票，见 §2.3 决策表)
 
 Failure Path (Executor crashed):
   Executor → CRASH → Manual state reset → Resume from last checkpoint
@@ -886,6 +1010,8 @@ Abort Path (Too many conflicts):
 | StatefulSet | Agent Lifecycle | LangGraph FSM |
 | Ingress | Review Workflow | AEP REVIEW_REQUEST 路由 |
 
+> 说明：v1.0 架构中的 Project Manager 模块（项目定义、团队定义、Agent 角色绑定）在 v2.0 中并入 Workflow Controller（任务编排）与 Agent Registry（角色绑定配置）；项目/团队配置沿用 agmsg team 定义。
+
 ### 7.2 对标 CI/CD 流程
 
 ```
@@ -909,7 +1035,7 @@ Merge: Push to main           |    Consensus + Merge
 
 | KPI | Target | 测量方式 |
 |-----|--------|---------|
-| **State Recognition Accuracy** | >95% | 自动化测试覆盖 |
+| **State Recognition Accuracy** | >95% | 标注样本集评测（分母 = 观察窗口内全部状态转换次数） |
 | **Explicit Signal Usage Rate** | >99% | 状态转换由 .yml 驱动的比例 |
 | **Workflow Completion Rate** | >90% | 无人工介入的完成比例 |
 | **Human Override Frequency** | <10% | 总流程数中人工接管比例 |
@@ -971,4 +1097,7 @@ Merge: Push to main           |    Consensus + Merge
 **版本历史**
 - v1.0: 高阶架构设计（即 `SRSv1.md`，产品暂定名 "A"）
 - v1.5: 专家评审意见反馈（见 `IMPROVEMENT_SUMMARY.md` 第四节）
-- v2.0 (本文档): 规范化流程 + 标准输出物 + 改进状态识别
+- v2.0: 规范化流程 + 标准输出物 + 改进状态识别
+- v2.0.1: 按 `docs/reviews/2026-08-25-review-result-ec60f70-*` 三份评审反馈闭环 P0/P1/P2 问题
+  （状态机唯一化、共识规则引入最低法定人数与决策表、diff 载体统一为 refs、
+   字段命名统一 checkpoint_ref 与 to、AEP 补齐 7 类示例、status↔vote 映射等）

@@ -9,6 +9,7 @@
 > | 状态识别第一层 = Hook/API 事件 | 改为 `.dev.yml` / `.review.yml` 显式产物信号；Layer 2/3 仅作辅助与诊断 |
 > | 第一阶段 4 CLI（含 OpenCode），架构含远程 Agent | MVP 收敛为单机 3 CLI：Claude Code（Executor）+ Codex / Kimi（Reviewers） |
 > | AEP 消息：`TASK_ASSIGN` / `REVIEW_RESULT` 等 | 统一为 7 种消息类型：`DEVELOPMENT_STARTED` / `REVIEW_RESPONSE` 等（见 PRD §2.4） |
+> | LLM Judge 输入 last 200 logs | 扩展为最后 300 行 Terminal Log + 全部 .yml 产物（见 PRD §3.1） |
 > | 投票规则未明确 | 明确 2/3 多数投票 + `vote_result.json` 记录（见 PRD §2.3） |
 > | 人工接管仅提概念 | 明确 6 个 HUMAN_OVERRIDE 触发条件（见 PRD §6.1） |
 >
@@ -88,6 +89,9 @@ Executor   Reviewer     Reviewer
 ---
 
 # 3. 核心能力
+
+> **[历史内容 · v2.0 已收敛]** 本节 CLI 列表（含 OpenCode）与"未来支持列表"仅为 v1.0 设想。
+> v2.0 MVP 固定为 Claude Code（Executor）+ Codex / Kimi（Reviewers），以 `MACAO_PRD_v2.md` §4.1 为准。
 
 ## 3.1 多 CLI Agent 管理
 
@@ -402,6 +406,10 @@ PTY
 
 # 6. Agent State Detection
 
+> **[历史内容 · v2.0 已重定义]** 本章 Layer 1 = Hook/API 的设计已被替换：
+> v2.0 Layer 1 = 三类显式产物（`.dev.yml` / `.review.yml` / `vote_result.json`），
+> Layer 2 仅作辅助推断、Layer 3 仅作故障诊断，以 `MACAO_PRD_v2.md` §3 为准。
+
 ## 设计目标
 
 统一：
@@ -598,6 +606,9 @@ messages
 ---
 
 # 7. Agent Communication Protocol
+
+> **[历史内容 · v2.0 已更名]** `TASK_ASSIGN` / `REVIEW_RESULT` 等消息名已废弃，
+> 统一为 7 类 AEP 消息（`DEVELOPMENT_STARTED` / `REVIEW_RESPONSE` 等），以 `MACAO_PRD_v2.md` §2.4 为准。
 
 ## 设计目标
 
@@ -824,6 +835,10 @@ DONE
 ---
 
 # 9. 第一阶段 MVP
+
+> **[历史内容 · v2.0 已收敛]** 本章"单机环境"成员（cc-glm / qwen / kimi）为 v1.0 示例。
+> v2.0 MVP 团队 = Executor cc-ds4（Claude Code）+ Reviewer cc-glm（Codex）、kimi（Kimi）；
+> 远程示例 agent qwen 移出 MVP 范围，以 `MACAO_PRD_v2.md` §4 为准。
 
 目标：
 

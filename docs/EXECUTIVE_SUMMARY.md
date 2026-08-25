@@ -18,10 +18,10 @@
 
 **问题**：各 CLI 的工作流不一致，系统无法可靠判断进度。
 
-**解决**：规定所有 CLI 必须生成标准的**三类 .yml 文件**：
-- `.dev.yml` - 开发完成的宣布书
-- `.review.yml` - 评审意见的投票券
-- `vote_result.json` - 最终决策的公告
+**解决**：规定每个阶段必须产出**三类标准产物**（两类 YAML manifest 由 Agent 生成，JSON 共识记录由 MACAO 生成）：
+- `.dev.yml` - 开发完成的宣布书（Executor 生成）
+- `.review.yml` - 评审意见的投票券（各 Reviewer 生成）
+- `vote_result.json` - 最终决策的公告（MACAO 生成）
 
 **收益**：状态识别从"推断（60%可信）"升级到"检查（99%可信）"
 
@@ -65,6 +65,8 @@ MVP 范围               4 CLI + 远程         3 CLI (local only)
 预计交付周期           12-16 周           6-8 周
 ```
 
+> 注：表中及全文的 99% / 100% 等数字为**设计目标值**，最终以 PoC 实测为准（验收阈值见 KPI 表）。
+
 ---
 
 ## 🗺️ 产品架构速写
@@ -87,6 +89,8 @@ Local CLI Processes (PTY)
 
 **关键**：Adapter 层是通过**.yml 文件和 AEP 消息**与 CLI 通信，不是直接调用 API。
 
+> 说明：v1.0 架构中的 Project Manager（项目/团队定义、Agent 角色绑定）在 v2.0 中并入 Workflow Controller（编排）与 Agent Registry（角色绑定配置），配置沿用 agmsg team 定义。
+
 ---
 
 ## 🔄 核心工作流（MVP）
@@ -96,7 +100,7 @@ Local CLI Processes (PTY)
    ↓
 2. MACAO 启动 Claude Code (Executor)
    ↓
-3. Claude 开发，完成时主动生成 .dev.yml
+3. Claude 开发，完成时主动生成 .dev.yml（经 ARTIFACT CHECKPOINT 校验，见 PRD §1.2）
    ↓
 4. MACAO 检测到 .dev.yml，发送 AEP REVIEW_REQUEST
    ↓
@@ -111,11 +115,12 @@ Local CLI Processes (PTY)
 
 ---
 
-## 📄 三个关键 .yml 文件详解
+## 📄 三个关键产物文件详解
 
 ### `.dev.yml` - "我完成了" 的宣言书
 
 ```yaml
+# 精简示例：完整字段定义见 PRD §2.1
 version: "1.0"
 status: "ready_for_review"  # ← MACAO 读这行来判断开发是否完成
 signal: "EXPLICIT"          # ← 显式信号标记，Layer 1 无条件信任
@@ -172,17 +177,17 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 
 ```json
 {
-  "checkpoint": "a1b2c3d",
+  "checkpoint_ref": "a1b2c3d",
   "votes": [
     {"reviewer": "cc-glm", "vote": "NO_APPROVE"},
     {"reviewer": "kimi", "vote": "NO_APPROVE"}
   ],
-  "decision": "REWORK_REQUIRED",  # ← 2/3 多数规则：反对 2/2 ≥ 2/3
+  "decision": "REWORK_REQUIRED",
   "next_step": "Send REWORK_REQUEST to executor"
 }
 ```
 
-**关键**：所有投票过程透明化，用户看 JSON 就知道发生了什么。
+**关键**：所有投票过程透明化，用户看 JSON 就知道发生了什么。示例为精简示意版，权威 Schema 见 PRD §2.3（含最低法定人数与决策表）。
 
 ---
 
@@ -191,26 +196,24 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 ```
 问题：当前状态是什么？
 
-第 1 步：查找 .dev.yml
-├─ 文件存在 + status="ready_for_review" 
-│  └─ ✅ 状态 = READY_FOR_REVIEW（100% 确定）
-└─ 文件不存在或状态不符
+第 1 步：查找显式产物（.dev.yml / .review.yml / vote_result.json，按 PRD §3.2 校验）
+├─ 任一产物有效
+│  └─ ✅ 按产物映射直接确定状态（唯一能推进业务状态的途径）
+└─ 全部缺失或无效
    └─ 第 2 步
 
-第 2 步：检查行为指标（git 变更 + 测试通过 + PTY 安静）
-├─ 所有指标符合
-│  └─ ⚠️ 警告：推断为 READY_FOR_REVIEW（80% 猜测，发出警告日志）
-└─ 指标不符或混乱
-   └─ 第 3 步
+第 2 步：行为推断（git 变更 + 测试通过 + PTY 安静）
+└─ ⚠️ 推断结果（80%）仅写入日志与预警，仅供参考；
+   不改变实际状态 —— 保持上一个已确认状态（HOLD）
 
-第 3 步：调用 LLM 诊断（仅当怀疑卡死）
-├─ LLM 置信度 > 0.7
-│  └─ ⚠️ 提示用户诊断结果
+第 3 步：LLM 诊断（仅当怀疑卡死）
+├─ LLM 置信度 ≥ 0.7
+│  └─ ⚠️ 向用户提示诊断结果，维持 HOLD，等待显式信号或人工确认
 └─ LLM 置信度 < 0.7
-   └─ 🚨 触发 HUMAN_OVERRIDE：要求用户手动确认状态
+   └─ 🚨 触发 HUMAN_OVERRIDE：状态置为 UNKNOWN，要求用户手动确认
 ```
 
-**关键**：99% 的情况由第 1 步解决，99% 的故障由用户在第 3 步解决。
+**关键**：99% 的情况由第 1 步解决；系统绝不依据推断"静默推进"，边界情况始终由用户做出知情决策。
 
 ---
 
@@ -218,7 +221,7 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 
 | 触发条件 | 症状 | 用户操作 |
 |---------|------|--------|
-| **State Ambiguity** | .dev.yml 缺失 + 行为推断 <70% | 输入：`状态应该是？` |
+| **State Ambiguity** | 显式产物缺失/无效，状态无法确定 | 输入：`状态应该是？` |
 | **Reviewer Timeout** | 10min 无响应 | Ping + 等 2min + 如需要输入：`标记为弃权？` |
 | **Consensus Deadlock** | 无法达成 2/3 多数 | 输入：`APPROVED 还是 REWORK？` |
 | **Process Crash** | Executor CLI 崩溃 | 输入：`重试 1 次还是放弃？` |
@@ -264,6 +267,7 @@ Week 1-2: 方案定敲 + PoC 验证
 ├─ 与 Anthropic 确认 Claude Code Hook API 稳定性
 ├─ 与 OpenAI / Moonshot 确认 Codex / Kimi PTY 可行性
 ├─ 完成 .yml Schema 和 AEP 格式定义
+├─ 完成 State Recognition FSM 文档
 └─ 里程碑：单 Executor + 单 Reviewer 工作流 PoC
 
 Week 3-4: Adapter 实现
@@ -345,7 +349,7 @@ Week 8: 文档与发布
 
 **理由**：平衡效率与质量，1 个 Reviewer 的"异议"不应该卡住所有人。
 
-**补充口径**（见 PRD §2.3）：有效票 = 响应票 − 弃权票。MVP 为 2 Reviewer 配置（Codex + Kimi），2/3 规则下需全票赞成方可通过；1 赞成 + 1 反对时触发 Consensus Deadlock 人工接管。3 Reviewer 为目标配置，协议支持 N 个 Reviewer。
+**补充口径**（见 PRD §2.3 共识规则与决策表）：有效票 = 响应票 − 弃权票；任何自动判定都要求有效票 ≥ 最低法定人数（2 票）。MVP 为 2 Reviewer 配置（Codex + Kimi），即要求全票通过（2/2）；1 赞成 + 1 反对、或弃权导致有效票不足，均触发 Consensus Deadlock 由用户裁定。3 Reviewer 为目标配置，协议支持 N 个 Reviewer。
 
 ### 决策 3：为什么 MVP 不支持远程 SSH？
 
@@ -364,6 +368,7 @@ Week 8: 文档与发布
 |------|------|------|---------|
 | Claude Code Hook API 不稳定 | 中 | 高 | Week 1-2 做 PoC 验证 |
 | Reviewer CLI 响应慢 | 中 | 中 | 设置合理超时 + 降级投票 |
+| Git merge 冲突导致卡死 | 低 | 高 | 自动检测 + 提前预警用户 |
 | .yml 文件损坏 | 低 | 中 | YAML Schema 验证 + 版本控制 |
 | 网络临时中断 | 低 | 中 | 本地队列缓冲 + 自动重试 |
 
@@ -407,7 +412,8 @@ Week 8: 文档与发布
 1. 10min 后自动 ping 一次
 2. 再等 2min
 3. 触发 HUMAN_OVERRIDE：`是否标记此 Reviewer 为弃权？`
-4. 用户决策后，2/3 投票规则继续执行
+4. 用户标记弃权后，剩余 1 张有效票低于最低法定人数（2 张，见 PRD §2.3 决策表），
+   自动进入 Consensus Deadlock，由用户裁定 APPROVED / REWORK / 重试评审
 
 ### Q: v2.0 比原方案"小"了，会不会无法解决真实问题？
 

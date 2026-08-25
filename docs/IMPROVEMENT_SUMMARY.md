@@ -19,7 +19,8 @@
 │  └─ ✅ v2.0: 标准化 review_context，包含任务、代码、质量指标等完整信息
 │
 └─ ❌ MVP 范围过大，风险难以控制
-   └─ ✅ v2.0: 严格的 P0/P1 划分，单机+单 Reviewer 先行，后续渐进式扩展
+   └─ ✅ v2.0: 严格的 P0/P1 划分（Week 1–2 PoC 先跑通单 Executor + 单 Reviewer 最小闭环；
+      MVP 完整配置为单机 Claude Code + Codex/Kimi 双 Reviewer），后续渐进式扩展
 ```
 
 ---
@@ -50,7 +51,7 @@ User Input → Claude Executor → 主动生成 .dev.yml → MACAO 读取文件 
 | 阶段 | 产物文件 | 格式 | 作用 |
 |------|---------|------|------|
 | **Development Complete** | `.dev.yml` | YAML | Executor 宣布"我完成了" |
-| **Review Response** | `.reviews/<reviewer_id>.review.yml` | YAML | 每个 Reviewer 的评审意见与投票 |
+| **Review Response** | `.macao/.reviews/<reviewer_id>.review.yml` | YAML | 每个 Reviewer 的评审意见与投票 |
 | **Consensus Decision** | `vote_result.json` | JSON | MACAO 的投票统计与最终决策 |
 
 ### 为什么这样设计更好？
@@ -117,6 +118,8 @@ Layer 3: LLM Diagnosis (故障诊断) — 60% 可信
 - ❌ 原方案：三层混合投票，谁说了算不明确
 - ✅ v2.0：清晰的优先级链，显式信号一票否决（veto）
 
+> 注：上文各层标注的可信度（100% / 80% / 60%）及全文 "99%+" 表述均为**设计目标值**，以 PoC 实测数据为准。Layer 2 的推断结果只进入日志与预警，不推进状态机（行为约定见 PRD §3.2）。
+
 ---
 
 ## 三、解决 Reviewer 信息不对称问题
@@ -153,7 +156,7 @@ MACAO 打包完整 review_context，发送 AEP REVIEW_REQUEST
         ↓
 Reviewer 收到 review_context，包含：
 ├─ task_info（任务背景）
-├─ code_changes（完整 diff）
+├─ code_changes（变更 refs：base_commit / head_commit，Reviewer 本地自行取 diff）
 ├─ quality_metrics（质量快照）
 ├─ executor_self_assessment（开发者自评）
 └─ references（相关文档与历史）
@@ -171,9 +174,12 @@ review_context:
     description: "实现数据库连接池重构"
     business_impact: "提升连接复用率 30%"
     
-  # 2️⃣ 代码变更 - 改了什么？
+  # 2️⃣ 代码变更 - 改了什么？（传 refs，Reviewer 本地自行取 diff）
   code_changes:
-    diff: "<完整的 git diff>"
+    refs:
+      base_commit: "b2c3d4e"
+      head_commit: "a1b2c3d"
+    diff_command: "git diff b2c3d4e..a1b2c3d"  # 参考命令，非传输内容
     files_list:
       - "src/db/connection.py (80 added, 30 deleted)"
       - "tests/test_db.py (35 added, 12 deleted)"
@@ -218,7 +224,7 @@ review_context:
 | ✅ **缩小 MVP 范围** | P0: 单机 Claude + 本地 Codex/Kimi; P1: 远程 SSH |
 | ✅ **State Detection 不可靠** | 用 Explicit Signal 替代推断，99%+ 由 .yml 驱动 |
 | ✅ **Reviewer Context 不完整** | 标准化 `review_context` 包，包含完整信息 |
-| ✅ **多 Reviewer 冲突处理不清** | 定义 2/3 投票规则 + `vote_result.json` 记录 |
+| ✅ **多 Reviewer 冲突处理不清** | 定义 2/3 投票规则 + 最低法定人数（2 张有效票）+ `vote_result.json` 记录；2 Reviewer 配置下等价全票通过，1:1 或有效票不足进入人工仲裁 |
 | ✅ **人工介入点不清楚** | 明确列出 6 个 HUMAN_OVERRIDE_TRIGGERS |
 | ✅ **依赖外部 API 风险** | PoC 第一步验证 Hook 可用性 |
 
@@ -228,7 +234,7 @@ review_context:
 |------|-------------|
 | ✅ **流程规范化** | `.dev.yml` + `.review.yml` 约定式设计 |
 | ✅ **排版与格式统一** | 完全按 PRD 标准格式撰写 |
-| ✅ **细节补充** | 补充 AEP Message 完整格式、workflow FSM 图等 |
+| ✅ **细节补充** | 补充 AEP 消息规范（定义 7 类消息；详细格式覆盖主流程 4 类，其余遵循统一信封）、workflow FSM 图等 |
 | ✅ **架构映射清晰** | K8s 对标表与 CI/CD 对标表 |
 | ✅ **交付计划具体** | 8 周分阶段计划，含周度里程碑 |
 | ✅ **成功指标量化** | KPI 表（State Accuracy >95%, Override <10% 等） |
@@ -320,6 +326,8 @@ v2.0 承诺（第一阶段）：
 ├─ 只有 CLI 界面（Dashboard 延至 v1.1）
 └─ 优势：6-8 周可以交付，质量有保障
 ```
+
+> 说明：v1.0 示例中的远程 Reviewer qwen（SSH 上的第二个 Codex 实例）随单机化收敛移出 MVP 范围；v2.0 的 Reviewer 为本地 Codex（cc-glm）+ Kimi（kimi）。qwen 可作为 3 Reviewer 目标配置在 v1.1 回归。
 
 ### 交付计划的可信度
 
@@ -480,5 +488,7 @@ MACAO 的借鉴：
 - v1.0: 原始高阶架构设计（即 `SRSv1.md`，产品暂定名 "A"）
 - v1.5: 第一位专家评审意见反馈
 - v2.0: 融合两位专家意见 + 规范化流程创新（即 `MACAO_PRD_v2.md`）
+- v2.0.1: 按 `docs/reviews/` 三份评审反馈修订口径（checkpoint_ref 统一命名、diff 载体改为 refs、
+  共识规则引入最低法定人数、PoC 与 MVP 范围表述区分等），以 PRD 为准
 
 **下一步**：Review 本文档，反馈是否有理解偏差或遗漏之处。
