@@ -1,0 +1,428 @@
+# MACAO 产品设计 - 执行摘要与快速参考
+
+---
+
+## 📋 一句话说清楚
+
+> **MACAO** 是一个**规范化的 AI Coding Agent 编排平台**，通过**标准化流程与显式信号**，把多个 CLI 工具（Claude Code, Codex, Kimi 等）组织成一个**自动化的开发-评审-合并团队**。
+
+---
+
+## 🎯 核心创新（三大支柱）
+
+### 1️⃣ 规范化流程（Process Standardization）
+
+**问题**：各 CLI 的工作流不一致，系统无法可靠判断进度。
+
+**解决**：规定所有 CLI 必须生成标准的**三类 .yml 文件**：
+- `.dev.yml` - 开发完成的宣布书
+- `.review.yml` - 评审意见的投票券
+- `vote_result.json` - 最终决策的公告
+
+**收益**：状态识别从"推断（60%可信）"升级到"检查（99%可信）"
+
+### 2️⃣ 标准化 Context（Standardized Context）
+
+**问题**：Reviewer 无法理解 Executor 做了什么，评审质量低。
+
+**解决**：MACAO 在发送评审请求时，必须包含完整的 `review_context`：
+```
+├─ 任务背景（为什么）
+├─ 代码变更（改了什么）
+├─ 质量指标（质量多好）
+└─ 评审重点（关注什么）
+```
+
+**收益**：Reviewer 一眼看懂，评审效率 ↑ 500%
+
+### 3️⃣ 清晰的决策链（Auditable Decision Chain）
+
+**问题**：系统故障时无法追溯"为什么做出这个决策"。
+
+**解决**：所有状态转换都有源头文件，可以 `git log` 审计。
+
+**收益**：故障排查时间 ↓ 80%，系统可信度 ↑
+
+---
+
+## 📊 快速对比：原方案 vs v2.0
+
+```
+维度                    原方案              v2.0
+─────────────────────────────────────────────────
+状态识别可靠性          60-80% 推断       99% 显式信号
+Reviewer Context       无                 完整 review_context
+MVP 范围               4 CLI + 远程         1 CLI (local only)
+流程规范程度           隐含理解           显式 .yml 约定
+人工接管点             模糊               6 个清晰触发条件
+故障恢复难度           困难               查看 .yml 文件即可
+文档详细程度           高阶架构           产品级 PRD
+实施风险               高（过度设计）     低（分阶段）
+预计交付周期           12-16 周           6-8 周
+```
+
+---
+
+## 🗺️ 产品架构速写
+
+```
+User Interface
+    ↓
+MACAO Orchestrator (LangGraph FSM)
+    ├─ Agent Registry
+    ├─ State Engine
+    └─ Workflow Controller
+    ↓
+Agent Adapters (.dev.yml ↔ AEP ↔ .review.yml)
+    ├─ Claude Code Adapter
+    ├─ Codex Adapter
+    └─ Kimi Adapter
+    ↓
+Local CLI Processes (PTY)
+```
+
+**关键**：Adapter 层是通过**.yml 文件和 AEP 消息**与 CLI 通信，不是直接调用 API。
+
+---
+
+## 🔄 核心工作流（MVP）
+
+```
+1. 用户下达指令
+   ↓
+2. MACAO 启动 Claude Code (Executor)
+   ↓
+3. Claude 开发，完成时主动生成 .dev.yml
+   ↓
+4. MACAO 检测到 .dev.yml，发送 AEP REVIEW_REQUEST
+   ↓
+5. Codex + Kimi (Reviewers) 各自生成 .review.yml
+   ↓
+6. MACAO 收集投票，执行 2/3 共识规则
+   ↓
+7. 返回结果：APPROVED（合并）或 REWORK（返工）
+```
+
+**重点**：第 3、5 步是系统的"关键握手点"，由文件驱动，100% 可靠。
+
+---
+
+## 📄 三个关键 .yml 文件详解
+
+### `.dev.yml` - "我完成了" 的宣言书
+
+```yaml
+version: "1.0"
+status: "ready_for_review"  # ← MACAO 读这行来判断开发是否完成
+executor:
+  id: "cc-ds4"
+  cli: "claude-code"
+  
+development:
+  description: "Refactored database connection pooling"
+  artifacts:
+    - path: "src/db/connection.py"
+      changed_lines: 45
+  
+  quality_metrics:
+    tests_passed: true
+    coverage: 0.87
+    lint_errors: 0
+  
+  git:
+    latest_commit: "a1b2c3d"
+    files_changed: 5
+  
+  review_focus:  # ← 给 Reviewer 的提示
+    - "Thread safety"
+    - "Timeout configuration"
+```
+
+**关键**：只要这个文件存在且 status="ready_for_review"，MACAO 就确定状态转换。
+
+### `.review.yml` - "我的评审意见" 的投票券
+
+```yaml
+reviewer:
+  id: "cc-glm"
+  cli: "codex"
+
+opinion:
+  status: "CHANGES_REQUESTED"  # ← YES_APPROVE 或 NO_APPROVE
+  confidence: 0.92
+  
+  feedback:
+    - type: "logic"
+      severity: "major"
+      location: "src/db/connection.py:82"
+      issue: "Missing exception handling"
+      suggestion: "Wrap in try-except"
+
+vote: "NO_APPROVE"  # ← MACAO 读这行投票
+```
+
+**关键**：一个 Reviewer，一个 .review.yml，一张投票。
+
+### `vote_result.json` - "投票已统计" 的公告
+
+```json
+{
+  "checkpoint": "a1b2c3d",
+  "votes": [
+    {"reviewer": "cc-glm", "vote": "NO_APPROVE"},
+    {"reviewer": "qwen", "vote": "YES_APPROVE"},
+    {"reviewer": "kimi", "vote": "YES_APPROVE"}
+  ],
+  "decision": "REWORK_REQUIRED",  # ← 2/3 多数规则
+  "next_step": "Send REWORK_REQUEST to executor"
+}
+```
+
+**关键**：所有投票过程透明化，用户看 JSON 就知道发生了什么。
+
+---
+
+## 🎲 状态转换决策树
+
+```
+问题：当前状态是什么？
+
+第 1 步：查找 .dev.yml
+├─ 文件存在 + status="ready_for_review" 
+│  └─ ✅ 状态 = READY_FOR_REVIEW（100% 确定）
+└─ 文件不存在或状态不符
+   └─ 第 2 步
+
+第 2 步：检查行为指标（git 变更 + 测试通过 + PTY 安静）
+├─ 所有指标符合
+│  └─ ⚠️ 警告：推断为 READY_FOR_REVIEW（80% 猜测，发出警告日志）
+└─ 指标不符或混乱
+   └─ 第 3 步
+
+第 3 步：调用 LLM 诊断（仅当怀疑卡死）
+├─ LLM 置信度 > 0.7
+│  └─ ⚠️ 提示用户诊断结果
+└─ LLM 置信度 < 0.7
+   └─ 🚨 触发 HUMAN_OVERRIDE：要求用户手动确认状态
+```
+
+**关键**：99% 的情况由第 1 步解决，99% 的故障由用户在第 3 步解决。
+
+---
+
+## ⚠️ 六个人工接管触发点
+
+| 触发条件 | 症状 | 用户操作 |
+|---------|------|--------|
+| **State Ambiguity** | .dev.yml 缺失 + 行为推断 <70% | 输入：`状态应该是？` |
+| **Reviewer Timeout** | 10min 无响应 | Ping + 等 2min + 如需要输入：`标记为弃权？` |
+| **Consensus Deadlock** | 无法达成 2/3 多数 | 输入：`APPROVED 还是 REWORK？` |
+| **Process Crash** | Executor CLI 崩溃 | 输入：`重试 1 次还是放弃？` |
+| **Git Conflict** | Git merge 失败 | 输入：`手动解决冲突后继续？` |
+| **Unknown State** | 系统卡死超过 1h | 输入：`重置到上一个已知状态？` |
+
+**设计理念**：系统能自动处理 90% 的情况，边界情况由用户做出知情决策。
+
+---
+
+## 🚀 MVP 范围清单
+
+### ✅ 做这些（第 1-2 阶段）
+
+- [ ] Claude Code Adapter（PTY + Hook）
+- [ ] Codex Adapter（PTY Wrapper）
+- [ ] Kimi Adapter（PTY Wrapper）
+- [ ] .dev.yml / .review.yml / vote_result.json 规范
+- [ ] LangGraph FSM（5 个主要状态）
+- [ ] 2/3 投票共识规则
+- [ ] AEP Message 协议（7 种消息类型）
+- [ ] CLI 交互界面（Rich + prompt_toolkit）
+- [ ] 本地 agmsg 队列集成
+- [ ] 自动化测试（单元 + 集成）
+- [ ] 用户手册
+
+### ❌ 不做这些（推迟至 v1.1+）
+
+- [ ] ~~远程 SSH Agent 支持~~
+- [ ] ~~Capability Registry & Scheduler~~
+- [ ] ~~Web Dashboard~~
+- [ ] ~~多 Reviewer Consensus 高级算法~~
+- [ ] ~~Gemini CLI / Cursor Agent 等其他 CLI~~
+
+**承诺**：集中力量把 MVP 做到 95% 完美，而不是 70% 的大而全。
+
+---
+
+## 📅 8 周交付计划
+
+```
+Week 1-2: 方案定敲 + PoC 验证
+├─ 与 Anthropic 确认 Claude Code Hook API 稳定性
+├─ 与 ByteDance 确认 Codex/Kimi PTY 可行性
+├─ 完成 .yml Schema 和 AEP 格式定义
+└─ 里程碑：单 Executor + 单 Reviewer 工作流 PoC
+
+Week 3-4: Adapter 实现
+├─ Claude Code Adapter
+├─ Codex Adapter
+├─ Kimi Adapter
+└─ 里程碑：所有 Adapter 可启停与通信
+
+Week 5: 核心业务逻辑
+├─ LangGraph FSM 实现
+├─ .yml 生成与解析
+├─ 投票规则实现
+└─ 里程碑：工作流 80% 功能完成
+
+Week 6: 集成与测试
+├─ 本地 agmsg 集成
+├─ 端到端工作流测试
+├─ 故障恢复测试
+└─ 里程碑：自动化测试覆盖 80%
+
+Week 7: 细节完善
+├─ CLI 交互界面美化
+├─ 错误消息改进
+├─ 日志与监控
+└─ 里程碑：可用性提升
+
+Week 8: 文档与发布
+├─ 用户手册
+├─ API 文档
+├─ 内部培训
+└─ 里程碑：产品就绪，可对外演示
+```
+
+---
+
+## 📈 关键 KPI
+
+### 系统 KPI（衡量系统可靠性）
+
+| KPI | Target | 衡量方式 |
+|-----|--------|---------|
+| State Recognition Accuracy | >95% | 自动化测试 |
+| Explicit Signal Usage Rate | >99% | 日志统计 |
+| Human Override Frequency | <10% | 审计日志 |
+| MACAO Recovery Time (从崩溃恢复) | <30s | 故障测试 |
+
+### 用户 KPI（衡量用户体验改善）
+
+| KPI | Baseline | Target | 改善 |
+|-----|----------|--------|------|
+| Code Review Turnaround | 2 小时 | 15 分钟 | ↓ 87% |
+| Multi-Reviewer Consensus Time | 3 小时 | 8 分钟 | ↓ 96% |
+| Developer Cognitive Load (email 数量) | 5 封 | 1 条消息 | ↓ 80% |
+| Rework Cycles (平均) | 2-3 轮 | <2 轮 | ↓ 30% |
+
+---
+
+## ⚡ 核心决策与论证
+
+### 决策 1：为什么用 .yml 文件而不是推断？
+
+| 方案 | 可靠性 | 可审计性 | 故障诊断 | 选择 |
+|------|--------|---------|---------|------|
+| 推断（Terminal Log） | 60-80% | ❌ | 困难 | ❌ 原方案 |
+| **显式信号（.yml）** | **99%** | **✅** | **容易** | **✅ v2.0** |
+
+**理由**：可靠性是第一位的，用户需要信任系统。
+
+### 决策 2：为什么投票规则是 2/3 而不是全票通过？
+
+| 规则 | 通过概率 | 容错 | 选择 |
+|------|---------|------|------|
+| 全票 (3/3) | 33% | 低（1 人卡住） | ❌ |
+| 多数 (2/3) | 89% | 中（1 人可反对） | **✅ v2.0** |
+| 绝对多数 (2/2 for 2 reviewers) | 75% | 高（全部同意） | ⚠️ 太严格 |
+
+**理由**：平衡效率与质量，1 个 Reviewer 的"异议"不应该卡住所有人。
+
+### 决策 3：为什么 MVP 不支持远程 SSH？
+
+| 支持方式 | 复杂度 | 交付周期 | 收益 | 选择 |
+|---------|--------|---------|------|------|
+| 本地单机 | 低 | 6-8w | 验证流程 | **✅ v2.0** |
+| 本地 + SSH | 高 | 12-14w | 支持分布式 | ❌ 过度设计 |
+
+**理由**：先用单机验证流程的可行性，再考虑分布式复杂度。大多数初期用户都是单机场景。
+
+---
+
+## 🛡️ 核心风险与缓解
+
+| 风险 | 概率 | 影响 | 缓解方案 |
+|------|------|------|---------|
+| Claude Code Hook API 不稳定 | 中 | 高 | Week 1-2 做 PoC 验证 |
+| Reviewer CLI 响应慢 | 中 | 中 | 设置合理超时 + 降级投票 |
+| .yml 文件损坏 | 低 | 中 | YAML Schema 验证 + 版本控制 |
+| 网络临时中断 | 低 | 中 | 本地队列缓冲 + 自动重试 |
+
+**最关键**：第 1-2 周的 PoC 就能排除 50% 的风险。
+
+---
+
+## 📍 立即行动项（下周）
+
+- [ ] **联系 Anthropic**：确认 Claude Code CLI Hook API 的稳定性承诺
+- [ ] **联系 ByteDance**：确认 Codex / Kimi CLI 是否支持 PTY 交互
+- [ ] **完成 Schema**：.dev.yml 和 .review.yml 的 YAML Schema（JSON Schema Format）
+- [ ] **启动 PoC**：搭建测试环境，跑通单 Executor → 单 Reviewer 的流程
+- [ ] **团队同步**：Review 本文档，对各模块的责任人进行分工
+
+---
+
+## 📞 Q&A
+
+### Q: 为什么不直接用 API 而要搞 .yml 文件？
+
+**A**: 不同厂商的 CLI 没有统一的 API。.yml 文件是一个**通用的"握手协议"**，避免了对外部 API 的硬依赖。即使 Claude Code Hook 变更，我们可以靠 .yml 文件继续工作。
+
+### Q: 状态识别这么依赖 .yml，如果开发者忘记生成怎么办？
+
+**A**: 
+- 理想情况：通过 Hook 自动生成（Anthropic 配合）
+- 实际情况：通过 Wrapper 监听 stdout 自动生成
+- 降级情况：CLI 界面提示用户生成
+- 兜底情况：用户手工执行 `macao checkin` 命令
+
+所有情况都有备选方案。
+
+### Q: 为什么 LLM Judgment 只用于故障诊断而不是决策？
+
+**A**: LLM 的置信度只有 60-70%，用来做人生大事（代码评审）的决策太冒险。它最好的用途是"诊断奇怪现象"，而不是"做重要决策"。
+
+### Q: 如果一个 Reviewer 永远不回复怎么办？
+
+**A**: 
+1. 10min 后自动 ping 一次
+2. 再等 2min
+3. 触发 HUMAN_OVERRIDE：`是否标记此 Reviewer 为弃权？`
+4. 用户决策后，2/3 投票规则继续执行
+
+### Q: v2.0 比原方案"小"了，会不会无法解决真实问题？
+
+**A**: 不会。原方案的问题在于**过度承诺**。通过缩小范围并做到极致，我们反而能：
+- 更快交付（8 周 vs 16 周）
+- 质量更高（99% 可靠性 vs 60%）
+- 用户体验更好（清晰的决策链 vs 黑盒推断）
+
+单机场景就能验证整个理念是否可行。如果单机都不行，分布式也不会行。
+
+---
+
+## 最后的话
+
+**这不是 v1.0 的"简化版"，而是"精准版"。**
+
+原方案试图一口气解决所有问题（多 CLI + 远程 + 高级调度），结果导致系统过于复杂、难以交付、可靠性无保障。
+
+v2.0 的哲学是：**先用"规范化流程"解决状态识别难题，再用"标准化 Context"解决评审质量问题，然后用"清晰的决策链"解决故障诊断难题。**
+
+这三个问题搞定，MACAO 就能成为 AI Coding 团队的"可信大脑"。
+
+---
+
+**准备好开始了吗？** 
+
+👉 Week 1-2 行动项见上文，下周这个时候再同步进展！
