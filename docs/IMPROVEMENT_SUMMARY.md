@@ -1,4 +1,4 @@
-# MACAO v2.0 改进对比总结
+# MACAO 改进对比总结（v2.0 → v2.2）
 
 > 本文档详细说明 v2.0 如何融合了评审意见、第二位专家的优化建议，以及最关键的"规范化流程"创新。
 >
@@ -186,10 +186,10 @@ review_context:
     
   # 3️⃣ 质量指标 - 质量多好？
   quality_snapshot:
-    tests_passed: 24/24 ✅
-    coverage: 87% ✅
-    lint_errors: 0 ✅
-    security_issues: 0 ✅
+    tests_passed: 24
+    coverage_percent: 87
+    lint_errors: 0
+    security_issues: 0
     
   # 4️⃣ 开发者自评 - 应该关注什么？
   executor_self_assessment:
@@ -332,13 +332,13 @@ v2.0 承诺（第一阶段）：
 ### 交付计划的可信度
 
 ```
-Week 1-2: 架构与方案（理论工作）✅
-Week 3-4: Adapter 层（技术验证）✅
-Week 5: 工作流引擎（核心逻辑）✅
-Week 6: 集成与测试（整合工作）✅
-Week 7-8: 完善与文档（交付准备）✅
+Week 1-2: 架构与方案（理论工作）【计划】
+Week 3-4: Adapter 层（技术验证）【计划】
+Week 5: 工作流引擎（核心逻辑）【计划】
+Week 6: 集成与测试（整合工作）【计划】
+Week 7-8: 完善与文档（交付准备）【计划】
 
-总耗时：8 周，相比原方案的 12-16 周，大幅缩减 ✅
+总耗时目标：8 周，相比原方案的 12-16 周大幅缩减（待 PoC 验证后回填实际数据）
 ```
 
 ---
@@ -397,9 +397,9 @@ MACAO 的借鉴：
 ### Phase 1: PoC Validation (Week 1-2)
 ```
 目标：验证关键假设是否成立
-├─ ✅ Claude Code Hook API 能否稳定获取任务完成信号？
-├─ ✅ Codex/Kimi CLI 能否通过 PTY 可靠交互？
-├─ ✅ .yml 文件作为状态信号是否足够？
+├─ [ ] Claude Code Hook API 能否稳定获取任务完成信号？（待验证）
+├─ [ ] Codex/Kimi CLI 能否通过 PTY 可靠交互？（待验证）
+├─ [ ] .yml 文件作为状态信号是否足够？（待验证）
 └─ 里程碑：能跑通单个 Executor + 单个 Reviewer 的流程
 ```
 
@@ -475,12 +475,12 @@ MACAO 的借鉴：
 - Claude Code Hook 不可用 → 评估 Wrapper 方案成本
 - 无法联系 Anthropic → 启动 Hook reverse-engineering 或 PTY 方案
 
-### 成功指标（MVP 完成）
-- ✅ 单机 Claude + 2x Reviewer 完整工作流通过
-- ✅ State Accuracy > 95%（99% 由显式信号驱动）
-- ✅ Human Override < 10%（人工介入比例）
-- ✅ 自动化测试覆盖 > 80%
-- ✅ 文档完备（用户手册 + 内部 API 文档）
+### 成功指标（MVP 完成，验收目标——未达成前不得勾选）
+- [ ] 单机 Claude + 2x Reviewer 完整工作流通过
+- [ ] State Accuracy > 95%（99% 由显式信号驱动）
+- [ ] Human Override < 10%（人工介入比例）
+- [ ] 自动化测试覆盖 > 80%
+- [ ] 文档完备（用户手册 + 内部 API 文档）
 
 ---
 
@@ -498,7 +498,12 @@ MACAO 的借鉴：
   R1 push 前置校验 / hosts 配置段）两种场景下的角色协作设计
 - v2.2: 按 2026-08-26 三份复审闭环：MERGING 中间态承接 CI gate 失败回退、Reviewer 执行权限
   边界强制 sandboxed+worktree、repository 路径统一、Task Schema 与 merge 配置段、State Store
-  DDL + 双写恢复算法、agmsg DLQ、输出自愈与 PTY 规范、docs/schemas/ 版本化 Schema + fixtures；
+  DDL + 双写恢复算法、agmsg DLQ、输出自愈与 PTY 规范、  docs/schemas/ 版本化 Schema + fixtures；
   另补 docs/README.md 文档索引
+- v2.3: 按 8ab9be7 两份复审（kimi/opencode）闭环：review_context 收敛为唯一权威结构
+  （§5.2 完整模型 + §2.4 最小子集，新增 review_context.schema.json）；Deadlock 裁定落盘
+  终局 vote_result（resolution 字段）；override 枚举统一（APPROVED/REWORK/RETRY_REVIEW/CANCEL）
+  并新增 E9/E10 与 CANCELLED 终态（FSM 10 态）；§6.1 触发条件 1 改 Layer 3 口径 + 人工接管
+  超时总则；摘要文档三处产物示例重写为 Schema 合规；计划类 ✅ 全部改为待验证表述
 
 **下一步**：Review 本文档，反馈是否有理解偏差或遗漏之处。

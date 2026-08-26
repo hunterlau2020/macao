@@ -24,8 +24,21 @@
       "properties": {
         "phase": { "type": "string" },
         "description": { "type": "string" },
-        "artifacts": { "type": "array" },
-        "checklist": { "type": "array" },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+              "type": { "type": "string" },
+              "path": { "type": "string", "minLength": 1 },
+              "changed_lines": { "type": "integer", "minimum": 0 },
+              "coverage": { "type": "number" },
+              "updated": { "type": "boolean" }
+            }
+          }
+        },
+        "checklist": { "type": "array", "items": { "type": "string" } },
         "quality_metrics": {
           "type": "object",
           "required": ["tests_passed"],

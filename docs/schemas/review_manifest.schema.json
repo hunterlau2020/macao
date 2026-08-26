@@ -25,7 +25,35 @@
       "properties": {
         "status": { "enum": ["APPROVED", "CHANGES_REQUESTED", "REJECTED"] },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "feedback": { "type": "object" }
+        "feedback": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "severity_breakdown": {
+              "type": "object",
+              "properties": {
+                "critical": { "type": "integer", "minimum": 0 },
+                "major": { "type": "integer", "minimum": 0 },
+                "minor": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["type", "severity", "issue"],
+                "properties": {
+                  "type": { "type": "string" },
+                  "severity": { "type": "string" },
+                  "location": { "type": "string" },
+                  "issue": { "type": "string", "minLength": 1 },
+                  "suggestion": { "type": "string" }
+                }
+              }
+            },
+            "automated_checks": { "type": "array" }
+          }
+        }
       }
     },
     "vote": { "enum": ["YES_APPROVE", "NO_APPROVE", "ABSTAIN"] }

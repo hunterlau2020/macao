@@ -2,66 +2,35 @@
 
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 
-- 更新时间：2026-08-26（8ab9be7 四方复审后）
-- 最近复审对象：commit `8ab9be7`（PRD v2.2），四份独立评审：
-  - `reviews/2026-08-26-review-result-8ab9be7-codex.md`：PARTIALLY_VERIFIED，未达 L1；发现 P0-1（clean rebase 改变哈希破坏审计一致性）、P0-2（worktree 强制性被架构图/示例削弱）+ 4 个 P1。
-  - `reviews/2026-08-26-review-result-8ab9be7-claude.md`：独立核对 codex 全部引用后采纳，追加 P0-3（`vote_result.json.decision` 无法表达 Consensus Deadlock 且伪代码二元误判）+ 3 个 P2/P3。
-  - `reviews/2026-08-26-review-result-8ab9be7-gemini.md`：通过实测（含 `jsonschema` 校验）全面确认上述 3 个 P0 缺陷与 4 个 P1 项，给出闭环路线与实施建议。
-  - `reviews/2026-08-26-review-result-8ab9be7-kimi.md`：v2.2 关闭上一轮全部 P0/P1，但发现新的 P0-4（PRD 内部 `review_context` 结构矛盾）+ 5 个 P1（摘要文档示例与 Schema 不符、改进总结无证据 ✅）+ P2/P3。
+- 更新时间：2026-08-26（v2.3 修订后）
+- 最近复审对象：commit `8ab9be7`（PRD v2.2），两份独立评审：
+  - `reviews/2026-08-26-review-result-8ab9be7-kimi.md`：1 个 P0 + 5 个 P1 + 4 个 P2/P3
+  - `reviews/2026-08-26-review-result-8ab9be7-opencode.md`：4 个 P1 + 4 个 P2 + 6 个 P3（19 项机器校验，PRD 全过）
 - 当前等级：**PENDING_REVIEW**
-  - 说明：PRD v2.2 已实质关闭 684a012 轮的全部遗留项；但四方独立复审共同锁定了 4 个新的 P0 阻塞性缺陷（集中在决策/安全规则、Schema/转移表一致性、核心 Context 契约映射上），待修订闭环后重新申请 L1 / PG-0 定级。
-- 本轮版本：PRD **v2.2**（含 `docs/schemas/`、`docs/README.md`）
+- 本轮修订：PRD **v2.3**（schemas 扩充至 6 个 Schema + 9 个 fixtures，全部经 jsonschema 实测通过/拒绝正确）
 
-## 针对 8ab9be7 四方评审的处理状态（本轮，待处理）
+## 针对 8ab9be7 两份评审的处理状态
 
-| 来源 | 编号 | 发现与危害 | 状态 | 建议处理位置 |
-|------|------|------------|------|---------|
-| codex / gemini | **P0-1** | clean rebase 改变被合并 commit 哈希却定义为"不触发复审"，导致最终 push 的 commit 脱离已批准的 checkpoint_ref 审计链 | 待处理 | §14.5 步骤 1 / E4a 硬校验（PRD:1459） |
-| codex / gemini | **P0-2** | Reviewer worktree 隔离在 §12.2 是强制安全规则，但在 AEP 示例（PRD:493-496）与 §16.3（PRD:1554）仍写为主工作区/可选 | 待处理 | 统一 AEP 示例为 worktree 隔离路径；§16.3 表述改为强制 |
-| claude / gemini | **P0-3** | `vote_result.schema.json` 缺少 `DEADLOCK` 枚举；Layer 1c 伪代码非 APPROVED 即判 REWORK，导致 1:1 平票死锁无法触发人工接管；统一转移表缺少 Deadlock 产物边 | 待处理 | `vote_result.schema.json` 增加 `DEADLOCK` 枚举；重构 Layer 1c 伪代码三元分支与转移表 E3a 边；§3.4 补充 1:1 死锁场景推演 |
-| kimi | **P0-4** | PRD 内部 `review_context` 结构矛盾：§2.4 Type B 与 §5.2 的字段命名、嵌套结构、缺省块不一致（`quality_metrics` vs `quality_snapshot`、`files_summary` vs `files_list`、缺少 `executor_self_assessment`/`history`/`references`） | 待处理 | 统一 `review_context` 权威结构，全文同步并新增/更新 Schema |
-| codex / gemini | **P1-1** | `review_manifest.schema.json` 顶层 `vote` 含 ABSTAIN，但 `opinion.status` 无 ABSTAIN 且 if-then 强制映射导致合法弃权票永远校验失败 | 待处理 | 补充 `opinion.status: ABSTAIN → vote: ABSTAIN` 映射规则 |
-| codex / gemini | **P1-2** | AEP payload 仅为通用 object 缺乏基于 type 的 `oneOf` 强校验；Task / Capability Manifest 缺少独立 Schema | 待处理 | `docs/schemas/` 补齐 type-specific payload 鉴别与对应 fixtures |
-| codex / gemini | **P1-3** | State Store `artifacts.path` 为全局主键，多任务/多轮次返工时同名产物会产生主键冲突 | 待处理 | 重构为 `(task_id, kind, checkpoint_ref, review_round, reviewer_id)` 复合主键 |
-| codex / gemini | **P1-4** | 审计事件"永久保留"与终端日志 `audit.retention_days=90` 策略未在数据分类与存储层显式解耦 | 待处理 | 明确结构化审计表永久保留 vs 文本日志文件按天轮转清理 |
-| kimi | **P1-5** | `EXECUTIVE_SUMMARY.md` `.dev.yml` 示例字段名与 Schema 不符（`coverage` vs `test_coverage`）且缺 `review_round` | 待处理 | `docs/EXECUTIVE_SUMMARY.md` 第 124–151 行 |
-| kimi | **P1-6** | `EXECUTIVE_SUMMARY.md` `vote_result.json` 示例缺必需字段且 `next_step` 类型不符 | 待处理 | `docs/EXECUTIVE_SUMMARY.md` 第 180–190 行 |
-| kimi | **P1-7** | `EXECUTIVE_SUMMARY.md` `.review.yml` 示例缺必需字段且 `feedback` 结构不符 | 待处理 | `docs/EXECUTIVE_SUMMARY.md` 第 157–174 行 |
-| kimi | **P1-8** | `IMPROVEMENT_SUMMARY.md` 多处用 ✅ 标记未完成的未来目标 | 待处理 | `docs/IMPROVEMENT_SUMMARY.md` 第 334–339、399–404、479–483 行 |
-| kimi | **P1-9** | `IMPROVEMENT_SUMMARY.md` `quality_snapshot.tests.passed` 为含 emoji 字符串而非整数 | 待处理 | `docs/IMPROVEMENT_SUMMARY.md` 第 188–193 行 |
-| claude / gemini | **N1 (P2)** | `macao merge approve` 是默认配置（`require_human_signoff: true`）下的常规必经命令，未列入 §14.2 命令表 | 待处理 | 补入 §14.2 日常运维命令表 |
-| claude / gemini | **N2 (P3)** | §14.1 第 6 步引用"见 14.6 Merge Policy"，实际章节号为 §14.5 | 待处理 | 勘误修正为 §14.5 |
-| claude / gemini | **N3 (P2)** | §16.3 "其余全自动"表述与默认 `require_human_signoff: true` 强制人工签字步骤存在框架性矛盾 | 待处理 | 措辞补充 "merge approve 完成签字放行" |
-| kimi | **N4 (P2)** | 部分 Schema 对嵌套结构约束不足（`next_step`/`summary`/`artifacts`/`feedback`） | 可延期 | 待细化对应 Schema |
-| kimi | **N5 (P2)** | `EXECUTIVE_SUMMARY.md` 对 `.review.yml` 路径表述笼统 | 可延期 | 第 25 行附近补充路径说明 |
-| kimi | **N6 (P3)** | `IMPROVEMENT_SUMMARY.md` 标题仍以 v2.0 为叙事 | 可延期 | 文件名/标题可注明 "截至 v2.2" |
+| 来源 | 编号 | 发现 | 状态 | 处理位置 |
+|------|------|------|------|---------|
+| kimi | P0-1 / opencode P1-3 | review_context 双结构并存（quality_metrics vs quality_snapshot、files_summary vs summary+files_list、§2.4 缺三块） | 已修订 | PRD §5.2 声明为唯一权威完整模型（补两传输块）；§2.4 收敛为最小子集（quality_snapshot 嵌套、summary+files_list、补 executor_self_assessment/history/references）；新增 `review_context.schema.json` |
+| opencode | P1-1 | §6.1 触发条件 1 残留 "Layer 2 confidence < 0.7" 陈旧文案 | 已修订 | PRD §6.1 条件改为 Layer 3/E8 口径，并注明 Layer 2 仅日志永不触发接管 |
+| opencode | P1-2 | §1.1 图无 MERGING、"Loop back to PHASE 1" 与 E6 不符；§1.2 行缺 MERGING/E7 | 已修订 | PRD §1.1 图重绘（MERGING/DONE/REWORK + E4a/E6 标注）+ 简化视图说明；§1.2 CONSENSUS/MERGE 行同步；README 导航行修正 |
+| kimi/opencode | P1-4 | Deadlock 轮 decision 无法表达、Layer 1c 静默 else、override 枚举三处不一致、CANCEL 无终态 | 已修订 | 裁定结果落盘终局 vote_result（resolution=human_override）；Layer 1c 显式两分支；枚举统一 APPROVED/REWORK/RETRY_REVIEW/CANCEL；转移表新增 E9（重试评审）/E10（取消→CANCELLED 终态），FSM 10 态 |
+| kimi | P1-1/2/3 / opencode P2-2 | EXEC 三处产物示例未通过 Schema | 已修订 | 三示例重写并通过对应 Schema（机验 PASS） |
+| kimi | P1-4 | IMPROVEMENT_SUMMARY 计划类条目标 ✅ 无证据 | 已修订 | 8 周计划改【计划】、PoC 三假设与 MVP 成功指标改 [ ] 待验证 |
+| kimi | P1-5 | quality_snapshot 字段类型不合法（24/24 ✅） | 已修订 | 改为整数并去除 emoji |
+| kimi | P2-1 | 缺 review_context Schema | 已修订 | 新增 review_context.schema.json（最小子集与完整模型共用） |
+| kimi | P2-2 / opencode P2-3 | Schema 嵌套约束不足；fixtures 覆盖宣称不符 | 已修订 | vote_result/dev/review Schema 细化嵌套结构；README 覆盖范围如实表述并补 fixtures（9 个） |
+| kimi | P2-3 | EXEC .review.yml 未标路径 | 已修订 | 补 `.macao/.reviews/<reviewer_id>.review.yml` |
+| kimi | P3-1 | 标题 v2.0 叙事 | 已修订 | 改为「改进对比总结（v2.0 → v2.2）」 |
+| opencode | P2-1 | Type D round=1 与规则矛盾 | 已修订 | 示例改为 round=2 并在消息表注明语义（即将开始的返工轮次） |
+| opencode | P2-2 | EXEC 架构速写模块名不一致；"↑500%" 无出处 | 已修订 | 速写对齐 §11.1 组件清单；500% 删除并标注设计目标 |
+| opencode | P2-4 | 人工接管超时默认动作未定义 | 已修订 | §6.1 新增超时总则：一律 HOLD+持续告警，绝不静默推进 |
+| opencode | P3-1~P3-6 | KPI 分母、timeouts 关系、Type F attachments、标题版本、full 模式机制、占位符 | 已修订 | 分别落位于 §8.1 / §13 timeouts 注释 / Type F attachments / 标题 v2.3 / §12.2 / §5.3 |
 
-## 历史轮次：684a012（PRD v2.1，已在 v2.2 闭环）
+## 下一步
 
-| 编号 | 历史发现 | 状态 | v2.2 落地位置与证据 |
-|------|---------|------|-------------------|
-| F1 (P0) | E4 即达 DONE 与 Merge Policy 的 CI gate 时序矛盾 | 已关闭 | PRD §3.3 新增 `MERGING` 中间态（E4/E4a/E4b）；§14.5 重写合并流水线；§3.4 场景推演同步 |
-| F2 (P0) | Reviewer 执行权限边界未定义 | 已关闭 | PRD §12.2 `execution_mode` 强制规则、§12.3 准入矩阵补列、§15.3 补充命令执行风险对策 |
-| P1-1 | repository 路径两种写法并存 | 已关闭 | 统一为 `review_context.repository`（PRD §2.4 注 / §5.2 注） |
-| P1-2 | Task 缺 Schema/branch 字段；merge 配置段未定义 | 已关闭 | PRD §14.1 Task 最小 Schema、Type A 增 task_id/source/target_branch、§13 merge 段 |
-| P1-3 | 双写缺恢复算法 | 已关闭 | PRD §11.4 DDL + §11.5 写入顺序与三场景 Reconcile 规则 |
-| P1-4 | 缺版本化 Schema 与 fixtures | 已关闭 | 新增 `docs/schemas/`（5 个 Schema + 正反 fixtures，已通过 jsonschema  校验） |
-| P1-5 | STATUS 同时声明"未达 L1"与"当前 PG-0" | 已关闭 | 本文件改为 PENDING_REVIEW 单一表述 |
-| 其他 P1~P3 | ANSI清洗/进程组回收/worktree注入/YAML输出自愈/DLQ/README | 已关闭 | PRD §12.5 自愈、§12.6 PTY规范、§11.6 DLQ、§15.4 用量估算、`docs/README.md` |
-
-## 下一步闭环路线
-
-1. **第一步（集中闭环 4 个 P0）**：
-   - 锁定 E4a 合并对象的 commit hash 硬校验，明确 rebase 产生新 hash 必须触发复审（或受控 range-diff 门禁）；
-   - 统一 AEP 示例与单机场景表为强制独立 worktree 路径；
-   - `vote_result.schema.json` 补全 `DEADLOCK` 枚举，重构 Layer 1c 伪代码三元分支与统一转移表 E3a 边；
-   - 统一 `review_context` 权威结构，同步 §2.4 Type B 与 §5.2 的字段命名、嵌套路径与缺省块。
-2. **第二步（补全 Schema、数据模型与摘要示例 P1 项）**：
-   - 修复 review_manifest 中的 ABSTAIN 映射冲突；
-   - 重构 State Store artifacts 复合主键；
-   - 完善 AEP type-specific payload 鉴别；
-   - 重写 `EXECUTIVE_SUMMARY.md` 三处示例使其通过 Schema；
-   - 修正 `IMPROVEMENT_SUMMARY.md` 的 ✅ 状态标记与 `quality_snapshot` 字段类型。
-3. **第三步（复审定级）**：
-   - 补齐 1:1 平票死锁推演场景与 fixtures；
-   - 完成下一轮独立复审，正式定级 L1 DOC-ALIGNED / PG-0。
+1. 对 PRD v2.3 申请下一轮独立复审（重点：review_context 单一结构、Deadlock→终局 vote_result 流程、10 态 FSM 一致性）；
+2. SIM 复核五场景（首次双批准 / CI gate 失败 E4b / 1:1 僵局 / 一人弃权 / 返工第二轮）+ Deadlock 人工裁定场景；
+3. 复审通过后定级 L1 DOC-ALIGNED / PG-0。

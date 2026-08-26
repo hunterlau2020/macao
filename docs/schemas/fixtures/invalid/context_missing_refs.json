@@ -1,0 +1,11 @@
+{
+  "dev_checkpoint": { "path": ".macao/.dev.yml", "content_base64": "..." },
+  "repository": { "workspace_path": "~/work/macao-demo", "remote_name": "origin" },
+  "task_info": { "description": "Refactor database connection pooling" },
+  "code_changes": {
+    "diff_command": "git diff HEAD^..HEAD"
+  },
+  "quality_snapshot": {
+    "tests": { "passed": 24, "failed": 0, "coverage": 0.87 }
+  }
+}

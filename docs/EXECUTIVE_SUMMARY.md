@@ -39,7 +39,7 @@
 └─ 评审重点（关注什么）
 ```
 
-**收益**：Reviewer 一眼看懂，评审效率 ↑ 500%
+**收益**：Reviewer 一眼看懂，评审效率显著提升（设计目标值，实测以 PoC 为准，见 KPI 表）
 
 ### 3️⃣ 清晰的决策链（Auditable Decision Chain）
 
@@ -73,13 +73,15 @@ MVP 范围               4 CLI + 远程         3 CLI (local only)
 
 ## 🗺️ 产品架构速写
 
-```
-User Interface
+```text
+User Interface (macao CLI)
     ↓
-MACAO Orchestrator (LangGraph FSM)
-    ├─ Agent Registry
-    ├─ State Engine
-    └─ Workflow Controller
+MACAO Orchestrator (LangGraph FSM, 单进程)
+    ├─ State Recognition Engine（状态识别）
+    ├─ Consensus Engine（共识/法定人数）
+    ├─ Merge Controller（合并流水线）
+    ├─ Config Loader（macao.yaml）
+    └─ State Store（SQLite 审计与任务态）
     ↓
 Agent Adapters (.dev.yml ↔ AEP ↔ .review.yml)
     ├─ Claude Code Adapter
@@ -89,9 +91,9 @@ Agent Adapters (.dev.yml ↔ AEP ↔ .review.yml)
 Local CLI Processes (PTY)
 ```
 
-**关键**：Adapter 层是通过**.yml 文件和 AEP 消息**与 CLI 通信，不是直接调用 API。
+**关键**：Adapter 层是通过**.yml 文件和 AEP 消息**与 CLI 通信，不是直接调用 API。组件清单与 PRD §11.1 一致。
 
-> 说明：v1.0 架构中的 Project Manager（项目/团队定义、Agent 角色绑定）在 v2.0 中并入 Workflow Controller（编排）与 Agent Registry（角色绑定配置），配置沿用 agmsg team 定义。
+> 说明：v1.0 架构中的 Project Manager（项目/团队定义、Agent 角色绑定）在 v2.x 中并入 Orchestrator 的任务编排（Workflow Controller 职能）与 Agent Registry 配置，配置沿用 agmsg team 定义。
 
 ---
 
@@ -122,29 +124,31 @@ Local CLI Processes (PTY)
 ### `.dev.yml` - "我完成了" 的宣言书
 
 ```yaml
-# 精简示例：完整字段定义见 PRD §2.1
+# 精简示例（可通过 dev_manifest.schema.json 校验）：完整字段定义见 PRD §2.1
 version: "1.0"
+review_round: 1
 status: "ready_for_review"  # ← MACAO 读这行来判断开发是否完成
 signal: "EXPLICIT"          # ← 显式信号标记，Layer 1 无条件信任
 executor:
   id: "cc-ds4"
   cli: "claude-code"
-  
+
 development:
   description: "Refactored database connection pooling"
   artifacts:
     - path: "src/db/connection.py"
       changed_lines: 45
-  
+
   quality_metrics:
     tests_passed: true
-    coverage: 0.87
+    tests_exempt: false
+    test_coverage: 0.87
     lint_errors: 0
-  
+
   git:
     latest_commit: "a1b2c3d"
     files_changed: 5
-  
+
   review_focus:  # ← 给 Reviewer 的提示
     - "Thread safety"
     - "Timeout configuration"
@@ -155,6 +159,11 @@ development:
 ### `.review.yml` - "我的评审意见" 的投票券
 
 ```yaml
+# 精简示例（可通过 review_manifest.schema.json 校验）：完整字段见 PRD §2.2
+version: "1.0"
+checkpoint_ref: "a1b2c3d"
+review_round: 1
+
 reviewer:
   id: "cc-glm"
   cli: "codex"
@@ -162,34 +171,45 @@ reviewer:
 opinion:
   status: "CHANGES_REQUESTED"  # ← APPROVED | CHANGES_REQUESTED | REJECTED
   confidence: 0.92
-  
-  feedback:
-    - type: "logic"
-      severity: "major"
-      location: "src/db/connection.py:82"
-      issue: "Missing exception handling"
-      suggestion: "Wrap in try-except"
 
-vote: "NO_APPROVE"  # ← MACAO 读这行投票
+  feedback:
+    summary: "设计合理，但需补充异常处理"
+    severity_breakdown: { critical: 0, major: 1, minor: 2 }
+    categories:
+      - type: "logic"
+        severity: "major"
+        location: "src/db/connection.py:82"
+        issue: "Missing exception handling"
+        suggestion: "Wrap in try-except"
+
+vote: "NO_APPROVE"  # ← MACAO 读这行投票；须与 status 按映射表一致
 ```
 
-**关键**：一个 Reviewer，一个 .review.yml，一张投票。
+**关键**：一个 Reviewer，一个 .review.yml（`.macao/.reviews/<reviewer_id>.review.yml`），一张投票。
 
 ### `vote_result.json` - "投票已统计" 的公告
 
 ```json
 {
+  "version": "1.0",
   "checkpoint_ref": "a1b2c3d",
+  "review_round": 1,
   "votes": [
-    {"reviewer": "cc-glm", "vote": "NO_APPROVE"},
-    {"reviewer": "kimi", "vote": "NO_APPROVE"}
+    { "reviewer": "cc-glm", "vote": "NO_APPROVE", "confidence": 0.92, "issues_count": 3 },
+    { "reviewer": "kimi", "vote": "NO_APPROVE", "confidence": 0.85, "issues_count": 1 }
+  ],
+  "vote_breakdown": { "approve": 0, "reject": 2, "abstain": 0 },
+  "input_artifacts": [
+    { "kind": "review", "path": ".macao/.reviews/cc-glm.review.yml", "sha256": "9f2a7c1e5bd0", "message_id": "msg-20240115-003" },
+    { "kind": "review", "path": ".macao/.reviews/kimi.review.yml", "sha256": "b91c04d8e3af", "message_id": "msg-20240115-004" }
   ],
   "decision": "REWORK_REQUIRED",
-  "next_step": "Send REWORK_REQUEST to executor"
+  "resolution": "automatic",
+  "next_step": { "action": "REWORK", "issues_to_fix": [ { "id": "cc-glm/1", "severity": "major" } ] }
 }
 ```
 
-**关键**：所有投票过程透明化，用户看 JSON 就知道发生了什么。示例为精简示意版，权威 Schema 见 PRD §2.3（含最低法定人数与决策表）。
+**关键**：所有投票过程透明化，用户看 JSON 就知道发生了什么。示例可通过 `docs/schemas/vote_result.schema.json` 校验；权威 Schema 与最低法定人数决策表见 PRD §2.3。
 
 ---
 
@@ -244,7 +264,7 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 - [ ] Codex Adapter（PTY Wrapper）
 - [ ] Kimi Adapter（PTY Wrapper）
 - [ ] .dev.yml / .review.yml / vote_result.json 规范
-- [ ] LangGraph FSM（9 个业务状态，含 MERGING 合并中间态，见 PRD §3.3）
+- [ ] LangGraph FSM（10 个业务状态，含 MERGING 合并中间态与 CANCELLED 终态，见 PRD §3.3）
 - [ ] 2/3 投票共识规则
 - [ ] AEP Message 协议（7 种消息类型）
 - [ ] CLI 交互界面（Rich + prompt_toolkit）

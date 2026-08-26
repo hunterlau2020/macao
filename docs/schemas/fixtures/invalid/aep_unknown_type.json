@@ -1,0 +1,9 @@
+{
+  "protocol": "AEP/1.0",
+  "message_id": "msg-20240115-099",
+  "timestamp": "2024-01-15T10:35:00Z",
+  "type": "TASK_ASSIGN",
+  "from": "macao",
+  "to": "cc-ds4",
+  "payload": {}
+}
