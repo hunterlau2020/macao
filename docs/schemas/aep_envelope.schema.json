@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.2/aep_envelope.schema.json",
+  "$id": "https://macao.dev/schemas/v2.3/aep_envelope.schema.json",
   "title": "MACAO AEP/1.0 Message Envelope (all 7 types)",
   "type": "object",
   "required": ["protocol", "message_id", "timestamp", "type", "from", "to", "payload"],

@@ -1,4 +1,4 @@
-# MACAO (Multi-Agent CLI Agent Orchestrator) - 产品方案 v2.3
+# MACAO (Multi-Agent CLI Agent Orchestrator) - 产品方案 v2.3.1
 
 > **核心理念**：通过**流程规范化** + **输出物标准化**，使 Agent 状态识别从"黑盒推断"转变为"约定式识别"。
 
@@ -82,7 +82,7 @@
              v
     ┌──────────────────────────────────────┐
     │  PHASE 3: REVIEWER WORK              │
-    │  ├─ Reviewer 收信后进入 REVIEWING   │
+    │  ├─ Reviewer 收信后进入 WAITING_REVIEW  │
     │  ├─ 运行本地 CLI 检查（代码、安全等）│
     │  └─ 生成 .review.yml                 │
     └────────┬─────────────────────────────┘
@@ -94,7 +94,7 @@
     │  PHASE 4: CONSENSUS CHECK            │
     │  ├─ MACAO 收集所有 .review.yml       │
     │  ├─ 执行投票规则 (2/3 通过)          │
-    │  └─ 决定 APPROVED or REJECTED        │
+    │  └─ 决定 APPROVED or REWORK_REQUIRED │
     └────────┬─────────────────────────────┘
              │
           ┌──┴──────────────────┐
@@ -302,7 +302,7 @@ metadata:
   methods: ["code_analysis", "security_scan", "performance_check"]
   certainty: "high"
 
-vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
+vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE（ABSTAIN 不在此枚举：Reviewer 无弃权通道，弃权票仅由 Orchestrator 在超时降级时写入 vote_result.json，见 §3.3 超时行与 §6.1）
 ```
 
 **`opinion.status` ↔ `vote` 映射与一致性校验**：
@@ -315,6 +315,7 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
 
 - `vote` 是唯一计票依据；MACAO 解析 `.review.yml` 时按上表校验二者一致性
 - 不一致（如 status=APPROVED 但 vote=NO_APPROVE）→ 该 `.review.yml` 判为**无效产物**：不计入有效票，发出告警并记录审计日志
+- 弃权不通过 `.review.yml` 表达：Reviewer 超时经 §6.1 人工确认标记弃权后，由 Orchestrator 记入本轮票面，在终局 `vote_result.json` 落盘时写入对应 `ABSTAIN` 票据并计入 `reviewers_responded`（§3.3 超时行同口径）
 
 ---
 
@@ -396,7 +397,7 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
 - 最低法定人数 `minimum_quorum = ⌈2 × configured_reviewers / 3⌉`，2 人与 3 人配置下均为 **2**
 - 有效票 ≥ 法定人数 且 赞成占比 ≥ 2/3 → 决策 `APPROVED`（进入合并）
 - 有效票 ≥ 法定人数 且 反对占比 ≥ 2/3 → 决策 `REWORK_REQUIRED`（进入返工）
-- 其余一切情形（含 1:1、有效票低于法定人数、全弃权/全超时）→ Consensus Deadlock，触发人工接管（见 §6.1），由用户裁定 `APPROVED` / `REWORK` / 重试评审
+- 其余一切情形（含 1:1、有效票低于法定人数、全弃权/全超时）→ Consensus Deadlock，触发人工接管（见 §6.1），由用户裁定 `APPROVED` / `REWORK` / `RETRY_REVIEW` / `CANCEL`（四选项的转移落位见 §3.3 E7/E9/E10）
 - Reviewer 配置：MVP 阶段为 2 Reviewer（Codex + Kimi），此时规则等价于全票通过；3 Reviewer 为目标配置（建议引入第三个异构 CLI，如 Gemini CLI，见第四部分扩展计划——异构评审比同模型多实例更具独立性），协议本身支持 N 个 Reviewer（N ≥ 2）
 
 **决策表**：
@@ -430,7 +431,7 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
 | 6 | `STATE_CHANGED` | Agent → MACAO | Agent 上报自身状态变化 | 同名 |
 | 7 | `HUMAN_OVERRIDE_REQUEST` | MACAO → User | 请求人工接管决策 | v2.0 新增 |
 
-以下给出开发/评审主流程的 4 个核心消息类型（1-4）的详细格式示例。
+以下给出开发/评审主流程的全部 7 个消息类型（1-4 为核心详细篇幅，5-7 为信封级规格）的格式示例。
 
 **统一信封约定**（适用于全部 7 类消息）：
 
@@ -495,7 +496,7 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
       },
 
       "repository": {
-        "workspace_path": "~/work/macao-demo",
+        "workspace_path": "~/work/macao-demo/.macao/worktrees/kimi/r1",
         "remote_name": "origin",
         "fetch_policy": "fetch_before_diff"
       },
@@ -682,7 +683,7 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   "payload": {
     "trigger": "consensus_deadlock",
     "context": "2 Reviewer 配置下 1 弃权 + 1 反对，有效票低于法定人数 2",
-    "options": ["APPROVED", "REWORK", "RETRY_REVIEW"],
+    "options": ["APPROVED", "REWORK", "RETRY_REVIEW", "CANCEL"],
     "deadline": "2024-01-15T11:08:00Z"
   }
 }
@@ -779,7 +780,11 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
             # 不存在"非 A 即 B"的静默 else；Deadlock 轮先人工裁定、后写终局 decision
             if result.decision == 'APPROVED':
                 return AgentState.MERGING                  # E4：进入合并流水线（E4a/E4b 命令驱动）
-            return AgentState.REWORK                       # E5
+            # E5 守卫：round 已收起 max_rework_rounds 时不得自动返回 REWORK，
+            # 改由 Orchestrator 发 HUMAN_OVERRIDE_REQUEST（Type G）→ E7 人工裁定（§15.2）
+            if rnd < max_rework_rounds:
+                return AgentState.REWORK                   # E5
+            return request_human_override(agent_id='orchestrator', reason='max_rework_rounds_failed')
 
     # ===== Layer 2: 行为推断 —— 只记录与预警，永不改变业务状态 =====
     signals = collect_behavior_signals(agent_id)          # git / tests / pty_idle
@@ -821,16 +826,16 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 | E1 | `IDLE` | 命令 | 用户受理任务，发送 `DEVELOPMENT_STARTED` AEP | `CODING` | 创建任务记录（State Store）；round=1 |
 | — | `CODING` / `REWORK` | 产物 | 当前轮 `.dev.yml` 通过最小有效性校验（新 commit + round 匹配） | `READY_FOR_REVIEW` | 锁定 checkpoint_ref；检查点窗口计时（1m） |
 | E2 | `READY_FOR_REVIEW` | 命令 | `.dev.yml` 消费完成，发送 `REVIEW_REQUEST` AEP | `WAITING_REVIEW` | `.dev.yml` 归档；记录评审 deadline |
-| E3 | `WAITING_REVIEW` | 产物 | 有效票 ≥ minimum_quorum（当前 ref/round 的 `.review.yml`） | `CONSENSUS_CHECK` | 收集到的 `.review.yml` 纳入 git 提交 |
-| — | `WAITING_REVIEW` | 超时 | 超时降级流程完成（ping/弃权/人工裁定，见 §6.1） | `CONSENSUS_CHECK` | 弃权票记入 `vote_result.json` |
+| E3 | `WAITING_REVIEW` | 产物 | 有效票 ≥ minimum_quorum（当前 ref/round 的 `.review.yml`） | `CONSENSUS_CHECK` | 收集到的 `.review.yml` 纳入 git 提交；**票数判定是确定性函数**——若按 §2.3 决策表算出 Deadlock（占比均未达 2/3），就地在伴随动作内发送 `HUMAN_OVERRIDE_REQUEST`（Type G，10 分钟时限，§6.1）并 **HOLD，不写 `vote_result.json`**，等待 E7 裁定 |
+| — | `WAITING_REVIEW` | 超时 | 超时降级流程完成（ping/弃权/人工裁定，见 §6.1） | `CONSENSUS_CHECK` | 弃权标记由 Orchestrator 记入本轮票面，**随 E7 终局 `vote_result.json` 一并落盘**（不提前写决策未定的文件） |
 | E4 | `CONSENSUS_CHECK` | 产物 | `vote_result.json` 决策 = `APPROVED` | `MERGING` | Merge Controller 启动合并流水线（§14.5：检出 → rebase 检查 → merge → CI gate → 人工签字 → push） |
-| E4a | `MERGING` | 命令 | 合并流水线全部成功（CI gate 通过、push 完成、签字按策略收集） | `DONE` | 发送 `MERGE_COMPLETED`（含 merge_commit）；本轮产物归档 |
+| E4a | `MERGING` | 命令 | 合并流水线全部成功，且**最终 push 对象 == `vote_result.json.checkpoint_ref` 硬校验通过**（期间未产生任何新 commit；CI gate 通过、push 完成、签字按策略收集） | `DONE` | 发送 `MERGE_COMPLETED`（含 merge_commit）；本轮产物归档 |
 | E4b | `MERGING` | 命令 | CI gate 失败，或 push 失败不可自动恢复，或签字被拒绝 | `REWORK` | 生成新一轮 `REWORK_REQUEST`（round+1，注明原因）；本轮产物归档 |
 | E5 | `CONSENSUS_CHECK` | 产物 | 决策 = `REWORK_REQUIRED` 且 round < max_rework_rounds | `REWORK` | 发送 `REWORK_REQUEST`（round+1）；本轮产物归档 |
 | E6 | `REWORK` | 产物 | 新一轮 `.dev.yml` 有效（round+1、新 commit） | `READY_FOR_REVIEW` | 更新当前 checkpoint_ref |
-| E7 | `CONSENSUS_CHECK` | 命令 | Deadlock 人工裁定（`--choice APPROVED \| REWORK \| RETRY_REVIEW \| CANCEL`），或 round ≥ max_rework_rounds 仍返工 | 见下 | 裁定结果落盘为终局 `vote_result.json`（附 `resolution: human_override`）后按选择转移：APPROVED→E4；REWORK→E5 同规则；写入审计 |
+| E7 | `CONSENSUS_CHECK` | 命令 | Deadlock 人工裁定（`--choice APPROVED \| REWORK \| RETRY_REVIEW \| CANCEL`），或 round ≥ max_rework_rounds 仍返工 | 见下 | 裁定结果落盘为终局 `vote_result.json`（附 `resolution: human_override`）后按选择转移：APPROVED→E4；REWORK→E5 同规则；RETRY_REVIEW→E9；CANCEL→E10（CANCELLED 终态）；均写入审计 |
 | E9 | `CONSENSUS_CHECK` | 命令 | 用户裁定 RETRY_REVIEW（重试当前轮评审，round 不变） | `WAITING_REVIEW` | 本轮已收意见作废归档；重新发送 `REVIEW_REQUEST`（全新 message_id 与 deadline） |
-| E10 | `*`（任意活动态，即除 DONE/CANCELLED 外） | 命令 | 用户执行 `macao cancel <task>` | `CANCELLED`（终态） | 通知全体 Agent；现场归档；审计记录 |
+| E10 | `*`（任意活动态，即除 DONE/CANCELLED 外） | 命令 | 用户执行 `macao cancel <task>`，或 override 裁定 `--choice CANCEL`（E7） | `CANCELLED`（终态） | 通知全体 Agent；现场归档；审计记录 |
 | E8 | `*`（任意） | 诊断 | 60min 无进展 + Layer 3 置信度 <0.7 | `UNKNOWN` | HUMAN_OVERRIDE，等待用户裁定 |
 
 > 说明：
@@ -879,6 +884,22 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 
 旧 r1 `.review.yml` 在步骤 6 前已归档——即使 Reviewer 尚未覆盖同名文件也不会被误读；
 若 round 已达 `max_rework_rounds` 仍为返工决策，则走 E7 人工裁定。
+
+**场景推演三：1:1 平票 → Deadlock → 人工裁定**（含弃权/取消变体）
+
+| 步骤 | 触发 | 状态变化（命中转移） | 作用域内读取的产物 |
+|------|------|--------------------|------------------|
+| 1-4 | 同场景一步骤 1-4；cc-glm 投 YES_APPROVE、kimi 投 NO_APPROVE（round 1） | `IDLE` → … → `CONSENSUS_CHECK`（E3） | 2 × `.review.yml` |
+| 5 | E3 伴随动作：票数判定为确定性函数——有效票 2 但双方占比均 < 2/3（§2.3 决策表第 4 行）→ 发送 `HUMAN_OVERRIDE_REQUEST`（Type G，`options` 含 CANCEL，10 分钟时限）；**不写 `vote_result.json`**，`CONSENSUS_CHECK` HOLD | （无转移，HOLD 待裁定） | — |
+| 6a | 用户 `macao override resolve --choice APPROVED` | 裁定落盘终局 vote_result（decision=APPROVED, resolution=human_override）→ `MERGING`（E4） | 终局 `vote_result.json` |
+| 6b | 用户选 REWORK | 终局 vote_result（decision=REWORK_REQUIRED, resolution=human_override）→ `REWORK`（E5 同规则） | 终局 `vote_result.json` |
+| 6c | 用户选 RETRY_REVIEW | 终局 vote_result（decision=RETRY_REVIEW）→ `WAITING_REVIEW`（E9；意见作废归档、round 不变、新 deadline） | 终局 `vote_result.json` |
+| 6d | 用户选 CANCEL | 终局 vote_result（decision=CANCELLED）→ `CANCELLED`（E10 终态）；通知全体、现场归档 | 终局 `vote_result.json` |
+| 7 | （仅 6a）同场景一步骤 6 | `MERGING` → `DONE`（E4a） | — |
+
+- 每一步恰好命中一个合法转移；步骤 5 期间没有任何 `.review.yml`/`vote_result.json` 处于可被读走状态，不存在"Deadlock 被误读为 REWORK"的路径。
+- `resolution: human_override` 的终局 vote_result 由 Schema 强制（`docs/schemas/vote_result.schema.json`），E9/E10 的落点由转移表 E9/E10 行唯一确定。
+- 弃权变体：1 人弃权 + 1 反对（有效票 1 < 法定人数）经由超时降级流程进入 `CONSENSUS_CHECK`，其余与步骤 5-7 一致；用户超时未裁定时按 §6.1 总则 HOLD + 持续告警，绝不静默推进。
 
 ---
 
@@ -961,7 +982,7 @@ review_context:
   dev_checkpoint:
     path: ".macao/.dev.yml"
   repository:
-    workspace_path: "~/work/macao-demo"
+    workspace_path: "~/work/macao-demo/.macao/worktrees/kimi/r1"   # 注入后的独立 worktree 路径，非主工作区（§16.3）
     remote_name: "origin"
     fetch_policy: "fetch_before_diff"
 
@@ -1100,7 +1121,7 @@ HUMAN_OVERRIDE_TRIGGERS = [
     {
         "condition": "Consensus deadlock",
         "description": "No consensus achievable (e.g., 50-50 vote)",
-        "action": "Ask user: '--choice APPROVED | REWORK | RETRY_REVIEW'（枚举见 E7/E9）",
+        "action": "Ask user: '--choice APPROVED | REWORK | RETRY_REVIEW | CANCEL'（枚举与落位见 E7/E9/E10）",
         "timeout": "10 minutes"
     },
     {
@@ -1237,13 +1258,13 @@ Merge: Push to main           |    Consensus + Merge
 - [ ] **Prototype UI**：用 `rich` 库实现简单的 CLI 交互 demo
 - [ ] **文档完善**：补全本 PRD 中的 edge cases 和错误处理细节
 
-### 成功标志 (MVP 完成)
+### 成功标志 (MVP 完成)——验收标准（未达成前不得勾选）
 
-- ✅ 单机 Claude Code + 2x Reviewer 的完整工作流运行通过
-- ✅ 所有关键状态转换由显式产物与命令型转移驱动，无 LLM 裁判（见 §3.3 统一转移表）
-- ✅ 三个 CLI 的 Adapter 都能正常启停与通信
-- ✅ 自动化测试覆盖 80% 以上逻辑
-- ✅ 用户手册与内部文档完备
+- [ ] 单机 Claude Code + 2x Reviewer 的完整工作流运行通过
+- [ ] 所有关键状态转换由显式产物与命令型转移驱动，无 LLM 裁判（见 §3.3 统一转移表）
+- [ ] 三个 CLI 的 Adapter 都能正常启停与通信
+- [ ] 自动化测试覆盖 80% 以上逻辑
+- [ ] 用户手册与内部文档完备
 
 ---
 
@@ -1296,14 +1317,19 @@ CREATE TABLE tasks(
   task_id       TEXT PRIMARY KEY,
   title         TEXT NOT NULL,
   source_branch TEXT, target_branch TEXT,
-  state         TEXT NOT NULL,              -- 当前 FSM 状态（9 态之一）
+  state         TEXT NOT NULL,              -- 当前 FSM 状态（10 态之一，含 CANCELLED，见 §3.3）
   checkpoint_ref TEXT, review_round INTEGER NOT NULL DEFAULT 1,
   created_at TEXT, updated_at TEXT
 );
 CREATE TABLE artifacts(
-  path TEXT PRIMARY KEY, kind TEXT NOT NULL, -- dev_manifest|review_manifest|vote_result
-  sha256 TEXT, checkpoint_ref TEXT, review_round INTEGER,
-  consumed INTEGER NOT NULL DEFAULT 0, archived_path TEXT
+  artifact_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id TEXT NOT NULL REFERENCES tasks(task_id),
+  kind TEXT NOT NULL,            -- dev_manifest|review_manifest|vote_result
+  path TEXT NOT NULL,            -- 物理路径（展示/恢复用，非唯一键）
+  sha256 TEXT, checkpoint_ref TEXT, review_round INTEGER, reviewer_id TEXT,
+  consumed INTEGER NOT NULL DEFAULT 0, archived_path TEXT,
+  created_at TEXT,
+  UNIQUE(task_id, kind, checkpoint_ref, review_round, reviewer_id)
 );
 CREATE TABLE audit_events(
   sequence_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1323,6 +1349,8 @@ CREATE TABLE dead_letter_queue(
 ### 11.5 双写与崩溃恢复（Reconcile）
 
 **写入顺序约定**：① 物理产物落盘并 fsync → ② SQLite 事务提交 → ③ git 提交（异步，失败可补偿重放）。
+
+**artifacts 追加语义**：归档采用"新增行"而非同路径 upsert——归档时在 `artifacts` 新插一行并填写 `archived_path`，原行标记 `consumed=true` 后转为只读；多轮/多任务下同路径产物各自一行（`artifact_id` 自增，唯一约束见 §11.4 DDL），git 历史与 SQLite 双账本按"latest row per (task, kind, ref, round)"查询，任何情况下不用覆盖式写入抹掉历史审计行。
 
 **第一真理源优先级**：git 已提交产物 > 磁盘上通过 Schema 校验的产物文件 > SQLite 记录。
 
@@ -1375,7 +1403,7 @@ cancel(reason)                            # 取消当前任务并回收子进程
 - `read_only`：只读挂载评审工作区，禁止任何写操作与命令执行（静态分析类工具适用）
 - `sandboxed`：在独立 git worktree + 容器/受限环境中执行；网络访问与包安装默认禁止，白名单放行
 - `full`：完全执行权限，仅允许 Executor 在其任务工作区内使用（以任务 worktree/路径白名单 + 命令审计为界；具体沙箱机制在 PoC 验证后固化）
-- **强制约束**：担任 Reviewer 的 CLI 必须 `execution_mode ∈ {read_only, sandboxed}` 且 MVP 阶段强制 `sandboxed` + 独立 worktree——通用 coding Agent 具备任意 shell/网络能力，若不加边界，被 prompt injection 后的危害是"破坏工作区/外传代码"而不只是"投错票"
+- **强制约束**：担任 Reviewer 的 CLI 必须 `execution_mode ∈ {read_only, sandboxed}` 且 MVP 阶段强制 `sandboxed` + 独立 worktree——通用 coding Agent 具备任意 shell/网络能力，若不加边界，被 prompt injection 后的危害是"破坏工作区/外传代码"而不只是"投错票"。`supports_worktree=true` 是 Reviewer 的**准入硬条件**：preflight 与 Conformance 均强制校验，不支持者拒绝接入（§16.3 同口径）。
 
 ### 12.3 MVP 准入矩阵
 
@@ -1392,7 +1420,7 @@ cancel(reason)                            # 取消当前任务并回收子进程
 - preflight 全绿；版本探测与 `cli_version_range` 一致；
 - 五类一致性场景：PTY 断开重连、重复 message_id 回执去重、CLI 升级后探测、厂商限流退避、凭据失效报错；
 - producer→consumer 端到端：Adapter 生成的产物 fixture 直接喂给消费方命令（如 §5.3 的 jq 路径）验证可解析；
-- 校验输入为**版本化 JSON Schema 与正/反 fixture**，统一维护于 `docs/schemas/`（三类产物 + AEP 信封 + macao.yaml），Schema 演进随 PRD 版本号走。
+- 校验输入为**版本化 JSON Schema 与正/反 fixture**，统一维护于 `docs/schemas/`（三类产物 + AEP 信封 + review_context + macao.yaml），Schema 演进随 PRD 版本号走。
 
 ### 12.5 Reviewer 输出自愈（两级）
 
@@ -1440,7 +1468,7 @@ merge:
   strategy: "ff_only"            # ff_only | no_ff
   ci_gate_command: null          # 例: "make ci"；null 表示无门禁（MERGING 内执行）
   require_human_signoff: true    # 推送前人工签字开关；默认保守值 true（刻意的安全默认）
-  rebase_before_merge: true      # 上游 target 领先时由 Executor 自动 rebase
+  rebase_before_merge: false     # MVP 禁用；受控门禁（range-diff 三重条件）规划于 v1.1，见 §14.5
 timeouts:
   development: "2h"              # 总上限；期间每 60min 无进展即触发 E8 检查（见 §6.1）
   checkpoint_validation: "1m"    # 超时处置：保持原状态并告警，走 Layer 2 预警路径
@@ -1474,7 +1502,7 @@ audit:
 3. 创建任务：`macao task create --title … --acceptance … --branch feature/x` —— **Task 最小 Schema** = `task_id`（State Store 生成）+ 标题 + 验收标准数组（可测试判据，映射 `DEVELOPMENT_STARTED.success_criteria`）+ `source_branch` + `target_branch` + 期望产物路径；验收标准或目标分支缺失则拒绝创建；字段随任务写入 State Store 的 tasks 表并进入 AEP 消息；
 4. 观察：`macao status`（FSM 状态 / 当前 ref 与 round / 各 agent 状态）、`macao logs <agent>`；
 5. 人工处置：出现 HUMAN_OVERRIDE_REQUEST 时，`macao override list` 查看证据（诊断报告/票面/冲突详情）→ `macao override resolve --choice APPROVED|REWORK|RETRY_REVIEW|CANCEL [--note]`；每笔决策写入审计并向请求方回执；
-6. 合并与发布：见 14.6 Merge Policy；
+6. 合并与发布：见 14.5 Merge Policy；
 7. 归档：流程结束后本轮产物自动归档至 `.macao/archive/<ref>/r<round>/` 并随 git 提交。
 
 ### 14.2 日常运维操作
@@ -1484,6 +1512,7 @@ audit:
 | 暂停观察 | `macao pause <task>` | 进入 HOLD，停止状态推进 |
 | 取消 | `macao cancel <task>` | 终止任务，通知全体 agent，归档现场 |
 | 重试 | `macao retry <task>` | 从最后检查点重放 |
+| 合并签字 | `macao merge approve [--note]` | `require_human_signoff: true`（默认）下推送前的强制人工放行（§14.5 第 4 步）；拒绝则 E4b——与 `override resolve`（异常接管/Deadlock 裁定）语义不同 |
 | 用量查询 | `macao usage` | 按阶段/CLI 汇总 token 与调用次数 |
 | 手工补交检查点 | `macao checkpoint create --file <path>` | 替 Agent 手工生成/修正 `.dev.yml`（内容仍须通过最小有效性校验，见 §2.1） |
 
@@ -1501,7 +1530,7 @@ CLI 版本超出支持矩阵 → preflight 告警并要求显式确认；某 Rev
 
 E4 进入 `MERGING` 后，Merge Controller 顺序执行（任一步失败即走 E4b 返工，除非该项配置为可选且未启用）：
 
-1. **检出与上游同步**：检出 target 分支；若上游领先且 `rebase_before_merge: true`，由 Executor 自动 rebase 并重跑本地验证——rebase 仅改变 commit 哈希、不触发新一轮评审；但解决冲突产生的代码改动视为新变更 → E4b 返工；
+1. **检出与上游同步（E4a 硬校验前置）**：检出 target 分支。"评审对象 = 合并对象"是本流水线的不可变前提：E4 后至 push 前的任何操作若产生新 commit（含 clean rebase、cherry-pick、amend——它们都会改变哈希），MVP 一律判为**未评审的新对象 → E4b 增量复审**（`REWORK_REQUEST` 注明原因）。"rebase 仅改变哈希、不触发新一轮评审"的旧豁免**明确废除**——审计链在哈希层面不得断裂。`rebase_before_merge` 配置项在 MVP 禁用；v1.1 可启用**受控门禁**（三者齐备方可免重审）：`git range-diff` 证明除 parent 外无内容差异 + `rebased_from` 元数据写入 `vote_result`/审计 + CI gate 与人工签字在新 commit 上重跑。解决冲突产生的代码改动同样视为新变更 → E4b；
 2. **技术合并**：merge 到 target 分支（默认 `ff_only`，可配 `no_ff`）；Git Conflict → 触发 §6.1 Git Conflict 人工接管，裁定后继续或 E4b；
 3. **CI gate**：`merge.ci_gate_command` 非空时执行；失败 → E4b（REWORK_REQUEST 注明 CI 失败原因）；
 4. **人工签字**：`require_human_signoff: true`（默认，刻意的保守安全默认值——正常路径下人类对自己代码被合并保留否决权）时，推送前需用户 `macao merge approve` 确认；拒绝 → E4b；
@@ -1554,7 +1583,7 @@ KPI 之外增加共识有效性评测，回答"双 Reviewer 共识是否真能�
 
 | 角色 | 实体 | 核心职责 | 垄断权（单一写者原则） |
 |------|------|---------|----------------------|
-| **编排者** | 用户 + MACAO Orchestrator | 任务受理、FSM 推进（E1~E8）、共识仲裁、合并执行、人工接管处理 | 唯一写 `vote_result.json`、唯一执行 merge |
+| **编排者** | 用户 + MACAO Orchestrator | 任务受理、FSM 推进（E1~E10）、共识仲裁、合并执行、人工接管处理 | 唯一写 `vote_result.json`、唯一执行 merge |
 | **执行者** | Executor CLI（MVP = Claude Code） | 理解验收标准 → 改码 → 自测 → commit → 生成 `.dev.yml` | 唯一写 `.dev.yml`、唯一产生业务 commit |
 | **评审专家** | Reviewer CLI ×N（Codex / Kimi） | 按 review_context 取 diff → 审查 → 产出意见 → 投票 | 各自唯一写自己的 `.review.yml` |
 
@@ -1587,18 +1616,19 @@ KPI 之外增加共识有效性评测，回答"双 Reviewer 共识是否真能�
 │  ├─ CodexAdapter ─────── PTY ── codex（评审专家 A）   │
 │  └─ KimiAdapter ───────── PTY ── kimi（评审专家 B）   │
 │      │                                               │
-│  同一个工作区 clone：.macao/ 产物 + archive + git     │
+│  同一仓库：主工作区（Executor）+ 每 Reviewer 独立      │
+│  worktree；.macao/ 产物 + archive + git               │
 └──────────────────────────────────────────────────────┘
 ```
 
 | 协作面 | 实现方式 | 说明 |
 |--------|---------|------|
 | 控制流 | 本地 agmsg 文件队列 | 零网络延迟；消息可靠性由队列落盘保证 |
-| 代码共享 | 同一个工作区 clone | 执行者 commit 后，评审专家直接在同仓 `git diff base..head`，无同步动作 |
+| 代码共享 | 同一仓库、独立 worktree | 执行者 commit 后，各评审专家在自己的 worktree 内 `git diff base..head`；无跨机同步动作 |
 | 产物落盘 | 同一文件系统 | 三类产物直接读写 `.macao/`；归档即本地 mv + git 提交 |
-| 隔离 | 可选 git worktree（`supports_worktree` 能力位） | 评审专家跑构建/测试时不污染主工作区 |
+| 隔离 | **强制**独立 git worktree（`supports_worktree=true` 为准入硬条件，preflight/Conformance 强制校验） | 评审专家绝不进入 Executor 主工作区；跑构建/测试只在自带 worktree 内（§12.2 安全红线） |
 
-故障面仅限本机：进程崩溃（State Store 恢复）、PTY 卡死（Layer 3 诊断）、磁盘资源耗尽。用户体感为单终端交互：`status` 看进度、`override resolve` 处理接管，其余全自动。
+故障面仅限本机：进程崩溃（State Store 恢复）、PTY 卡死（Layer 3 诊断）、磁盘资源耗尽。用户体感为单终端交互：`status` 看进度、`override resolve` 处理接管、`merge approve` 完成签字放行，其余自动。
 
 ### 16.4 场景二：跨机分布（v1.1 规划）
 
@@ -1696,3 +1726,13 @@ hosts:
     §6.1 触发条件 1 改为 Layer 3/E8 口径并补人工接管超时总则；§1.1 图补 MERGING/REWORK
   - 摘要文档三处产物示例重写为 Schema 合规；IMPROVEMENT_SUMMARY 计划类 ✅ 改为待验证表述
   - 新增 docs/schemas/review_context.schema.json 及正反 fixtures；既有 Schema 嵌套细化
+- v2.3.1: 按 `docs/reviews/2026-08-26-review-result-cc77a94-*` 五份独立复审（kimi/opencode/codex/claude/gemini）闭环——
+  - P0-1：评审对象 = 合并对象硬绑定——"rebase 仅改变哈希不重审"豁免废除，MVP 任何新 hash（clean rebase/cherry-pick/amend）→ E4b 增量复审；E4a 增加 push 对象 == checkpoint_ref 硬校验；受控 range-diff 门禁规划于 v1.1（§14.5）
+  - P0-2：Reviewer worktree 强制化——§16.3"可选"改"强制"，Type B/§5.2 示例改注入后 worktree 路径，`supports_worktree` 为准入硬条件（§12.2/§12.3/§16.3）
+  - P1-1：弃权口径裁决——`.review.yml` 移出 ABSTAIN 死枚举，弃权仅由 Orchestrator 超时降级写入 vote_result（§2.2/Schema）
+  - P1-2：artifacts 改 `artifact_id` 自增主键 + `(task_id, kind, ref, round, reviewer_id)` 唯一约束，归档为追加语义（§11.4/§11.5）
+  - P1-3：治理对账——STATUS 补登记 8ab9be7/cc77a94 全部评审，确立"复审前必须先全量对账"规则
+  - Deadlock 入口边（union 方案 B）：E3 伴随动作内联确定性票数判定——Deadlock 即发 HUMAN_OVERRIDE_REQUEST（Type G）并 HOLD、不写 vote_result；§3.4 补场景三（1:1 平票 + CANCEL/RETRY/弃权变体）；E7 CANCEL→E10、E10 触发补 override 路径
+  - P2：Layer 1c 补 max_rework_rounds 守卫；§11.4 DDL 注释改 10 态；§14.2 补 `merge approve`；§16.3"其余全自动"改"merge approve 签字放行，其余自动"；§10 成功标志改验收标准 `[ ]`；vote_result decision 枚举扩 RETRY_REVIEW/CANCELLED + human_override 正例 fixture
+  - P3：版本指针统一 v2.3；§1.1 REVIEWING/REJECTED 措辞；§2.4 消息类型数；§16.1 E1~E10；Schema $id 统一 v2.3；§12.4/README 清单补 review_context；§14.1 章节引用勘误；README L1~L4
+  - schemas/fixtures：新增 `valid/vote_result_human_override.json`

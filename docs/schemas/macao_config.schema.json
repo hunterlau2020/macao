@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.2/macao_config.schema.json",
+  "$id": "https://macao.dev/schemas/v2.3/macao_config.schema.json",
   "title": "MACAO macao.yaml Configuration",
   "type": "object",
   "required": ["project", "team"],

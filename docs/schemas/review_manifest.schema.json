@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.2/review_manifest.schema.json",
+  "$id": "https://macao.dev/schemas/v2.3/review_manifest.schema.json",
   "title": "MACAO .review.yml Reviewer Opinion Manifest",
   "type": "object",
   "required": ["version", "reviewer", "checkpoint_ref", "review_round", "opinion", "vote"],
@@ -56,7 +56,7 @@
         }
       }
     },
-    "vote": { "enum": ["YES_APPROVE", "NO_APPROVE", "ABSTAIN"] }
+    "vote": { "enum": ["YES_APPROVE", "NO_APPROVE"] }
   },
   "allOf": [
     {

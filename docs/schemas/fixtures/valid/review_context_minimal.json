@@ -1,6 +1,6 @@
 {
   "dev_checkpoint": { "path": ".macao/.dev.yml", "content_base64": "..." },
-  "repository": { "workspace_path": "~/work/macao-demo", "remote_name": "origin", "fetch_policy": "fetch_before_diff" },
+  "repository": { "workspace_path": "~/work/macao-demo/.macao/worktrees/codex/r1", "remote_name": "origin", "fetch_policy": "fetch_before_diff" },
   "task_info": { "description": "Refactor database connection pooling", "review_focus": ["Thread safety"] },
   "code_changes": {
     "refs": { "base_commit": "b2c3d4e", "head_commit": "a1b2c3d" },

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.2/dev_manifest.schema.json",
+  "$id": "https://macao.dev/schemas/v2.3/dev_manifest.schema.json",
   "title": "MACAO .dev.yml Development Checkpoint Manifest",
   "type": "object",
   "required": ["version", "executor", "development", "status", "signal", "review_round"],

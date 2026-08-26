@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.2/vote_result.schema.json",
+  "$id": "https://macao.dev/schemas/v2.3/vote_result.schema.json",
   "title": "MACAO vote_result.json Consensus Record",
   "type": "object",
   "required": ["version", "checkpoint_ref", "review_round", "votes", "vote_breakdown", "input_artifacts", "decision"],
@@ -48,7 +48,7 @@
         }
       }
     },
-    "decision": { "enum": ["APPROVED", "REWORK_REQUIRED"] },
+    "decision": { "enum": ["APPROVED", "REWORK_REQUIRED", "RETRY_REVIEW", "CANCELLED"] },
     "resolution": { "enum": ["automatic", "human_override"] },
     "decision_confidence": { "type": "number" },
     "summary": {
@@ -82,5 +82,15 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "decision": { "enum": ["RETRY_REVIEW", "CANCELLED"] } }, "required": ["decision"] },
+      "then": { "properties": { "resolution": { "const": "human_override" } }, "required": ["resolution"] }
+    },
+    {
+      "if": { "properties": { "decision": { "enum": ["APPROVED", "REWORK_REQUIRED"] }, "resolution": { "const": "human_override" } }, "required": ["decision", "resolution"] },
+      "then": { "properties": { "next_step": { "type": "object" } } }
+    }
+  ]
 }

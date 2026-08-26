@@ -1,6 +1,6 @@
 # MACAO 文档索引
 
-> 权威基准：[`MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（当前 v2.2）。文档间不一致时以 PRD 为准。
+> 权威基准：[`MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（当前 v2.3）。文档间不一致时以 PRD 为准。
 
 ## 核心文档（建议阅读顺序）
 
@@ -15,9 +15,9 @@
 
 | 路径 | 内容 |
 |------|------|
-| [`schemas/`](schemas/) | 版本化 JSON Schema（三类产物 / AEP 信封 / macao.yaml）+ 正反 fixtures，Adapter Conformance 的校验输入 |
+| [`schemas/`](schemas/) | 版本化 JSON Schema（三类产物 / AEP 信封 / review_context / macao.yaml）+ 正反 fixtures，Adapter Conformance 的校验输入 |
 | [`reviews/`](reviews/) | 各 commit 的独立评审结论；[`reviews/STATUS.md`](reviews/STATUS.md) 为唯一实时门禁状态 |
-| [`MACAO_REVIEW_GUIDELINES.md`](MACAO_REVIEW_GUIDELINES.md) | 评审方法论（L0~L4 / PG-0~PG-3 门禁、证据规则） |
+| [`MACAO_REVIEW_GUIDELINES.md`](MACAO_REVIEW_GUIDELINES.md) | 评审方法论（L1~L4 / PG-0~PG-3 门禁、证据规则） |
 
 ## 快速导航（PRD 常用章节）
 

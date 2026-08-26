@@ -1,4 +1,4 @@
-# MACAO 改进对比总结（v2.0 → v2.2）
+# MACAO 改进对比总结（v2.0 → v2.3）
 
 > 本文档详细说明 v2.0 如何融合了评审意见、第二位专家的优化建议，以及最关键的"规范化流程"创新。
 >
@@ -157,7 +157,7 @@ MACAO 打包完整 review_context，发送 AEP REVIEW_REQUEST
 Reviewer 收到 review_context，包含：
 ├─ task_info（任务背景）
 ├─ code_changes（变更 refs：base_commit / head_commit，Reviewer 本地自行取 diff）
-├─ quality_metrics（质量快照）
+├─ quality_snapshot（质量快照）
 ├─ executor_self_assessment（开发者自评）
 └─ references（相关文档与历史）
         ↓
@@ -174,7 +174,7 @@ review_context:
   dev_checkpoint:
     path: ".macao/.dev.yml"
   repository:
-    workspace_path: "~/work/macao-demo"
+    workspace_path: "~/work/macao-demo/.macao/worktrees/codex/r1"  # 独立 worktree 路径
     remote_name: "origin"
     fetch_policy: "fetch_before_diff"
 
@@ -513,5 +513,10 @@ MACAO 的借鉴：
   终局 vote_result（resolution 字段）；override 枚举统一（APPROVED/REWORK/RETRY_REVIEW/CANCEL）
   并新增 E9/E10 与 CANCELLED 终态（FSM 10 态）；§6.1 触发条件 1 改 Layer 3 口径 + 人工接管
   超时总则；摘要文档三处产物示例重写为 Schema 合规；计划类 ✅ 全部改为待验证表述
+- v2.3.1: 按 cc77a94 五份独立复审（kimi/opencode/codex/claude/gemini）闭环 2 P0 + 3 P1：
+  rebase 豁免废除（评审对象=合并对象硬校验，任何新 hash → E4b）；Reviewer worktree
+  强制化（§16.3/示例/supports_worktree 准入）；弃权口径两清（.review.yml 移出 ABSTAIN，
+  仅 Orchestrator 写 vote_result）；artifacts 复合主键 + 追加归档语义；Deadlock 入口边内联
+  E3 + §3.4 场景三 + E7 CANCEL→E10；评审治理全量对账规则。  P2/P3 随版本一并勘误
 
 **下一步**：Review 本文档，反馈是否有理解偏差或遗漏之处。
