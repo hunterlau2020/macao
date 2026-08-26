@@ -1,0 +1,54 @@
+project:
+  name: "macao-demo"
+  repository:
+    workspace_path: "."
+    remote_name: "origin"
+    default_branch: "main"
+
+team:
+  executor:
+    id: "cc-ds4"
+    cli: "claude-code"
+    adapter: "claude-hook"
+  reviewers:
+    - id: "cc-glm"
+      cli: "codex"
+      adapter: "pty-wrapper"
+    - id: "kimi"
+      cli: "kimi"
+      adapter: "pty-wrapper"
+
+policy:
+  consensus_rule: "2/3_majority"
+  min_effective_votes: 2
+  max_rework_rounds: 3
+  review_strategy: "delta_plus_focus"
+
+merge:
+  strategy: "ff_only"
+  ci_gate_command: null
+  require_human_signoff: true
+  rebase_before_merge: false
+
+timeouts:
+  development: "2h"
+  checkpoint_validation: "1m"
+  review_request: "30m"
+  per_reviewer: "10m"
+  consensus_check: "1m"
+
+thresholds:
+  layer2_inference_log_only: true
+  llm_diagnosis_override_below: 0.7
+
+cost:
+  usage_metering: true
+  monthly_budget_usd: null
+
+security:
+  allowed_clis: ["claude-code", "codex", "kimi"]
+  send_terminal_logs_to_reviewers: false
+  secrets_masking: true
+
+audit:
+  retention_days: 90
