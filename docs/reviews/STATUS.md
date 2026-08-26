@@ -2,58 +2,66 @@
 
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 
-- 更新时间：2026-08-26（PRD v2.2 复审后）
-- 最近复审对象：commit `8ab9be7`（PRD v2.2），一份独立评审：
-  - `reviews/2026-08-26-review-result-8ab9be7-kimi.md`：v2.2 关闭上一轮全部 P0/P1，但发现 1 个新 P0（PRD 内部 `review_context` 结构矛盾）+ 5 个 P1（摘要文档示例与 Schema 不符、改进总结无证据 ✅）+ P2/P3
+- 更新时间：2026-08-26（8ab9be7 四方复审后）
+- 最近复审对象：commit `8ab9be7`（PRD v2.2），四份独立评审：
+  - `reviews/2026-08-26-review-result-8ab9be7-codex.md`：PARTIALLY_VERIFIED，未达 L1；发现 P0-1（clean rebase 改变哈希破坏审计一致性）、P0-2（worktree 强制性被架构图/示例削弱）+ 4 个 P1。
+  - `reviews/2026-08-26-review-result-8ab9be7-claude.md`：独立核对 codex 全部引用后采纳，追加 P0-3（`vote_result.json.decision` 无法表达 Consensus Deadlock 且伪代码二元误判）+ 3 个 P2/P3。
+  - `reviews/2026-08-26-review-result-8ab9be7-gemini.md`：通过实测（含 `jsonschema` 校验）全面确认上述 3 个 P0 缺陷与 4 个 P1 项，给出闭环路线与实施建议。
+  - `reviews/2026-08-26-review-result-8ab9be7-kimi.md`：v2.2 关闭上一轮全部 P0/P1，但发现新的 P0-4（PRD 内部 `review_context` 结构矛盾）+ 5 个 P1（摘要文档示例与 Schema 不符、改进总结无证据 ✅）+ P2/P3。
 - 当前等级：**PENDING_REVIEW**
-  - 说明：v2.2 已关闭 `684a012` 的全部 P0/P1，但新一轮复审在权威基准 PRD 内部发现核心 Context 契约不自洽，且两份摘要文档的示例/状态标记与 Schema/事实不符；L1 DOC-ALIGNED 待 P0/P1 关闭后再行定级。
-- 本轮修订：PRD **v2.2**（含 `docs/schemas/`、`docs/README.md` 新增）
+  - 说明：PRD v2.2 已实质关闭 684a012 轮的全部遗留项；但四方独立复审共同锁定了 4 个新的 P0 阻塞性缺陷（集中在决策/安全规则、Schema/转移表一致性、核心 Context 契约映射上），待修订闭环后重新申请 L1 / PG-0 定级。
+- 本轮版本：PRD **v2.2**（含 `docs/schemas/`、`docs/README.md`）
 
-## 针对 684a012 三份评审的处理状态
+## 针对 8ab9be7 四方评审的处理状态（本轮，待处理）
 
-| 来源 | 编号 | 发现 | 状态 | 处理位置 |
-|------|------|------|------|---------|
-| claude | F1 (P0) | E4 即达 DONE 与 Merge Policy 的 CI gate 时序矛盾 | 已修订 | PRD §3.3 新增 `MERGING` 中间态（E4/E4a/E4b）；§14.5 重写为合并流水线；§3.4 推演同步 |
-| claude | F2 (P0) | Reviewer 执行权限边界未定义 | 已修订 | PRD §12.2 `execution_mode` 强制规则、§12.3 准入矩阵补列、§5.3 worktree 注入、§15.3 风险表 |
-| codex | P1-1 | repository 路径两种写法并存 | 已修订 | 统一为 `review_context.repository`（PRD §2.4 注 / §5.2 注） |
-| codex | P1-2 | Task 缺 Schema/branch 字段；merge 配置段未定义 | 已修订 | PRD §14.2 Task 最小 Schema、Type A 增 task_id/source/target_branch、§13 merge 段 |
-| codex | P1-3 | 双写缺恢复算法 | 已修订 | PRD §11.4 DDL + §11.5 写入顺序与三场景 Reconcile 规则 |
-| codex | P1-4 | 缺版本化 Schema 与 fixtures | 已修订 | 新增 `docs/schemas/`（5 个 Schema + 正反 fixtures，已通过 jsonschema 校验） |
-| codex | P1-5 | STATUS 同时声明"未达 L1"与"当前 PG-0" | 已修订 | 本文件改为 PENDING_REVIEW 单一表述 |
-| codex | P2/P3 | checkin 未定义 / v2.0 叙事标题 / min_effective_votes 推导 | 已修订 | 命令更名 `macao checkpoint create` 并入命令表；标题类留待下轮整理；Loader 推导规则见 PRD §13 |
-| claude | F3 (P1) | 无合并前人工签字开关 | 已修订 | `merge.require_human_signoff: true` 默认保守值（PRD §13/§14.5 第 4 步） |
-| claude | F4 (P1) | 与 GitHub/GitLab 分支保护关系空白 | 已修订 | PRD §14.5 尾注：MVP 假设未启用分支保护的本地仓库，共享仓库集成 v1.1+ |
-| claude | F5 (P1) | .review.yml 格式错误无同轮重试 | 已修订 | PRD §12.5 两级输出自愈（Extractor + 局部 Re-prompt，限 1 次） |
-| claude | F6 (P1) | 崩溃恢复算法缺失 | 已修订 | 同 codex P1-3（§11.4/11.5） |
-| claude | F7 (P1) | 缺非确定性 E2E 测试策略 | 已修订 | PRD §12.4 fixture 回放 + §15.5 评测计划；完整 E2E 策略随 PoC 报告补充 |
-| gemini | 环节1 (P1) | PTY 权限弹窗/ANSI/孤儿进程 | 已修订 | PRD §12.6 PTY 运行规范 |
-| gemini | 环节2 (P1) | 多 Reviewer 工作区并发冲突 | 已修订 | PRD §5.3 worktree 注入机制 + §12.3 强制列 |
-| gemini | 环节3 (P1) | SQLite DDL 与 Reconcile 缺失 | 已修订 | 同 codex P1-3 |
-| gemini | 环节4 (P2) | YAML 输出自愈 | 已修订 | 同 claude F5（§12.5） |
-| gemini | 环节5 (P2) | Pre-merge rebase 策略缺失 | 已修订 | PRD §14.5 第 1 步（rebase 不触发复审的边界已写明） |
-| gemini | 环节6 (P2) | agmsg 物理形态与 DLQ | 已修订 | PRD §11.6 |
-| gemini | 环节7 (P3) | usage 估算兜底；docs/README 为空 | 已修订 | PRD §15.4 estimated 标记；新增 `docs/README.md` 索引 |
+| 来源 | 编号 | 发现与危害 | 状态 | 建议处理位置 |
+|------|------|------------|------|---------|
+| codex / gemini | **P0-1** | clean rebase 改变被合并 commit 哈希却定义为"不触发复审"，导致最终 push 的 commit 脱离已批准的 checkpoint_ref 审计链 | 待处理 | §14.5 步骤 1 / E4a 硬校验（PRD:1459） |
+| codex / gemini | **P0-2** | Reviewer worktree 隔离在 §12.2 是强制安全规则，但在 AEP 示例（PRD:493-496）与 §16.3（PRD:1554）仍写为主工作区/可选 | 待处理 | 统一 AEP 示例为 worktree 隔离路径；§16.3 表述改为强制 |
+| claude / gemini | **P0-3** | `vote_result.schema.json` 缺少 `DEADLOCK` 枚举；Layer 1c 伪代码非 APPROVED 即判 REWORK，导致 1:1 平票死锁无法触发人工接管；统一转移表缺少 Deadlock 产物边 | 待处理 | `vote_result.schema.json` 增加 `DEADLOCK` 枚举；重构 Layer 1c 伪代码三元分支与转移表 E3a 边；§3.4 补充 1:1 死锁场景推演 |
+| kimi | **P0-4** | PRD 内部 `review_context` 结构矛盾：§2.4 Type B 与 §5.2 的字段命名、嵌套结构、缺省块不一致（`quality_metrics` vs `quality_snapshot`、`files_summary` vs `files_list`、缺少 `executor_self_assessment`/`history`/`references`） | 待处理 | 统一 `review_context` 权威结构，全文同步并新增/更新 Schema |
+| codex / gemini | **P1-1** | `review_manifest.schema.json` 顶层 `vote` 含 ABSTAIN，但 `opinion.status` 无 ABSTAIN 且 if-then 强制映射导致合法弃权票永远校验失败 | 待处理 | 补充 `opinion.status: ABSTAIN → vote: ABSTAIN` 映射规则 |
+| codex / gemini | **P1-2** | AEP payload 仅为通用 object 缺乏基于 type 的 `oneOf` 强校验；Task / Capability Manifest 缺少独立 Schema | 待处理 | `docs/schemas/` 补齐 type-specific payload 鉴别与对应 fixtures |
+| codex / gemini | **P1-3** | State Store `artifacts.path` 为全局主键，多任务/多轮次返工时同名产物会产生主键冲突 | 待处理 | 重构为 `(task_id, kind, checkpoint_ref, review_round, reviewer_id)` 复合主键 |
+| codex / gemini | **P1-4** | 审计事件"永久保留"与终端日志 `audit.retention_days=90` 策略未在数据分类与存储层显式解耦 | 待处理 | 明确结构化审计表永久保留 vs 文本日志文件按天轮转清理 |
+| kimi | **P1-5** | `EXECUTIVE_SUMMARY.md` `.dev.yml` 示例字段名与 Schema 不符（`coverage` vs `test_coverage`）且缺 `review_round` | 待处理 | `docs/EXECUTIVE_SUMMARY.md` 第 124–151 行 |
+| kimi | **P1-6** | `EXECUTIVE_SUMMARY.md` `vote_result.json` 示例缺必需字段且 `next_step` 类型不符 | 待处理 | `docs/EXECUTIVE_SUMMARY.md` 第 180–190 行 |
+| kimi | **P1-7** | `EXECUTIVE_SUMMARY.md` `.review.yml` 示例缺必需字段且 `feedback` 结构不符 | 待处理 | `docs/EXECUTIVE_SUMMARY.md` 第 157–174 行 |
+| kimi | **P1-8** | `IMPROVEMENT_SUMMARY.md` 多处用 ✅ 标记未完成的未来目标 | 待处理 | `docs/IMPROVEMENT_SUMMARY.md` 第 334–339、399–404、479–483 行 |
+| kimi | **P1-9** | `IMPROVEMENT_SUMMARY.md` `quality_snapshot.tests.passed` 为含 emoji 字符串而非整数 | 待处理 | `docs/IMPROVEMENT_SUMMARY.md` 第 188–193 行 |
+| claude / gemini | **N1 (P2)** | `macao merge approve` 是默认配置（`require_human_signoff: true`）下的常规必经命令，未列入 §14.2 命令表 | 待处理 | 补入 §14.2 日常运维命令表 |
+| claude / gemini | **N2 (P3)** | §14.1 第 6 步引用"见 14.6 Merge Policy"，实际章节号为 §14.5 | 待处理 | 勘误修正为 §14.5 |
+| claude / gemini | **N3 (P2)** | §16.3 "其余全自动"表述与默认 `require_human_signoff: true` 强制人工签字步骤存在框架性矛盾 | 待处理 | 措辞补充 "merge approve 完成签字放行" |
+| kimi | **N4 (P2)** | 部分 Schema 对嵌套结构约束不足（`next_step`/`summary`/`artifacts`/`feedback`） | 可延期 | 待细化对应 Schema |
+| kimi | **N5 (P2)** | `EXECUTIVE_SUMMARY.md` 对 `.review.yml` 路径表述笼统 | 可延期 | 第 25 行附近补充路径说明 |
+| kimi | **N6 (P3)** | `IMPROVEMENT_SUMMARY.md` 标题仍以 v2.0 为叙事 | 可延期 | 文件名/标题可注明 "截至 v2.2" |
 
-## 针对 8ab9be7 评审的处理状态
+## 历史轮次：684a012（PRD v2.1，已在 v2.2 闭环）
 
-| 来源 | 编号 | 发现 | 状态 | 处理位置 |
-|------|------|------|------|---------|
-| kimi | P0-1 | PRD 内部 `review_context` 结构矛盾：§2.4 Type B 与 §5.2 字段命名/嵌套结构/缺省块不一致 | **待修订** | 需统一 `review_context` 权威结构，全文同步并新增/更新 Schema |
-| kimi | P1-1 | `EXECUTIVE_SUMMARY.md` `.dev.yml` 示例字段名与 Schema 不符（`coverage` vs `test_coverage`）且缺 `review_round` | **待修订** | `docs/EXECUTIVE_SUMMARY.md` 第 124–151 行 |
-| kimi | P1-2 | `EXECUTIVE_SUMMARY.md` `vote_result.json` 示例缺必需字段且 `next_step` 类型不符 | **待修订** | `docs/EXECUTIVE_SUMMARY.md` 第 180–190 行 |
-| kimi | P1-3 | `EXECUTIVE_SUMMARY.md` `.review.yml` 示例缺必需字段且 `feedback` 结构不符 | **待修订** | `docs/EXECUTIVE_SUMMARY.md` 第 157–174 行 |
-| kimi | P1-4 | `IMPROVEMENT_SUMMARY.md` 多处用 ✅ 标记未完成的未来目标 | **待修订** | `docs/IMPROVEMENT_SUMMARY.md` 第 334–339、399–404、479–483 行 |
-| kimi | P1-5 | `IMPROVEMENT_SUMMARY.md` `quality_snapshot.tests.passed` 为含 emoji 字符串而非整数 | **待修订** | `docs/IMPROVEMENT_SUMMARY.md` 第 188–193 行 |
-| kimi | P2-1 | 缺少 `review_context` 与 AEP payload 级 Schema | 可延期 | 待新增 `docs/schemas/` 文件 |
-| kimi | P2-2 | 部分 Schema 对嵌套结构约束不足（`next_step`/`summary`/`artifacts`/`feedback`） | 可延期 | 待细化对应 Schema |
-| kimi | P2-3 | `EXECUTIVE_SUMMARY.md` 对 `.review.yml` 路径表述笼统 | 可延期 | 第 25 行附近补充路径说明 |
-| kimi | P3-1 | `IMPROVEMENT_SUMMARY.md` 标题仍以 v2.0 为叙事 | 可延期 | 文件名/标题可注明 "截至 v2.2" |
+| 编号 | 历史发现 | 状态 | v2.2 落地位置与证据 |
+|------|---------|------|-------------------|
+| F1 (P0) | E4 即达 DONE 与 Merge Policy 的 CI gate 时序矛盾 | 已关闭 | PRD §3.3 新增 `MERGING` 中间态（E4/E4a/E4b）；§14.5 重写合并流水线；§3.4 场景推演同步 |
+| F2 (P0) | Reviewer 执行权限边界未定义 | 已关闭 | PRD §12.2 `execution_mode` 强制规则、§12.3 准入矩阵补列、§15.3 补充命令执行风险对策 |
+| P1-1 | repository 路径两种写法并存 | 已关闭 | 统一为 `review_context.repository`（PRD §2.4 注 / §5.2 注） |
+| P1-2 | Task 缺 Schema/branch 字段；merge 配置段未定义 | 已关闭 | PRD §14.1 Task 最小 Schema、Type A 增 task_id/source/target_branch、§13 merge 段 |
+| P1-3 | 双写缺恢复算法 | 已关闭 | PRD §11.4 DDL + §11.5 写入顺序与三场景 Reconcile 规则 |
+| P1-4 | 缺版本化 Schema 与 fixtures | 已关闭 | 新增 `docs/schemas/`（5 个 Schema + 正反 fixtures，已通过 jsonschema  校验） |
+| P1-5 | STATUS 同时声明"未达 L1"与"当前 PG-0" | 已关闭 | 本文件改为 PENDING_REVIEW 单一表述 |
+| 其他 P1~P3 | ANSI清洗/进程组回收/worktree注入/YAML输出自愈/DLQ/README | 已关闭 | PRD §12.5 自愈、§12.6 PTY规范、§11.6 DLQ、§15.4 用量估算、`docs/README.md` |
 
-## 下一步
+## 下一步闭环路线
 
-1. 关闭 P0-1：在 PRD 内选定 `review_context` 唯一权威结构，统一 §2.4 Type B 与 §5.2 的字段命名、嵌套路径与缺省块；
-2. 关闭 P1-1/1-2/1-3：重写 `EXECUTIVE_SUMMARY.md` 三处示例，使其通过对应 Schema（`dev_manifest`/`review_manifest`/`vote_result`）；
-3. 关闭 P1-4/1-5：修正 `IMPROVEMENT_SUMMARY.md` 的 ✅ 状态标记与 `quality_snapshot` 字段类型；
-4. 对修复后的 PRD v2.2 申请下一轮独立复审（重点复核 `review_context` 一致性、摘要文档示例、schemas 完整性）；
-5. 四场景 SIM 复核扩展为五场景（增加"CI gate 失败 → E4b 返工"场景）；
-6. 复审通过后定级 L1 DOC-ALIGNED / PG-0。
+1. **第一步（集中闭环 4 个 P0）**：
+   - 锁定 E4a 合并对象的 commit hash 硬校验，明确 rebase 产生新 hash 必须触发复审（或受控 range-diff 门禁）；
+   - 统一 AEP 示例与单机场景表为强制独立 worktree 路径；
+   - `vote_result.schema.json` 补全 `DEADLOCK` 枚举，重构 Layer 1c 伪代码三元分支与统一转移表 E3a 边；
+   - 统一 `review_context` 权威结构，同步 §2.4 Type B 与 §5.2 的字段命名、嵌套路径与缺省块。
+2. **第二步（补全 Schema、数据模型与摘要示例 P1 项）**：
+   - 修复 review_manifest 中的 ABSTAIN 映射冲突；
+   - 重构 State Store artifacts 复合主键；
+   - 完善 AEP type-specific payload 鉴别；
+   - 重写 `EXECUTIVE_SUMMARY.md` 三处示例使其通过 Schema；
+   - 修正 `IMPROVEMENT_SUMMARY.md` 的 ✅ 状态标记与 `quality_snapshot` 字段类型。
+3. **第三步（复审定级）**：
+   - 补齐 1:1 平票死锁推演场景与 fixtures；
+   - 完成下一轮独立复审，正式定级 L1 DOC-ALIGNED / PG-0。
