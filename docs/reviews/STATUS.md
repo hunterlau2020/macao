@@ -1,68 +1,87 @@
 # MACAO 文档门禁状态（Live Status）
 
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
+> 治理规则（P1-3 确立）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- 更新时间：2026-08-26（v2.3 复审后）
-- 最近复审（两份独立复审，结论一致：未达 L1，维持 PENDING_REVIEW）：
-  - `reviews/2026-08-26-review-result-PRD-v2.3-opencode.md`（kimi/opencode 上轮发现全部确认关闭，53 项机验全过；但同 commit 另有三份未跟踪评审的 2 P0 + 2 P1 仍成立，见下节）
-  - `reviews/2026-08-26-review-result-cc77a94-kimi.md`（独立复核确认 kimi/opencode 上轮 P0/P1 全部关闭，20+ 项机验全过；同样确认 codex/claude/gemini 三份的 2 P0 + 2 P1 在 v2.3 未闭环，登记治理缺口 P1-3，另附 P2/P3 勘误清单）
-- commit `8ab9be7`（PRD v2.2）轮共有 **五份**独立评审（STATUS 此前只登记两份，已补齐）：
-  - `reviews/2026-08-26-review-result-8ab9be7-kimi.md`：1 P0 + 5 P1 + 4 P2/P3（已由 v2.3 关闭并经本轮复核确认）
-  - `reviews/2026-08-26-review-result-8ab9be7-opencode.md`：4 P1 + 4 P2 + 6 P3（已由 v2.3 关闭并经本轮复核确认）
-  - `reviews/2026-08-26-review-result-8ab9be7-codex.md`：2 P0 + 4 P1 + 3 P2（**本轮补登记**；P0-1/P0-2/P1-1/P1-3 未处理，P1-2 部分，P1-4 已顺带关闭）
-  - `reviews/2026-08-26-review-result-8ab9be7-claude.md`：1 P0（+确认 codex 各项）+ 3 P2/P3（**本轮补登记**；P0 已被 v2.3 设计改法关闭，N1/N2/N3 未处理）
-  - `reviews/2026-08-26-review-result-8ab9be7-gemini.md`：3 P0 + 4 P1 + 4 P2/P3（**本轮补登记**；P0-3 已顺带关闭，P0-1/P0-2/P1-1/P1-3 未处理，P1-4 已顺带关闭）
-- 当前等级：**PENDING_REVIEW**（L1 申请被驳回，理由与待办见"v2.3 复审结论"节）
-- 本轮修订：PRD **v2.3**（schemas 扩充至 6 个 Schema + 9 个 fixtures，全部经 jsonschema 实测通过/拒绝正确）
+- 更新时间：2026-08-26（v2.3 五份复审后，合并两端记录）
+- 最近复审对象：commit `cc77a94`（PRD v2.3，响应 `reviews/2026-08-26-review-request-PRD-v2.3.md`），**共五份独立评审，结论一致：未达 L1，维持 PENDING_REVIEW**：
+  - `reviews/2026-08-26-review-result-PRD-v2.3-opencode.md`：上轮（kimi/opencode-8ab9be7）发现全部确认关闭，53 项机验全过；但同 commit 另有三份未跟踪评审的 2 P0 + 2 P1 仍成立，另登记 P1-3 治理缺口 + 9 P2 + 8 P3
+  - `reviews/2026-08-26-review-result-cc77a94-kimi.md`：独立复核确认 kimi/opencode 上轮 P0/P1 全部关闭、20+ 项机验全过；同样确认 codex/claude/gemini 的 2 P0 + 2 P1 在 v2.3 未闭环；登记 P1-3 治理缺口与 P2/P3 逐条勘误
+  - `reviews/2026-08-26-review-result-cc77a94-codex.md`：PARTIALLY_VERIFIED；机器校验与 context 单一模型闭环，但指出 rebase 审计一致性、worktree 强制性、override 终局模型仍需正文闭环（P0-1/P0-2/P0-3，后降级为各家的 P2-1）
+  - `reviews/2026-08-26-review-result-cc77a94-claude.md`：PARTIALLY_VERIFIED；确认机验通过，主张 Deadlock 检测到接管的入口转移边在 §3.3 缺失（维持 P1，见下方"分歧记录"），§3.4 缺推演三，§11.4 DDL 注释"9 态"
+  - `reviews/2026-08-26-review-result-cc77a94-gemini.md`：PARTIALLY_VERIFIED；独立机验 14/14 PASS，确认四大高风险区状态，给出定级前最终闭环清单（P0-1/P0-2/P1-1/P1-2/P2-1/P2-2/P3-1）
+- commit `8ab9be7`（PRD v2.2）轮共有 **五份**独立评审（此前 STATUS 只登记两份，已按 P1-3 补齐对账）：
+  - `reviews/2026-08-26-review-result-8ab9be7-kimi.md`：1 P0 + 5 P1 + 4 P2/P3（已由 v2.3 关闭并经本轮五份复核确认）
+  - `reviews/2026-08-26-review-result-8ab9be7-opencode.md`：4 P1 + 4 P2 + 6 P3（已由 v2.3 关闭并经复核确认）
+  - `reviews/2026-08-26-review-result-8ab9be7-codex.md`：2 P0 + 4 P1 + 3 P2（补登记；P0-1/P0-2/P1-1/P1-3 未处理，P1-2 部分，P1-4 已顺带关闭）
+  - `reviews/2026-08-26-review-result-8ab9be7-claude.md`：1 P0 + 3 P2/P3（补登记；P0 已由 v2.3 设计改法关闭，N1/N2/N3 未处理）
+  - `reviews/2026-08-26-review-result-8ab9be7-gemini.md`：3 P0 + 4 P1 + 4 P2/P3（补登记；P0-1/P0-2/P1-1/P1-3 未处理，P0-3/P1-4 已顺带关闭）
+- 当前等级：**PENDING_REVIEW**
+- 本轮版本：PRD **v2.3**（schemas 6 个 + fixtures 9 个，机验 53/53 全过；review_context 单一结构、Deadlock 终局表达、10 态 FSM 主体已闭环）
 
-## 针对 8ab9be7 两份评审的处理状态
+## 已确认关闭的项（五份评审共识）
 
-| 来源 | 编号 | 发现 | 状态 | 处理位置 |
-|------|------|------|------|---------|
-| kimi | P0-1 / opencode P1-3 | review_context 双结构并存（quality_metrics vs quality_snapshot、files_summary vs summary+files_list、§2.4 缺三块） | 已修订 | PRD §5.2 声明为唯一权威完整模型（补两传输块）；§2.4 收敛为最小子集（quality_snapshot 嵌套、summary+files_list、补 executor_self_assessment/history/references）；新增 `review_context.schema.json` |
-| opencode | P1-1 | §6.1 触发条件 1 残留 "Layer 2 confidence < 0.7" 陈旧文案 | 已修订 | PRD §6.1 条件改为 Layer 3/E8 口径，并注明 Layer 2 仅日志永不触发接管 |
-| opencode | P1-2 | §1.1 图无 MERGING、"Loop back to PHASE 1" 与 E6 不符；§1.2 行缺 MERGING/E7 | 已修订 | PRD §1.1 图重绘（MERGING/DONE/REWORK + E4a/E6 标注）+ 简化视图说明；§1.2 CONSENSUS/MERGE 行同步；README 导航行修正 |
-| kimi/opencode | P1-4 | Deadlock 轮 decision 无法表达、Layer 1c 静默 else、override 枚举三处不一致、CANCEL 无终态 | 已修订 | 裁定结果落盘终局 vote_result（resolution=human_override）；Layer 1c 显式两分支；枚举统一 APPROVED/REWORK/RETRY_REVIEW/CANCEL；转移表新增 E9（重试评审）/E10（取消→CANCELLED 终态），FSM 10 态 |
-| kimi | P1-1/2/3 / opencode P2-2 | EXEC 三处产物示例未通过 Schema | 已修订 | 三示例重写并通过对应 Schema（机验 PASS） |
-| kimi | P1-4 | IMPROVEMENT_SUMMARY 计划类条目标 ✅ 无证据 | 已修订 | 8 周计划改【计划】、PoC 三假设与 MVP 成功指标改 [ ] 待验证 |
-| kimi | P1-5 | quality_snapshot 字段类型不合法（24/24 ✅） | 已修订 | 改为整数并去除 emoji |
-| kimi | P2-1 | 缺 review_context Schema | 已修订 | 新增 review_context.schema.json（最小子集与完整模型共用） |
-| kimi | P2-2 / opencode P2-3 | Schema 嵌套约束不足；fixtures 覆盖宣称不符 | 已修订 | vote_result/dev/review Schema 细化嵌套结构；README 覆盖范围如实表述并补 fixtures（9 个） |
-| kimi | P2-3 | EXEC .review.yml 未标路径 | 已修订 | 补 `.macao/.reviews/<reviewer_id>.review.yml` |
-| kimi | P3-1 | 标题 v2.0 叙事 | 已修订 | 改为「改进对比总结（v2.0 → v2.2）」 |
-| opencode | P2-1 | Type D round=1 与规则矛盾 | 已修订 | 示例改为 round=2 并在消息表注明语义（即将开始的返工轮次） |
-| opencode | P2-2 | EXEC 架构速写模块名不一致；"↑500%" 无出处 | 已修订 | 速写对齐 §11.1 组件清单；500% 删除并标注设计目标 |
-| opencode | P2-4 | 人工接管超时默认动作未定义 | 已修订 | §6.1 新增超时总则：一律 HOLD+持续告警，绝不静默推进 |
-| opencode | P3-1~P3-6 | KPI 分母、timeouts 关系、Type F attachments、标题版本、full 模式机制、占位符 | 已修订 | 分别落位于 §8.1 / §13 timeouts 注释 / Type F attachments / 标题 v2.3 / §12.2 / §5.3 |
+| 项目 | 证据 |
+|------|------|
+| review_context 唯一权威结构 | §5.2 完整模型（L952-1035，两传输块+六语义块）；§2.4 Type B（L491-545）最小子集，顶层 8 键与嵌套路径与 §5.2 完全一致；`review_context.schema.json` 同接受最小/完整形态 |
+| EXEC/IMPROVEMENT 示例 Schema 合规 | 验证器独立复跑 53/53 通过（PRD 8 JSON + 5 YAML、7 AEP、EXEC 三例、IMPROVEMENT context） |
+| Deadlock 终局表达（resolution 落盘） | `vote_result.schema.json:52` `resolution: automatic\|human_override`；§3.2 Layer 1c 显式两分支（L778-782）；E7 为出口边 + §6.1 超时总则 HOLD 兜底（L1127） |
+| 10 态 FSM 主体 | §3.3（L837）10 态；E9/E10/CANCELLED（L832-833）；§1.1 图 + §1.2 行同步；README L24 |
+| §6.1 触发条件 1 口径 | L1090 改 Layer 3/E8，注明 Layer 2 永不触发接管 |
+| kimi/opencode（8ab9be7）P0/P1 全部 | 经五份复审逐条复核确认关闭 |
 
-## v2.3 复审结论（2026-08-26，opencode；kimi 独立复核结论一致）
+## 待闭环项（v2.3.1 处理）
 
-未达 L1 DOC-ALIGNED / PG-0。kimi/opencode 两份评审的 P0/P1 已确认全部关闭（含 53 项机验全过）；阻断项来自补登记的三份评审（证据均已对 v2.3 现文逐条复现）+ 本轮新发现：
+| 编号 | 级别 | 发现（证据） | 来源（共识/分歧） | 修正要求 |
+|------|------|-------------|------------------|---------|
+| P0-1 | P0 | clean rebase 豁免破坏"评审对象=合并对象"：§14.5（L1504）"rebase 仅改变 commit 哈希、不触发新一轮评审"，而受理作用域为 checkpoint_ref+review_round（L744-746/L824-830），E4a（L827）无"最终 push 对象==checkpoint_ref"硬校验 | codex/claude/gemini/kimi/opencode **共识** | 二选一写入 E4a 硬校验：①严格——rebase 产生新 hash 即 E4b 重审；②受控门禁——range-diff 无内容差异 + rebased_from 元数据 + CI/签字重跑记录 |
+| P0-2 | P0 | worktree 强制边界被削弱：§12.2（L1378）/§5.3（L1046-1049）强制 sandboxed+独立 worktree；但 §16.3（L1599）"可选 git worktree"、Type B 示例 workspace_path 为主工作区（L498） | codex/gemini/kimi/opencode **共识**（claude 未主张冲突） | 三处对账一致：§16.3 改"强制（Reviewer）"；Type B 示例改注入后 worktree 路径或注明占位；Conformance 将 supports_worktree 设为准入硬条件 |
+| P1-1 | P1 | ABSTAIN 为不可表达死枚举：review_manifest.schema.json vote 含 ABSTAIN（L59）但 opinion.status 无（L26），三条 if/then 强制映射 YES/NO（L61-74）；§2.2 映射表无 ABSTAIN 行 | codex/claude/gemini/kimi/opencode **共识** | 二选一：①status 增 ABSTAIN→vote:ABSTAIN；②vote 枚举移除 ABSTAIN，注明"弃权仅由 Orchestrator 超时降级时写入 vote_result"。补正/反 fixture |
+| P1-2 | P1 | artifacts.path 全局主键 vs 多轮同路径生命周期矛盾：§11.4（L1303-1307）path TEXT PRIMARY KEY，§3.4（L847-853）每轮同路径再生 | codex(claude 确认)/kimi/opencode **共识** | 改复合键 `(task_id, kind, checkpoint_ref, review_round, reviewer_id)` 或自增主键 + 一句话归档插入/更新语义 |
+| P1-3 | P1 | 治理缺口：同 commit（8ab9be7）五份评审仅两份进跟踪，导致上轮一度将被误授 L1（流程级，违反 Guidelines §1.1(5)/§8） | kimi/opencode **共识**（本轮新发现） | 本科本轮即执行：STATUS 与 reviews/ 全量对账（已补登记三份）；确立每轮对账规则（见本文档引言） |
+| P2-1 | P2 | E7 四选项中 CANCEL 无显式落位：E7 伴随动作只写 APPROVED→E4/REWORK→E5（L831）；E10 触发仅为 macao cancel；Type G（L685）/§6.1（L1103）/§2.3（L399）未列 CANCEL | codex P0-3（降级）+opencode+kimi | E7 补 CANCEL→E10；E10 触发补 override 路径；各枚举展示统一 |
+| P2-2 | P2 | Layer 1c 伪代码（L771-782）缺 max_rework_rounds 守卫（E5 L829/E7 L831）；max 轮自动 decision 是否落盘未定义 | opencode+kimi | 伪代码补守卫；明确 max 轮"不落盘自动 decision，直接 Type G→E7" |
+| P2-3 | P2 | §11.4 DDL 注释"9 态之一"（L1299）vs §3.3"共 10 个"（L837） | claude/gemini/codex/opencode **共识** | 注释改"10 态之一（含 CANCELLED）" |
+| P2-4 | P2 | IMPROVEMENT_SUMMARY L160 结构图仍写 "quality_metrics"，v2.3 已统一 quality_snapshot | opencode | L160 改名 |
+| P2-5 | P2 | PRD §10 "成功标志" 五项均标 ✅（L1242-1246），无完成证据，与"未达成前不得勾选"（IMPROVEMENT L486）冲突 | kimi+opencode | 改 [ ] 或「验收标准」措辞 |
+| P2-6 | P2 | `macao merge approve` 为默认 require_human_signoff 正常路径必经命令（L1507），但 §14.2 命令表（L1482-1488）未列 | claude N1/gemini N1 → opencode/kimi 采纳 | 补入命令表并注明与 override resolve 区别 |
+| P2-7 | P2 | §16.3"其余全自动"（L1601）与默认强制人工签字矛盾 | claude N3/gemini N3 → opencode | 改"…merge approve 签字放行，其余自动" |
+| P2-8 | P2 | AEP payload 仍无 per-type Schema（aep_envelope.schema.json:29 payload 自由对象）；Task/Capability Schema 缺 | codex/gemini P1-2 残余 → opencode/kimi 降级 P2 | 随 PoC 前置补 DEVELOPMENT_STARTED/REVIEW_RESPONSE/REWORK_REQUEST payload Schema 与 fixtures |
+| P2-9 | P2 | Deadlock 场景推演未回填 PRD §3.4（正文仅场景一/二）；fixtures 无 resolution=human_override 正例 | claude/gemini（入口边 P1 的分歧收敛点）+opencode | §3.4 补 1:1 平票→裁定→E7 推演；补终局 vote_result fixture |
 
-| 编号 | 级别 | 发现 | 状态 | 来源 |
-|------|------|------|------|------|
-| P0-1 | P0 | clean rebase 豁免破坏 checkpoint 绑定（§14.5 L1504 vs §3.2/§3.3/E4a） | **待修订** | codex P0-1 / claude / gemini P0-1 |
-| P0-2 | P0 | §16.3 "可选 worktree"（L1599）与 Type B 主工作区示例（L498）vs §12.2 强制（L1378） | **待修订** | codex P0-2 / gemini P0-2 |
-| P1-1 | P1 | review_manifest 的 ABSTAIN 为不可表达死枚举（schema L26/L59/L61-74 vs §2.2 映射表） | **待修订** | codex/claude/gemini P1-1 |
-| P1-2 | P1 | artifacts.path 全局主键与多轮同路径生命周期矛盾（L1303-1307 vs §3.4） | **待修订** | codex P1-3 |
-| P1-3 | P1 | 闭环治理缺口：五份 8ab9be7 评审仅两份进跟踪（本节补登记即修复第一步） | **修订中** | 本轮新发现 |
-| P2-1~P2-9 | P2 | E7 CANCEL 落位；Layer 1c 缺 max 轮守卫；§11.4 "9 态"；IMPROVEMENT L160 旧命名；PRD §10 ✅；§14.2 缺 merge approve；§16.3 "其余全自动"；AEP per-type Schema 残余；Deadlock 推演/fixture 未回填 | **待修订** | 本轮 + claude N1/N3 + codex/gemini P1-2 残余 + claude P0 验收残余 |
-| P3-1~P3-8 | P3 | 版本指针 v2.2 滞后；§1.1 "REJECTED"；§2.4 "4 个"；§16.1 "E1~E8"；$id 版本串；Schema 清单未含 review_context；§14.1 "14.6"；README "L0~L4" | **待修订** | 本轮 + claude N2/N4 + codex P2 |
+## 分歧记录（未强行统一，交由 v2.3.1 闭环处理）
 
-## 下一步
+**Deadlock 检测→人工接管入口边**：claude/gemini 主张"票收齐算出 Deadlock → 进入人工接管"这一入口在 §3.3 E1~E10 中无对应边，Layer 1c 会退化为 60 分钟卡死诊断，无法兑现 §6.1 的 10 分钟独立时限承诺，维持 **P1**；opencode/kimi 主张该路径已由设计改法闭环（先人工裁定、后写终局 decision；CONSENSUS_CHECK 停留期由 §6.1 超时总则 HOLD 兜底），仅缺口是 §3.4 推演文本与 CANCEL 落位（P2-1/P2-9）。
+处理取向：v2.3.1 按**并集**处理——在 E3 行补充一条"票数判定即确定性函数"的入口说明（或显式 E3a），并在 §3.4 补第三场景推演，同时消除 P2-1/P2-9；满足两家验收标准，不做二选一。
 
-1. **v2.3 L1 复审申请：未通过**（`reviews/2026-08-26-review-result-PRD-v2.3-opencode.md`、`reviews/2026-08-26-review-result-cc77a94-kimi.md`，两份独立复审结论一致）。按其"闭环顺序"处理：① STATUS 与 reviews/ 目录全量对账常态化（P1-3）；② 裁决 rebase 绑定方案并写入 E4a 硬校验（P0-1）；③ worktree 三处对账一致 + Conformance 硬校验（P0-2）；④ ABSTAIN 口径 + artifacts 键（P1-1/P1-2）；⑤ P2/P3 随 v2.3.1 一并落文（kimi 报告另附逐条勘误清单可对照）。
-2. 以上关闭后申请下一轮独立复审；届时若仅余 P2/P3，可宣告 **L1 DOC-ALIGNED / PG-0**。
-3. 历史：~~五场景 + Deadlock 场景 SIM 复核~~ 已完成（2026-08-26，随 v2.3 修订执行；结论已被本轮复审独立重放确认，其中 CANCEL 落位与 max 轮守卫两处推导缺口登记为 P2-1/P2-2）：
+## P3 待修（不阻塞定级，随 v2.3.1 一并）
 
-   | 场景 | 转移链（逐步命中） | 每步唯一性 |
-   |------|--------------------|-----------|
-   | S1 首次双批准 | E1 → 产物(.dev.yml) → E2 → E3 → E4 → E4a | ✓ |
-   | S2 CI gate 失败 | S1 至 MERGING → E4b → 产物(.dev.yml r2) → E6 → E2 → … 循环 | ✓ |
-   | S3 1:1 僵局 → 裁定 APPROVED | E1→…→E3（有效票 2 = 法定人数，占比均 <2/3）→ Deadlock → E7 落盘终局 vote_result(APPROVED, human_override) → E4 → E4a | ✓ |
-   | S4 一人弃权 + 1 反对 | …→ WAITING_REVIEW；超时降级流程完成 → CONSENSUS_CHECK（有效票 1 < 法定人数，不产出自动 decision）→ E7 裁定 REWORK → 落盘 → 按 E5 同规则转 REWORK | ✓ |
-   | S5 返工第二轮 | E5 → REWORK_REQUEST(round=2) → 产物(.dev.yml r2 新 commit) → E6 → E2 → … （r1 产物已归档，无遮蔽） | ✓ |
-   | S6 RETRY_REVIEW / CANCEL | CONSENSUS_CHECK —E9→ WAITING_REVIEW（意见作废归档、round 不变）；任意活动态 —E10→ CANCELLED 终态 | ✓ |
+| 编号 | 发现（证据） |
+|------|-------------|
+| P3-1 | 版本指针滞后：EXECUTIVE_SUMMARY.md:3、README.md:3 仍 "v2.2"；IMPROVEMENT_SUMMARY.md:1 标题 "(v2.0 → v2.2)" 而其版本历史已含 v2.3 |
+| P3-2 | §1.1 图 "决定 APPROVED or REJECTED"（L97）——decision 枚举无 REJECTED，改 "REWORK_REQUIRED" |
+| P3-3 | §2.4 "…4 个核心消息类型"（L433）实际给出 7 个（Type A–G） |
+| P3-4 | §16.1 "FSM 推进（E1~E8）"（L1557）未随 E9/E10 更新 |
+| P3-5 | Schema $id 版本串不一致：review_context v2.3，其余 5 个 v2.2（vote_result 内容已在 v2.3 变更）；schemas/README.md:3 称"当前对应 PRD v2.3" —— 或声明 Schema 独立版本策略 |
+| P3-6 | §12.4（L1395）与 README.md:18 Schema 清单未含 review_context.schema.json |
+| P3-7 | §14.1 第 6 步 "见 14.6 Merge Policy"（L1477）实际为 §14.5 |
+| P3-8 | README.md:20 "L0~L4" 应为方法论正文 "L1~L4" |
+| P3-9 | §1.1 简化图非正式术语 "REVIEWING"（L85），与 10 态正式列表不对应（图已自称简化，非强制） |
+| P3-10 | EXECUTIVE_SUMMARY.md:118 "文件握手 100% 可靠" 建议就地标注为设计目标 |
+| P3-11 | IMPROVEMENT_SUMMARY 历史叙事数字（33%/89%/75%）出处核查（历史记录性质，多份评审豁免） |
 
-   推演中修正一处残留：§6.1 Consensus Deadlock 提示语补齐 RETRY_REVIEW 选项（与 E7/E9 枚举一致）。
-   全部文档示例已通过对应 JSON Schema 机验（PRD 8 JSON + 5 YAML、EXEC 三示例、IMPROVEMENT_SUMMARY context）。
+## 已确认的治理闭环动作（本轮同步执行）
+
+1. **P1-3 对账**：STATUS 已补登记 8ab9be7 的 codex/claude/gemini 三份 + cc77a94 全部五份评审。
+2. 机器校验维持 **53/53 全过**（opencode 独立复跑；claude/gemini 亦独立复跑一致）；`git diff --check` 无空白错误。
+3. SIM 六场景推导：opencode 本轮独立重放 S3/S4/S6 可唯一推导（CANCEL 落位、max 轮守卫两处缺口登记为 P2-1/P2-2）。
+
+## 下一步（v2.3.1 闭环顺序）
+
+1. **P0-1**：裁决 rebase 绑定（严格 or 受控门禁二选一）写入 E4a 硬校验；验收：以"target 领先、clean rebase"场景推演唯一证明不存在未评审内容进入 push。
+2. **P0-2**：三处（§12.2/§16.3/Type B 示例）worktree 对账一致 + Conformance supports_worktree 硬校验项。
+3. **P1-1**：ABSTAIN 口径裁决 + Schema/fixture 正反例。
+4. **P1-2**：artifacts 复合键改 + 生命周期语义一句话。
+5. **P2-1/P2-2/P2-3/P2-9**：E7 CANCEL→E10 落位、Layer 1c max 轮守卫、DDL 注释 10 态、§3.4 补场景三、补 resolution=human_override fixture。
+6. **P2/P3 其余 + P1-3 对账规则固化** 随 v2.3.1 一并落文。
+7. 完成后申请下一轮独立复审；若仅余 P2/P3，可宣告 **L1 DOC-ALIGNED / PG-0**，正式启动开发。本轮申请"仅余 P2/P3 即宣告"条款不适用，因其前提（上轮发现全部闭环）不成立。
