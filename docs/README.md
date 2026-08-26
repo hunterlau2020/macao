@@ -8,8 +8,11 @@
 |---|------|------|
 | 1 | [`EXECUTIVE_SUMMARY.md`](EXECUTIVE_SUMMARY.md) | 执行摘要与快速参考，最快了解全貌 |
 | 2 | [`MACAO_PRD_v2.md`](MACAO_PRD_v2.md) | **权威基准**：流程/产物协议/状态机/架构/配置/用户旅程/边界（第一～十六部分） |
-| 3 | [`IMPROVEMENT_SUMMARY.md`](IMPROVEMENT_SUMMARY.md) | v1.0 → v2.x 改进对比与版本演进说明 |
-| 4 | [`SRSv1.md`](SRSv1.md) | v1.0 历史基线（暂定名 "A"），**仅供追溯，不得用于实现** |
+| 3 | [`TECH_INTRUDUCE.md`](TECH_INTRUDUCE.md) | **技术架构与实现说明**：技术选型、组件落地矩阵、CLI 交互设计与模块全景 |
+| 4 | [`PLAN.md`](PLAN.md) | **技术开发计划**：8 周 MVP 迭代任务分解、里程碑（M0~M3）与交付验收标准 |
+| 5 | [`ROADMAP.md`](ROADMAP.md) | **技术路线图**：8 周 MVP 与未来演进路线（v1.1 ~ v2.0） |
+| 6 | [`IMPROVEMENT_SUMMARY.md`](IMPROVEMENT_SUMMARY.md) | v1.0 → v2.x 改进对比与版本演进说明 |
+| 7 | [`SRSv1.md`](SRSv1.md) | v1.0 历史基线（暂定名 "A"），**仅供追溯，不得用于实现** |
 
 ## 规范与治理
 
@@ -18,6 +21,7 @@
 | [`schemas/`](schemas/) | 版本化 JSON Schema（三类产物 / AEP 信封 / review_context / macao.yaml）+ 正反 fixtures，Adapter Conformance 的校验输入 |
 | [`reviews/`](reviews/) | 各 commit 的独立评审结论；[`reviews/STATUS.md`](reviews/STATUS.md) 为唯一实时门禁状态 |
 | [`MACAO_REVIEW_GUIDELINES.md`](MACAO_REVIEW_GUIDELINES.md) | 评审方法论（L1~L4 / PG-0~PG-3 门禁、证据规则） |
+| [`EXPERT_QUALITY.md`](EXPERT_QUALITY.md) | 评审专家质量评估报告（评分卡 / 角度重合度 / 排班建议），用于后续评审排班 |
 
 ## 快速导航（PRD 常用章节）
 

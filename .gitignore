@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# MACAO Runtime
+.macao/state.db*
+.macao/worktrees/
+.macao/archive/
+.macao/.reviews/
+.macao/.dev.yml
+.macao/vote_result.json
+
+# Environment & IDE
+.env
+.venv
+venv/
+.vscode/
+.idea/
+.DS_Store
