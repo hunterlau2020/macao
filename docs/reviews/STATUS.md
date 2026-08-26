@@ -2,14 +2,11 @@
 
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 
-- 更新时间：2026-08-26（v2.2 修订后）
-- 最近复审对象：commit `684a012`（PRD v2.1），三份独立评审：
-  - `reviews/2026-08-26-review-result-684a012-codex.md`：上轮 P0 全关，核心实质对齐；余下 5 个 P1
-  - `reviews/2026-08-26-review-result-684a012-claude.md`：新发现 2 个 P0（F1 CI Gate 状态矛盾、F2 Reviewer 执行权限边界）+ F3~F9
-  - `reviews/2026-08-26-review-result-684a012-gemini.md`：7 大工程环节增量
+- 更新时间：2026-08-26（PRD v2.2 复审后）
+- 最近复审对象：commit `8ab9be7`（PRD v2.2），一份独立评审：
+  - `reviews/2026-08-26-review-result-8ab9be7-kimi.md`：v2.2 关闭上一轮全部 P0/P1，但发现 1 个新 P0（PRD 内部 `review_context` 结构矛盾）+ 5 个 P1（摘要文档示例与 Schema 不符、改进总结无证据 ✅）+ P2/P3
 - 当前等级：**PENDING_REVIEW**
-  - 说明：此前本文件曾依据 gemini 单方结论标记"已达成 L1 DOC-ALIGNED"，但 claude 复审发现的 2 个 P0 与 codex 的 P1 清单表明该结论过早，现予撤回；
-    待下方各项经下一次独立复审确认后再行定级。
+  - 说明：v2.2 已关闭 `684a012` 的全部 P0/P1，但新一轮复审在权威基准 PRD 内部发现核心 Context 契约不自洽，且两份摘要文档的示例/状态标记与 Schema/事实不符；L1 DOC-ALIGNED 待 P0/P1 关闭后再行定级。
 - 本轮修订：PRD **v2.2**（含 `docs/schemas/`、`docs/README.md` 新增）
 
 ## 针对 684a012 三份评审的处理状态
@@ -37,8 +34,26 @@
 | gemini | 环节6 (P2) | agmsg 物理形态与 DLQ | 已修订 | PRD §11.6 |
 | gemini | 环节7 (P3) | usage 估算兜底；docs/README 为空 | 已修订 | PRD §15.4 estimated 标记；新增 `docs/README.md` 索引 |
 
+## 针对 8ab9be7 评审的处理状态
+
+| 来源 | 编号 | 发现 | 状态 | 处理位置 |
+|------|------|------|------|---------|
+| kimi | P0-1 | PRD 内部 `review_context` 结构矛盾：§2.4 Type B 与 §5.2 字段命名/嵌套结构/缺省块不一致 | **待修订** | 需统一 `review_context` 权威结构，全文同步并新增/更新 Schema |
+| kimi | P1-1 | `EXECUTIVE_SUMMARY.md` `.dev.yml` 示例字段名与 Schema 不符（`coverage` vs `test_coverage`）且缺 `review_round` | **待修订** | `docs/EXECUTIVE_SUMMARY.md` 第 124–151 行 |
+| kimi | P1-2 | `EXECUTIVE_SUMMARY.md` `vote_result.json` 示例缺必需字段且 `next_step` 类型不符 | **待修订** | `docs/EXECUTIVE_SUMMARY.md` 第 180–190 行 |
+| kimi | P1-3 | `EXECUTIVE_SUMMARY.md` `.review.yml` 示例缺必需字段且 `feedback` 结构不符 | **待修订** | `docs/EXECUTIVE_SUMMARY.md` 第 157–174 行 |
+| kimi | P1-4 | `IMPROVEMENT_SUMMARY.md` 多处用 ✅ 标记未完成的未来目标 | **待修订** | `docs/IMPROVEMENT_SUMMARY.md` 第 334–339、399–404、479–483 行 |
+| kimi | P1-5 | `IMPROVEMENT_SUMMARY.md` `quality_snapshot.tests.passed` 为含 emoji 字符串而非整数 | **待修订** | `docs/IMPROVEMENT_SUMMARY.md` 第 188–193 行 |
+| kimi | P2-1 | 缺少 `review_context` 与 AEP payload 级 Schema | 可延期 | 待新增 `docs/schemas/` 文件 |
+| kimi | P2-2 | 部分 Schema 对嵌套结构约束不足（`next_step`/`summary`/`artifacts`/`feedback`） | 可延期 | 待细化对应 Schema |
+| kimi | P2-3 | `EXECUTIVE_SUMMARY.md` 对 `.review.yml` 路径表述笼统 | 可延期 | 第 25 行附近补充路径说明 |
+| kimi | P3-1 | `IMPROVEMENT_SUMMARY.md` 标题仍以 v2.0 为叙事 | 可延期 | 文件名/标题可注明 "截至 v2.2" |
+
 ## 下一步
 
-1. 对 PRD v2.2 申请下一轮独立复审（重点复核 MERGING 转移边、execution_mode 约束、schemas 一致性）；
-2. 四场景 SIM 复核扩展为五场景（增加"CI gate 失败 → E4b 返工"场景）；
-3. 复审通过后定级 L1 DOC-ALIGNED / PG-0。
+1. 关闭 P0-1：在 PRD 内选定 `review_context` 唯一权威结构，统一 §2.4 Type B 与 §5.2 的字段命名、嵌套路径与缺省块；
+2. 关闭 P1-1/1-2/1-3：重写 `EXECUTIVE_SUMMARY.md` 三处示例，使其通过对应 Schema（`dev_manifest`/`review_manifest`/`vote_result`）；
+3. 关闭 P1-4/1-5：修正 `IMPROVEMENT_SUMMARY.md` 的 ✅ 状态标记与 `quality_snapshot` 字段类型；
+4. 对修复后的 PRD v2.2 申请下一轮独立复审（重点复核 `review_context` 一致性、摘要文档示例、schemas 完整性）；
+5. 四场景 SIM 复核扩展为五场景（增加"CI gate 失败 → E4b 返工"场景）；
+6. 复审通过后定级 L1 DOC-ALIGNED / PG-0。
