@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://macao.dev/schemas/v2.2/vote_result.schema.json",
+  "title": "MACAO vote_result.json Consensus Record",
+  "type": "object",
+  "required": ["version", "checkpoint_ref", "review_round", "votes", "vote_breakdown", "input_artifacts", "decision"],
+  "properties": {
+    "version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "checkpoint_ref": { "type": "string", "minLength": 1 },
+    "executor": { "type": "string" },
+    "review_round": { "type": "integer", "minimum": 1 },
+    "reviewers_total": { "type": "integer", "minimum": 2 },
+    "reviewers_responded": { "type": "integer", "minimum": 0 },
+    "votes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["reviewer", "vote"],
+        "properties": {
+          "reviewer": { "type": "string" },
+          "vote": { "enum": ["YES_APPROVE", "NO_APPROVE", "ABSTAIN"] },
+          "confidence": { "type": "number" },
+          "issues_count": { "type": "integer" }
+        }
+      }
+    },
+    "consensus_rule": { "type": "string" },
+    "vote_breakdown": {
+      "type": "object",
+      "required": ["approve", "reject", "abstain"],
+      "properties": {
+        "approve": { "type": "integer", "minimum": 0 },
+        "reject": { "type": "integer", "minimum": 0 },
+        "abstain": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "input_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "path", "sha256", "message_id"],
+        "properties": {
+          "kind": { "type": "string" },
+          "path": { "type": "string" },
+          "sha256": { "type": "string" },
+          "message_id": { "type": "string" }
+        }
+      }
+    },
+    "decision": { "enum": ["APPROVED", "REWORK_REQUIRED"] },
+    "decision_confidence": { "type": "number" },
+    "next_step": { "type": "object" }
+  }
+}

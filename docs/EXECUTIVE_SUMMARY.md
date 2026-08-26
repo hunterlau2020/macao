@@ -1,8 +1,8 @@
 # MACAO 产品设计 - 执行摘要与快速参考
 
-> **文档地位**：本文档是 `MACAO_PRD_v2.md`（权威基准文档，现版本 v2.1）的执行摘要与快速参考，细节以 PRD 为准。
+> **文档地位**：本文档是 `MACAO_PRD_v2.md`（权威基准文档，现版本 v2.2）的执行摘要与快速参考，细节以 PRD 为准。
 >
-> **文档体系**：`SRSv1.md`（v1.0 历史基线）→ `MACAO_PRD_v2.md`（主文档）→ 本文档（执行摘要）+ `IMPROVEMENT_SUMMARY.md`（改进对比）。PRD v2.1 新增第十一～十五部分：系统架构、Adapter Contract、配置规范、用户旅程与运行手册、边界声明。
+> **文档体系**：`SRSv1.md`（v1.0 历史基线）→ `MACAO_PRD_v2.md`（主文档）→ 本文档（执行摘要）+ `IMPROVEMENT_SUMMARY.md`（改进对比）。PRD v2.1+ 新增第十一～十六部分：系统架构、Adapter Contract、配置规范、用户旅程与运行手册、边界声明、部署形态与协作拓扑；机器可校验契约见 [`schemas/`](schemas/)。
 
 ---
 
@@ -10,7 +10,7 @@
 
 > **MACAO** 是一个**规范化的 AI Coding Agent 编排平台**，通过**标准化流程与显式信号**，把多个 CLI 工具（Claude Code, Codex, Kimi 等）组织成一个**自动化的开发-评审-合并团队**。
 
-> **定位声明（重要）**：v2.x 的可交付范围是**固定三 CLI（Claude Code + Codex/Kimi）的本地单机协作 PoC 规格**，不是通用跨 CLI 编排平台——调度、远程、多租户等通用化能力的路线见 PRD 第四部分，边界与非功能约束见 PRD 第十五部分。
+> **定位声明（重要）**：v2.x 的可交付范围是**固定三 CLI（Claude Code + Codex/Kimi）的本地单机协作 PoC 规格**，不是通用跨 CLI 编排平台——调度、远程、多租户等通用化能力的路线见 PRD 第四部分，边界与非功能约束见 PRD 第十五部分。MVP 为**单任务串行流水线**："团队"体现在角色分工（Executor/Reviewers/Orchestrator）而非并发规模。
 
 ---
 
@@ -244,7 +244,7 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 - [ ] Codex Adapter（PTY Wrapper）
 - [ ] Kimi Adapter（PTY Wrapper）
 - [ ] .dev.yml / .review.yml / vote_result.json 规范
-- [ ] LangGraph FSM（8 个主要状态，见 PRD §3.3）
+- [ ] LangGraph FSM（9 个业务状态，含 MERGING 合并中间态，见 PRD §3.3）
 - [ ] 2/3 投票共识规则
 - [ ] AEP Message 协议（7 种消息类型）
 - [ ] CLI 交互界面（Rich + prompt_toolkit）
@@ -262,7 +262,7 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 
 **承诺**：集中力量把 MVP 做到 95% 完美，而不是 70% 的大而全。
 
-**配套章节（PRD v2.1）**：系统架构与技术栈（第十一部分）、Adapter Contract v1 与能力矩阵（第十二部分）、配置规范 macao.yaml（第十三部分）、用户旅程与运行手册含 Merge Policy（第十四部分）、边界声明与非功能需求含安全/成本/评审质量评测（第十五部分）。
+**配套章节（PRD v2.1+）**：系统架构与技术栈含 State Store DDL 与恢复算法（第十一部分）、Adapter Contract v1 含执行权限边界/输出自愈/PTY 规范（第十二部分）、配置规范 macao.yaml（第十三部分）、用户旅程与运行手册含 Merge Policy（第十四部分）、边界声明与非功能需求含安全/成本/评审质量评测（第十五部分）、部署形态与协作拓扑——单机同置/跨机分布两种场景的角色协作设计（第十六部分）。
 
 ---
 
@@ -406,7 +406,7 @@ Week 8: 文档与发布
 - 理想情况：通过 Hook 自动生成（Anthropic 配合）
 - 实际情况：通过 Wrapper 监听 stdout 自动生成
 - 降级情况：CLI 界面提示用户生成
-- 兜底情况：用户手工执行 `macao checkin` 命令
+- 兜底情况：用户手工执行 `macao checkpoint create` 命令补交检查点（见 PRD 第十四部分命令表）
 
 所有情况都有备选方案。
 

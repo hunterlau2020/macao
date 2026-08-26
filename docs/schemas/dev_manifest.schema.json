@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://macao.dev/schemas/v2.2/dev_manifest.schema.json",
+  "title": "MACAO .dev.yml Development Checkpoint Manifest",
+  "type": "object",
+  "required": ["version", "executor", "development", "status", "signal", "review_round"],
+  "properties": {
+    "version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "review_round": { "type": "integer", "minimum": 1 },
+    "executor": {
+      "type": "object",
+      "required": ["id", "cli"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "role": { "type": "string" },
+        "cli": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" }
+      }
+    },
+    "development": {
+      "type": "object",
+      "required": ["quality_metrics", "git"],
+      "properties": {
+        "phase": { "type": "string" },
+        "description": { "type": "string" },
+        "artifacts": { "type": "array" },
+        "checklist": { "type": "array" },
+        "quality_metrics": {
+          "type": "object",
+          "required": ["tests_passed"],
+          "properties": {
+            "tests_passed": { "type": "boolean" },
+            "tests_exempt": { "type": "boolean" },
+            "tests_total": { "type": "integer" },
+            "test_coverage": { "type": "number" },
+            "lint_errors": { "type": "integer" },
+            "security_scan_passed": { "type": "boolean" }
+          }
+        },
+        "git": {
+          "type": "object",
+          "required": ["latest_commit"],
+          "properties": {
+            "latest_commit": { "type": "string", "minLength": 1 },
+            "branch": { "type": "string" },
+            "files_changed": { "type": "integer" }
+          }
+        },
+        "review_focus": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "status": { "const": "ready_for_review" },
+    "signal": { "const": "EXPLICIT" }
+  }
+}

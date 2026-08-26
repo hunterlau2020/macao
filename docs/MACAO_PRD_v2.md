@@ -393,7 +393,7 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE | ABSTAIN
 - 有效票 ≥ 法定人数 且 赞成占比 ≥ 2/3 → 决策 `APPROVED`（进入合并）
 - 有效票 ≥ 法定人数 且 反对占比 ≥ 2/3 → 决策 `REWORK_REQUIRED`（进入返工）
 - 其余一切情形（含 1:1、有效票低于法定人数、全弃权/全超时）→ Consensus Deadlock，触发人工接管（见 §6.1），由用户裁定 `APPROVED` / `REWORK` / 重试评审
-- Reviewer 配置：MVP 阶段为 2 Reviewer（Codex + Kimi），此时规则等价于全票通过；3 Reviewer 为目标配置（如引入第二个 Codex 实例），协议本身支持 N 个 Reviewer（N ≥ 2）
+- Reviewer 配置：MVP 阶段为 2 Reviewer（Codex + Kimi），此时规则等价于全票通过；3 Reviewer 为目标配置（建议引入第三个异构 CLI，如 Gemini CLI，见第四部分扩展计划——异构评审比同模型多实例更具独立性），协议本身支持 N 个 Reviewer（N ≥ 2）
 
 **决策表**：
 
@@ -449,6 +449,9 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   
   "payload": {
     "project": "macao-demo",
+    "task_id": "task-20240115-001",
+    "source_branch": "feature/db-refactor",
+    "target_branch": "main",
     "task_description": "Refactor database connection pooling with configurable timeout",
     "expected_output": {
       "code_path": "src/db/connection.py",
@@ -530,7 +533,7 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
 
 > **代码变更载体与仓库定位约定（重要）**：
 > 1. `code_changes.refs.{base_commit, head_commit}` 是**唯一权威路径**（全文所有示例、消费代码一律使用该嵌套结构，不允许扁平写法）；`diff_command` 仅是给 Reviewer 的参考命令，不是传输内容。
-> 2. 仓库/工作区定位：优先取 `payload.repository` 块；缺省时按 `project` 名称从项目配置 `macao.yaml` 的 `repository` 段解析（见第十三部分）。两者必居其一，否则该 `REVIEW_REQUEST` 判为无效消息。
+> 2. 仓库/工作区定位：优先取 `review_context.repository` 块（与下方示例一致）；缺省时按 `project` 名称从项目配置 `macao.yaml` 的 `repository` 段解析（见第十三部分）。两者必居其一，否则该 `REVIEW_REQUEST` 判为无效消息。
 > 3. Reviewer 在本地工作区执行 `git fetch` + `git diff` 取得变更（见 §5.3），不内联 diff 文本或 patch 内容，规避消息体积上限、编码与截断问题；若未来需要离线评审再扩展内联 patch（需另行定义大小上限与摘要校验）。
 
 #### Type C：评审反馈
@@ -789,13 +792,17 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 | E2 | `READY_FOR_REVIEW` | 命令 | `.dev.yml` 消费完成，发送 `REVIEW_REQUEST` AEP | `WAITING_REVIEW` | `.dev.yml` 归档；记录评审 deadline |
 | E3 | `WAITING_REVIEW` | 产物 | 有效票 ≥ minimum_quorum（当前 ref/round 的 `.review.yml`） | `CONSENSUS_CHECK` | 收集到的 `.review.yml` 纳入 git 提交 |
 | — | `WAITING_REVIEW` | 超时 | 超时降级流程完成（ping/弃权/人工裁定，见 §6.1） | `CONSENSUS_CHECK` | 弃权票记入 `vote_result.json` |
-| E4 | `CONSENSUS_CHECK` | 产物 | `vote_result.json` 决策 = `APPROVED` | `DONE` | Merge Controller 执行合并策略（第十四部分）；发送 `MERGE_COMPLETED`；本轮产物归档 |
+| E4 | `CONSENSUS_CHECK` | 产物 | `vote_result.json` 决策 = `APPROVED` | `MERGING` | Merge Controller 启动合并流水线（§14.5：检出 → rebase 检查 → merge → CI gate → 人工签字 → push） |
+| E4a | `MERGING` | 命令 | 合并流水线全部成功（CI gate 通过、push 完成、签字按策略收集） | `DONE` | 发送 `MERGE_COMPLETED`（含 merge_commit）；本轮产物归档 |
+| E4b | `MERGING` | 命令 | CI gate 失败，或 push 失败不可自动恢复，或签字被拒绝 | `REWORK` | 生成新一轮 `REWORK_REQUEST`（round+1，注明原因）；本轮产物归档 |
 | E5 | `CONSENSUS_CHECK` | 产物 | 决策 = `REWORK_REQUIRED` 且 round < max_rework_rounds | `REWORK` | 发送 `REWORK_REQUEST`（round+1）；本轮产物归档 |
 | E6 | `REWORK` | 产物 | 新一轮 `.dev.yml` 有效（round+1、新 commit） | `READY_FOR_REVIEW` | 更新当前 checkpoint_ref |
 | E7 | `CONSENSUS_CHECK` | 命令 | round ≥ max_rework_rounds 仍返工，或 Deadlock 人工裁定 | `DONE` / `REWORK` / 终止 | 人工裁定写入审计日志 |
 | E8 | `*`（任意） | 诊断 | 60min 无进展 + Layer 3 置信度 <0.7 | `UNKNOWN` | HUMAN_OVERRIDE，等待用户裁定 |
 
 > 说明：
+> - 业务状态共 **9 个**：`IDLE` / `CODING` / `READY_FOR_REVIEW` / `WAITING_REVIEW` / `CONSENSUS_CHECK` / `MERGING` / `DONE` / `REWORK` / `UNKNOWN`；`MERGING` 是合并流水线的中间状态——merge/rebase/CI gate/push 是多步异步过程，必须与终态 `DONE` 区分；
+> - Git Conflict 发生在 MERGING 阶段内：触发 §6.1 Git Conflict 人工接管，裁定结果经 E4a 或 E4b 落地；
 > - `CODING`/`REWORK` → `READY_FOR_REVIEW` 由产物触发（`.dev.yml` 校验通过，见 §3.2 Layer 1a），因入口状态有两个故不单独编号；
 > - 超时不是独立的状态来源：超时降级的结果（弃权票/人工裁定）最终仍通过 E3 或 E7 生效；
 > - 除本表所列来源外，任何实现不得引入其他状态转移路径。
@@ -820,15 +827,18 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 | 2 | Claude 生成 `.dev.yml`（commit `a1b2c3d`，round 1） | `CODING` → `READY_FOR_REVIEW` | `.dev.yml`（校验通过） |
 | 3 | Orchestrator 发送 `REVIEW_REQUEST` | `READY_FOR_REVIEW` → `WAITING_REVIEW`（E2） | —（`.dev.yml` 已归档） |
 | 4 | cc-glm、kimi 各写 `.review.yml`（round 1），有效票 2 ≥ 2 | `WAITING_REVIEW` → `CONSENSUS_CHECK`（E3） | 2 × `.review.yml` |
-| 5 | MACAO 写 `vote_result.json`（APPROVED） | `CONSENSUS_CHECK` → `DONE`（E4） | `vote_result.json` |
+| 5 | MACAO 写 `vote_result.json`（APPROVED） | `CONSENSUS_CHECK` → `MERGING`（E4） | `vote_result.json` |
+| 6 | merge/rebase 检查/CI gate/签字/push 全部成功 | `MERGING` → `DONE`（E4a） | —（发送 `MERGE_COMPLETED`；归档） |
 
 每步恰好命中一个合法转移；步骤 3 之后 `.dev.yml` 已归档，不会再被 Layer 1a 读到。
+若步骤 6 中 CI gate 失败或 push 失败 → `MERGING` → `REWORK`（E4b），转入场景二的返工循环。
 
 **场景推演二：返工第二轮**
 
 | 步骤 | 触发 | 状态变化（命中转移） | 作用域内读取的产物 |
 |------|------|--------------------|------------------|
-| 1-5 | 同场景一步骤 1-5，但步骤 5 决策 = `REWORK_REQUIRED` | `CONSENSUS_CHECK` → `REWORK`（E5） | `vote_result.json`（round 1） |
+| 1-4 | 同场景一步骤 1-4 | `IDLE` → … → `CONSENSUS_CHECK` | 同场景一 |
+| 5 | MACAO 写 `vote_result.json`（REWORK_REQUIRED，round 1） | `CONSENSUS_CHECK` → `REWORK`（E5） | `vote_result.json`（round 1） |
 | 6 | 发送 `REWORK_REQUEST`（round=2）；r1 产物已归档 | （伴随动作） | — |
 | 7 | Claude 修复后生成新 `.dev.yml`（commit `d4e5f6a`，round 2） | `REWORK` → `READY_FOR_REVIEW`（E6） | 新 `.dev.yml`（双匹配） |
 | 8 | 发送 `REVIEW_REQUEST`（携带 r1 反馈作为增量复审上下文） | `READY_FOR_REVIEW` → `WAITING_REVIEW`（E2） | — |
@@ -991,6 +1001,9 @@ cat <<< "$REVIEW_REQUEST" | jq '.payload.review_context' > /tmp/context.json
 
 # Step 2: 定位工作区并按 refs 取得代码变更
 #   仓库定位：优先读消息的 repository 块，缺省时由 MACAO 按 macao.yaml 解析后注入
+#   工作区隔离：MVP 下 MACAO 在分发前已为每个 Reviewer 创建独立 worktree
+#   （git worktree add .macao/worktrees/<reviewer_id> <head_commit>），
+#    并把 worktree 路径作为 workspace_path 注入——Reviewer 只在该目录内操作
 cd "$(jq -r '.repository.workspace_path' /tmp/context.json)" || exit 1
 REMOTE=$(jq -r '.repository.remote_name // "origin"' /tmp/context.json)
 git fetch "$REMOTE"
@@ -1019,7 +1032,7 @@ macao send-message REVIEW_RESPONSE \
 
 > 注：`quality_snapshot.performance` 为可选扩展项——无性能基准数据时可省略该子块。摘要类文档的 Context 示例从简，允许省略可选字段，以本节 Schema 为准。
 >
-> 注：仓库定位遵循 §2.4 约定——优先 `payload.repository` 块，缺省时按 `project` 从 `macao.yaml` 的 `repository` 段解析（第十三部分）；`code_changes.refs.*` 为唯一权威路径。
+> 注：仓库定位遵循 §2.4 约定——优先 `review_context.repository` 块，缺省时按 `project` 从 `macao.yaml` 的 `repository` 段解析（第十三部分）；`code_changes.refs.*` 为唯一权威路径。
 
 ---
 
@@ -1231,6 +1244,57 @@ claude-code / codex / kimi CLI 进程
 | UI | Rich + prompt_toolkit | 仅 CLI |
 | 远程 Agent | 不支持 | 移除 v1.0 的 SSH Gateway 设想（v1.1） |
 
+### 11.4 State Store DDL（核心表）
+
+```sql
+CREATE TABLE tasks(
+  task_id       TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  source_branch TEXT, target_branch TEXT,
+  state         TEXT NOT NULL,              -- 当前 FSM 状态（9 态之一）
+  checkpoint_ref TEXT, review_round INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT, updated_at TEXT
+);
+CREATE TABLE artifacts(
+  path TEXT PRIMARY KEY, kind TEXT NOT NULL, -- dev_manifest|review_manifest|vote_result
+  sha256 TEXT, checkpoint_ref TEXT, review_round INTEGER,
+  consumed INTEGER NOT NULL DEFAULT 0, archived_path TEXT
+);
+CREATE TABLE audit_events(
+  sequence_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL, task_id TEXT, type TEXT NOT NULL, detail TEXT   -- JSON
+);
+CREATE TABLE overrides(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sequence_id INTEGER REFERENCES audit_events(sequence_id),
+  trigger TEXT, choice TEXT NOT NULL, note TEXT
+);
+CREATE TABLE dead_letter_queue(
+  message_id TEXT PRIMARY KEY, payload TEXT,
+  retry_count INTEGER, reason TEXT, ts TEXT
+);
+```
+
+### 11.5 双写与崩溃恢复（Reconcile）
+
+**写入顺序约定**：① 物理产物落盘并 fsync → ② SQLite 事务提交 → ③ git 提交（异步，失败可补偿重放）。
+
+**第一真理源优先级**：git 已提交产物 > 磁盘上通过 Schema 校验的产物文件 > SQLite 记录。
+
+启动扫描重建规则（所有修复动作写审计）：
+
+| 半完成场景 | 处理 |
+|-----------|------|
+| A：SQLite 已写、产物归档未完成 | 以磁盘文件为准，幂等重放归档动作 |
+| B：git 已提交、SQLite 未写 | 从 git 历史与磁盘产物重放补齐 SQLite |
+| C：归档复制中崩溃 | copy+rename 天然幂等，重扫后补齐 archive 目录 |
+
+### 11.6 agmsg 本地形态与死信队列
+
+- MVP 选型：SQLite 消息表（单机进程间生产/消费；跨机 v1.1 经 Gateway 复用同一表结构同步）；
+- 消息 TTL = 所属阶段 deadline；未 ACK 按退避重试最多 3 次；超限移入 `dead_letter_queue` 并告警；
+- 消费端以 message_id 幂等去重（与 Adapter Contract 的 ack 语义一致）。
+
 ---
 
 ## 第十二部分：Adapter Contract v1 与能力矩阵
@@ -1258,15 +1322,23 @@ cancel(reason)                            # 取消当前任务并回收子进程
 | supports_hook | bool | 支持官方 Hook 事件 |
 | supports_noninteractive | bool | 支持非交互模式 |
 | supports_worktree | bool | 支持 git worktree 隔离评审 |
+| **execution_mode** | enum：`read_only` / `sandboxed` / `full` | **执行权限边界**（P0 安全约束，见下） |
 | supported_os / cli_version_range | - | 平台与版本兼容范围 |
+
+**execution_mode 语义与强制规则**：
+
+- `read_only`：只读挂载评审工作区，禁止任何写操作与命令执行（静态分析类工具适用）
+- `sandboxed`：在独立 git worktree + 容器/受限环境中执行；网络访问与包安装默认禁止，白名单放行
+- `full`：完全执行权限，仅允许 Executor 在其任务工作区内使用
+- **强制约束**：担任 Reviewer 的 CLI 必须 `execution_mode ∈ {read_only, sandboxed}` 且 MVP 阶段强制 `sandboxed` + 独立 worktree——通用 coding Agent 具备任意 shell/网络能力，若不加边界，被 prompt injection 后的危害是"破坏工作区/外传代码"而不只是"投错票"
 
 ### 12.3 MVP 准入矩阵
 
-| CLI | can_execute | can_review | hook | noninteractive | Adapter 类型 |
-|-----|-------------|------------|------|----------------|--------------|
-| claude-code | ✓ | — | ✓ | 部分 | claude-hook |
-| codex | — | ✓ | — | ✓ | pty-wrapper |
-| kimi | — | ✓ | — | ✓ | pty-wrapper |
+| CLI | can_execute | can_review | hook | noninteractive | worktree | execution_mode | Adapter 类型 |
+|-----|-------------|------------|------|----------------|----------|----------------|--------------|
+| claude-code | ✓ | — | ✓ | 部分 | n/a | full（限任务工作区） | claude-hook |
+| codex | — | ✓ | — | ✓ | ✓ | sandboxed | pty-wrapper |
+| kimi | — | ✓ | — | ✓ | ✓ | sandboxed | pty-wrapper |
 
 ### 12.4 兼容性验收（Conformance）
 
@@ -1274,7 +1346,24 @@ cancel(reason)                            # 取消当前任务并回收子进程
 
 - preflight 全绿；版本探测与 `cli_version_range` 一致；
 - 五类一致性场景：PTY 断开重连、重复 message_id 回执去重、CLI 升级后探测、厂商限流退避、凭据失效报错；
-- producer→consumer 端到端：Adapter 生成的产物 fixture 直接喂给消费方命令（如 §5.3 的 jq 路径）验证可解析。
+- producer→consumer 端到端：Adapter 生成的产物 fixture 直接喂给消费方命令（如 §5.3 的 jq 路径）验证可解析；
+- 校验输入为**版本化 JSON Schema 与正/反 fixture**，统一维护于 `docs/schemas/`（三类产物 + AEP 信封 + macao.yaml），Schema 演进随 PRD 版本号走。
+
+### 12.5 Reviewer 输出自愈（两级）
+
+LLM CLI 自由文本生成 YAML 的常见失败：包裹 Markdown 代码栅栏、带客套话前后缀、字段缺失、status↔vote 不一致、缩进错误。Adapter 在落盘前执行两级自愈：
+
+1. **提取清洗（Extractor）**：正则提取首个合法 YAML 代码块，剥离栅栏与无关文本后再解析；
+2. **局部纠错重试（Local Re-prompt）**：Schema 校验失败时，在同一会话内追加一次纠错提示（附具体校验错误，如 "vote 字段与 status 映射冲突，请仅输出合法 YAML"）；自愈成功才落盘。
+
+约束：同轮最多自愈 1 次，仍在 per_reviewer 超时窗口内；仍失败才按无效产物处理（§2.2 一致性校验规则），避免一次格式错误浪费整轮评审窗口。
+
+### 12.6 PTY 运行规范
+
+- **非交互参数**：各 CLI 以非交互模式启动（权限确认关闭/自动允许清单），具体参数登记于 Capability Manifest 并在 preflight 时验证；
+- **ANSI 清洗**：所有 PTY 输出经 `strip_ansi()` 过滤后才写入 State Store 日志或送 Layer 3 LLM 诊断（省 token 且避免转义序列干扰语义）；
+- **进程组回收**：以进程组为单位管理子进程（`killpg(SIGTERM)` → 宽限期 → `SIGKILL`），确保 cancel/崩溃时编译、测试等孙进程一并回收；
+- **挂起检测**：权限弹窗等导致的输出静默由 pty_idle 监控捕获，进入 §3.1 Layer 2 预警与 Layer 3 诊断流程。
 
 ---
 
@@ -1302,6 +1391,11 @@ policy:
   min_effective_votes: 2         # ⌈2N/3⌉，N = configured reviewers
   max_rework_rounds: 3           # 超过则触发人工裁定（E7）
   review_strategy: "delta_plus_focus"
+merge:
+  strategy: "ff_only"            # ff_only | no_ff
+  ci_gate_command: null          # 例: "make ci"；null 表示无门禁（MERGING 内执行）
+  require_human_signoff: true    # 推送前人工签字开关；默认保守值 true（刻意的安全默认）
+  rebase_before_merge: true      # 上游 target 领先时由 Executor 自动 rebase
 timeouts:
   development: "2h"
   checkpoint_validation: "1m"
@@ -1322,7 +1416,7 @@ audit:
   retention_days: 90
 ```
 
-加载规则：Config Loader 启动时读取并做 JSON Schema 校验，失败则拒绝启动并列出错误项；运行中变更需显式 `macao config reload`，且不影响进行中的 round。
+加载规则：Config Loader 启动时读取并做 JSON Schema 校验（Schema 文件见 `docs/schemas/`），失败则拒绝启动并列出错误项；运行中变更需显式 `macao config reload`，且不影响进行中的 round。`min_effective_votes` 由 Loader 按 `⌈2 × N / 3⌉` 推导填充，显式覆盖时不得低于推导值。三类产物与 AEP 信封同样以 `docs/schemas/` 的版本化 Schema 为唯一校验依据。
 
 ---
 
@@ -1332,7 +1426,7 @@ audit:
 
 1. 安装预检：`macao preflight` —— 校验三个 CLI 已安装、登录态有效、版本在支持矩阵内，输出 PreflightReport 与修复建议；
 2. 初始化：`macao init` 生成 `macao.yaml` 模板 → 编辑团队与仓库段 → `macao doctor` 校验配置与环境；
-3. 创建任务：`macao task create --title … --acceptance … --branch feature/x` —— 需求最小集 = 标题 + 可测试的验收标准（写入 `DEVELOPMENT_STARTED.success_criteria`）+ 目标仓库/分支 + 期望产物路径；验收标准缺失则拒绝创建；
+3. 创建任务：`macao task create --title … --acceptance … --branch feature/x` —— **Task 最小 Schema** = `task_id`（State Store 生成）+ 标题 + 验收标准数组（可测试判据，映射 `DEVELOPMENT_STARTED.success_criteria`）+ `source_branch` + `target_branch` + 期望产物路径；验收标准或目标分支缺失则拒绝创建；字段随任务写入 State Store 的 tasks 表并进入 AEP 消息；
 4. 观察：`macao status`（FSM 状态 / 当前 ref 与 round / 各 agent 状态）、`macao logs <agent>`；
 5. 人工处置：出现 HUMAN_OVERRIDE_REQUEST 时，`macao override list` 查看证据（诊断报告/票面/冲突详情）→ `macao override resolve --choice APPROVED|REWORK|RETRY|CANCEL [--note]`；每笔决策写入审计并向请求方回执；
 6. 合并与发布：见 14.6 Merge Policy；
@@ -1346,6 +1440,7 @@ audit:
 | 取消 | `macao cancel <task>` | 终止任务，通知全体 agent，归档现场 |
 | 重试 | `macao retry <task>` | 从最后检查点重放 |
 | 用量查询 | `macao usage` | 按阶段/CLI 汇总 token 与调用次数 |
+| 手工补交检查点 | `macao checkpoint create --file <path>` | 替 Agent 手工生成/修正 `.dev.yml`（内容仍须通过最小有效性校验，见 §2.1） |
 
 > **并发声明**：MVP 单机同一时刻仅允许一个活动任务（串行编排）；多任务并发与调度属 Scheduler 范畴，延至 v1.2。
 
@@ -1357,12 +1452,18 @@ Terminal 日志滚动保留 `audit.retention_days`（默认 90 天）；审计�
 
 CLI 版本超出支持矩阵 → preflight 告警并要求显式确认；某 Reviewer Adapter 故障时可临时将其标记弃权，走超时降级路径（§6.2）。
 
-### 14.5 Merge Policy（从批准到合并）
+### 14.5 Merge Policy（MERGING 状态内的合并流水线）
 
-- E4 触发后由 Merge Controller 执行：检出工作分支 → merge 到 `default_branch` → 冲突即触发 Git Conflict 人工接管；
-- CI gate（可选）：`merge.ci_gate_command` 配置的命令通过后才推送；CI 失败视为返工，生成新一轮 `REWORK_REQUEST`（注明 CI 失败原因）；
-- 合并完成推送 `MERGE_COMPLETED`（含 merge_commit）；合并事故用 git revert 回滚，回滚事件入审计；
-- 默认 fast-forward 优先，no-ff 可在 `merge` 段配置。
+E4 进入 `MERGING` 后，Merge Controller 顺序执行（任一步失败即走 E4b 返工，除非该项配置为可选且未启用）：
+
+1. **检出与上游同步**：检出 target 分支；若上游领先且 `rebase_before_merge: true`，由 Executor 自动 rebase 并重跑本地验证——rebase 仅改变 commit 哈希、不触发新一轮评审；但解决冲突产生的代码改动视为新变更 → E4b 返工；
+2. **技术合并**：merge 到 target 分支（默认 `ff_only`，可配 `no_ff`）；Git Conflict → 触发 §6.1 Git Conflict 人工接管，裁定后继续或 E4b；
+3. **CI gate**：`merge.ci_gate_command` 非空时执行；失败 → E4b（REWORK_REQUEST 注明 CI 失败原因）；
+4. **人工签字**：`require_human_signoff: true`（默认，刻意的保守安全默认值——正常路径下人类对自己代码被合并保留否决权）时，推送前需用户 `macao merge approve` 确认；拒绝 → E4b；
+5. **推送与通告**：push 成功 → E4a：发送 `MERGE_COMPLETED`（含 merge_commit）、归档本轮产物；
+6. **回滚**：已推送后发现事故用 git revert，回滚事件入审计。
+
+> 与团队托管平台（GitHub/GitLab PR、分支保护、必需状态检查）的集成不在 MVP 范围：MVP 假设面向**未启用分支保护的本地/个人仓库**；共享仓库场景须先评估远端保护策略与自动合并的共存方式，规划于 v1.1+。
 
 ---
 
@@ -1370,7 +1471,7 @@ CLI 版本超出支持矩阵 → preflight 告警并要求显式确认；某 Rev
 
 ### 15.1 产品边界（重要）
 
-v2.x 定位为**「固定三 CLI（Claude Code + Codex/Kimi）的本地单机协作 PoC 规格」**，不是通用跨 CLI 编排平台。以下能力明确不在 MVP 内：跨物理机/远程 SSH（v1.1）、多任务并行与调度（v1.2）、Web Dashboard（v1.1+）、RBAC/多租户（企业版）。
+v2.x 定位为**「固定三 CLI（Claude Code + Codex/Kimi）的本地单机协作 PoC 规格」**，不是通用跨 CLI 编排平台。以下能力明确不在 MVP 内：跨物理机/远程 SSH（v1.1，部署形态见第十六部分场景二）、多任务并行与调度（v1.2）、Web Dashboard（v1.1+）、RBAC/多租户（企业版）。
 
 ### 15.2 返工策略
 
@@ -1382,13 +1483,14 @@ v2.x 定位为**「固定三 CLI（Claude Code + Codex/Kimi）的本地单机协
 | 风险 | 缓解措施 |
 |------|---------|
 | Reviewer 读到恶意代码被 prompt injection，操纵共识 | 评审产物 Schema 强校验（含 status↔vote 映射校验）；`review_focus` 白名单注入；异常投票模式告警；关键决策保留人工抽查点 |
+| Reviewer 被诱导执行破坏性命令（改写工作区、外传代码），而非仅投票被操纵 | **执行权限边界强制**（第十二部分）：Reviewer 必须 `execution_mode ∈ {read_only, sandboxed}` 且 MVP 强制 sandboxed + 独立 git worktree；网络访问与包安装默认禁止、白名单放行 |
 | 凭据泄露 | CLI 凭据经环境变量/keyring 注入子进程，不落盘明文；日志脱敏（`secrets_masking`） |
 | 代码/diff 发送至第三方厂商 | `security.allowed_clis` 白名单约束可用 CLI；`send_terminal_logs_to_reviewers` 默认关闭；企业部署前须完成数据出境评估 |
 | 自动化编排触碰第三方 CLI 服务条款 | PoC 前完成 ToS/法务核实（已列入风险表）；必要时提供半自动触发模式 |
 
 ### 15.4 成本计量
 
-Usage Meter 记录每次流程各阶段的 token 用量与调用次数（数据来自 CLI 输出与适配器统计，精度受厂商遥测限制，PoC 以可获得为准）；预算超限仅告警不硬限（`monthly_budget_usd: null`）。
+Usage Meter 记录每次流程各阶段的 token 用量与调用次数（数据来自 CLI 输出与适配器统计，精度受厂商遥测限制）；CLI 未输出 token 数据时按字符数粗估（≈4 chars/token）并标记 `estimated: true`。预算超限仅告警不硬限（`monthly_budget_usd: null`）。
 
 ### 15.5 评审质量评测计划（核心价值验证）
 
@@ -1398,6 +1500,122 @@ KPI 之外增加共识有效性评测，回答"双 Reviewer 共识是否真能�
 - 测量指标：共识召回率（已知缺陷被 ≥1 个 Reviewer 标记且进入返工的比例）与误报率；
 - 验收线：召回率 < 60% 则重新评估角色分配与 Context 设计，再进入 v1.1 角色扩展；
 - 结果记入 PoC 报告，作为对外宣称"评审有效性"的唯一依据。
+
+---
+
+## 第十六部分：部署形态与协作拓扑
+
+### 16.1 角色定义与协作第一性原则
+
+| 角色 | 实体 | 核心职责 | 垄断权（单一写者原则） |
+|------|------|---------|----------------------|
+| **编排者** | 用户 + MACAO Orchestrator | 任务受理、FSM 推进（E1~E8）、共识仲裁、合并执行、人工接管处理 | 唯一写 `vote_result.json`、唯一执行 merge |
+| **执行者** | Executor CLI（MVP = Claude Code） | 理解验收标准 → 改码 → 自测 → commit → 生成 `.dev.yml` | 唯一写 `.dev.yml`、唯一产生业务 commit |
+| **评审专家** | Reviewer CLI ×N（Codex / Kimi） | 按 review_context 取 diff → 审查 → 产出意见 → 投票 | 各自唯一写自己的 `.review.yml` |
+
+> **第一性原则**：三个角色之间的协作只依赖两类共享媒介——**① git 仓库（代码事实源）② AEP 消息（控制流 + 产物传输）**。部署形态的差异只体现为这两类媒介的物理实现不同，FSM、共识规则、产物契约（round + checkpoint_ref 双匹配）全部原样复用。
+
+### 16.2 端到端开发流程总览（标注交接通道）
+
+| # | 阶段 | 发起 → 接受 | 交接物与通道 | 完成标志 |
+|---|------|------------|-------------|---------|
+| 0 | 部署预检 | 用户 → Orchestrator | `macao preflight`（CLI 安装/登录态/版本矩阵） | PreflightReport 全绿 |
+| 1 | 任务受理 | 用户 → Orchestrator | `macao task create`（标题 + 可测验收标准 + 目标分支） | E1：`DEVELOPMENT_STARTED` 下发 |
+| 2 | 开发 | Orchestrator → 执行者 | AEP 任务指令；执行者在工作区 commit | 有效 `.dev.yml` 出现（新 commit + round 匹配） |
+| 3 | 检查点与分发 | 执行者 → Orchestrator → 评审专家 | `.dev.yml`（产物型转移）→ `REVIEW_REQUEST` 携带 context（refs + repository 定位） | E2：`.dev.yml` 归档，评审 deadline 生效 |
+| 4 | 并行评审 | Orchestrator ⇄ 各评审专家 | 各专家独立取 diff（`fetch_before_diff`）→ 各写 `.review.yml` | 有效票 ≥ 法定人数（E3） |
+| 5 | 共识判定 | Orchestrator（内部） | 决策表裁决 → `vote_result.json` | APPROVED / REWORK / Deadlock 转人工 |
+| 6 | 合并发布 | Orchestrator → git remote | Merge Policy：merge → CI gate → push → `MERGE_COMPLETED` | merge commit + 审计记录 |
+| 7 | 返工/归档 | Orchestrator → 执行者 | `REWORK_REQUEST`（round+1，附增量上下文）或产物归档 | 闭环或 E7 人工裁定 |
+
+阶段 2~5 为核心循环；round + checkpoint_ref 双匹配保证任何一轮产物不污染另一轮。
+
+### 16.3 场景一：单机同置（v2.x MVP，规格已全覆盖）
+
+```text
+┌────────────────── 物理机 M ──────────────────────────┐
+│  用户 ⇄ macao CLI                                    │
+│      │                                               │
+│  Orchestrator（FSM/共识/合并，SQLite State Store）    │
+│      │  本地 agmsg 队列（文件型，AEP 消息）            │
+│  ├─ ClaudeCodeAdapter ── PTY ── claude-code（执行者） │
+│  ├─ CodexAdapter ─────── PTY ── codex（评审专家 A）   │
+│  └─ KimiAdapter ───────── PTY ── kimi（评审专家 B）   │
+│      │                                               │
+│  同一个工作区 clone：.macao/ 产物 + archive + git     │
+└──────────────────────────────────────────────────────┘
+```
+
+| 协作面 | 实现方式 | 说明 |
+|--------|---------|------|
+| 控制流 | 本地 agmsg 文件队列 | 零网络延迟；消息可靠性由队列落盘保证 |
+| 代码共享 | 同一个工作区 clone | 执行者 commit 后，评审专家直接在同仓 `git diff base..head`，无同步动作 |
+| 产物落盘 | 同一文件系统 | 三类产物直接读写 `.macao/`；归档即本地 mv + git 提交 |
+| 隔离 | 可选 git worktree（`supports_worktree` 能力位） | 评审专家跑构建/测试时不污染主工作区 |
+
+故障面仅限本机：进程崩溃（State Store 恢复）、PTY 卡死（Layer 3 诊断）、磁盘资源耗尽。用户体感为单终端交互：`status` 看进度、`override resolve` 处理接管，其余全自动。
+
+### 16.4 场景二：跨机分布（v1.1 规划）
+
+示例布局（规则适配任意切分）：**M1 = Orchestrator + 评审专家 A（cc-glm）；M2 = 执行者（cc-ds4）+ 评审专家 B（kimi）**。
+
+```text
+┌──────────── M1（决策域）────────────┐      ┌──────────── M2（执行域）────────────┐
+│ 用户 ⇄ macao CLI                    │      │                                     │
+│ Orchestrator（FSM/共识/Merge）       │      │ claude-code（执行者）                │
+│ 评审专家 A：codex                    │      │ 评审专家 B：kimi                     │
+│ 本地 .macao/（唯一写者）+ clone      │      │ 自己的 clone（同 origin）            │
+└──────────────┬──────────────────────┘      └──────────────┬──────────────────────┘
+               │        ① Agent Gateway（SSH 隧道/mTLS）     │
+               └──────────── agmsg 网桥（AEP 双向）───────────┘
+               ② 共享 git origin（代码与检查点的唯一事实源）
+```
+
+**三条通道**：
+
+| 通道 | 承载 | 场景一实现 | 场景二实现 |
+|------|------|-----------|-----------|
+| C1 代码 | commit / push / fetch / diff | 同仓直读 | 共享 origin：M2 push → M1/M2 各自 fetch；checkpoint_ref 必须双方可见 |
+| C2 控制+产物 | AEP 消息（`content_base64` 内嵌产物内容） | 本地 agmsg | agmsg 网桥 + Agent Gateway（SSH 隧道或 mTLS） |
+| C3 共识产物落盘 | `.macao/` 文件 | 同盘直写 | 仅 M1 可写（单一写者）；远端产物经 C2 上送，由 M1 落盘并 git 提交留证 |
+
+**分工铁律**：M2 是执行域——产码、产检查点、产本机评审意见；M1 是决策域——共识、合并、审计。M2 不写 `vote_result.json`，不触碰 M1 的 `.macao/` 写权限。
+
+**相对场景一的差异点（δ）**：
+
+| δ# | 差异 | 机制 |
+|----|------|------|
+| δ1 | E2 分发新增前置校验 **R1**：head_commit 必须已推送至 origin（以 push 回执为准），否则不发 `REVIEW_REQUEST` | 杜绝"评审一个对端看不到的 commit" |
+| δ2 | `.dev.yml` 上行：包含在被 push 的 commit 中，同时发 `STATE_CHANGED`（Type F，附 content_base64）通知 M1；M1 落盘到本地 clone 后进入原有识别逻辑 | 消息是触发，git 是存证——与状态作用域读取完全兼容 |
+| δ3 | 评审意见回传：M2 的 Reviewer 写好 `.review.yml` 后经 `REVIEW_RESPONSE`（Type C，content_base64）上送，M1 落盘提交 | Type B/C 内嵌字段正是为此预留 |
+| δ4 | 远端评审取码：按 repository 块在自己 clone 上 `fetch_before_diff`；取不到 ref → 幂等重试（message_id 去重），超限转人工 | |
+| δ5 | deadline 统一以 Orchestrator（M1）时钟为准，容忍 ±5min 时钟偏差 | |
+| δ6 | 新增故障面：网关断连（队列积压+重放，幂等去重）、M2 整机离线（development/per_reviewer 超时照常降级）、push 凭据失败（preflight 前置拦截 + 运行期转人工） | |
+
+**配置增量**（macao.yaml 扩展草案，v1.1 实现）：
+
+```yaml
+team:
+  executor: { id: cc-ds4, cli: "claude-code", host: m2 }
+  reviewers:
+    - { id: cc-glm, cli: codex, host: m1 }
+    - { id: kimi,   cli: kimi,  host: m2 }
+hosts:
+  m1: { role: [orchestrator, reviewer] }
+  m2: { gateway: "ssh://user@m2.example:2222", role: [executor, reviewer] }
+```
+
+### 16.5 两场景对比与落地差距
+
+| 维度 | 场景一（同机） | 场景二（跨机） |
+|------|--------------|---------------|
+| 控制通道 | 本地 agmsg 文件队列 | agmsg 网桥 + Gateway（SSH/mTLS） |
+| 代码共享 | 同一 clone 直读 | 共享 origin：push → fetch |
+| 产物落盘 | 同盘直写 | 单一写者（M1）+ AEP 内容上送 |
+| 故障面 | 本机进程/PTY/磁盘 | + 网络分区、时钟漂移、push 失败、整机离线 |
+| 适用版本 | v2.x MVP（已覆盖） | v1.1 |
+
+场景二需新增的实现项共三项：**① Agent Gateway 守护进程；② R1 push 前置校验；③ hosts 配置段**。其余（FSM、共识、产物契约、round 匹配、Adapter Contract）全部复用，无需修改。
 
 ---
 
@@ -1415,3 +1633,13 @@ KPI 之外增加共识有效性评测，回答"双 Reviewer 共识是否真能�
   - `code_changes.refs.*` 唯一路径 + `repository` 定位块（解析源 = macao.yaml）
   - 产物补 `review_round` / `input_artifacts` 字段；Layer 3 图示统一"始终提示、低置信度接管"
   - 新增第十一～十五部分：系统架构与技术栈、Adapter Contract v1 与能力矩阵、配置规范、用户旅程与运行手册、边界声明与非功能需求
+- v2.1.1: 新增第十六部分《部署形态与协作拓扑》：角色单一写者原则、七阶段流程通道标注、
+  单机同置（场景一，MVP 已覆盖）与跨机分布（场景二，v1.1：Gateway / R1 push 前置校验 / hosts 配置段）
+- v2.2: 按 `docs/reviews/2026-08-26-review-result-684a012-*` 三份评审闭环——
+  - P0：新增 `MERGING` 中间状态承接合并流水线与 CI gate 失败回退（E4/E4a/E4b，§3.3/§14.5）；
+    Reviewer 执行权限边界 `execution_mode` 强制 sandboxed + worktree 隔离（§12.2/12.3/§5.3/§15.3）
+  - P1：repository 路径统一为 review_context 内；Task Schema 与 AEP 分支字段；merge 配置段
+    （ci_gate/signoff/rebase）；State Store DDL 与双写恢复算法（§11.4/11.5）；agmsg DLQ（§11.6）；
+    Reviewer 输出自愈与 PTY 运行规范（§12.5/12.6）；版本化 JSON Schema（docs/schemas/）
+  - P2/P3：pre-merge rebase 策略、usage 粗估兜底、`macao checkpoint create` 命令、
+    3-Reviewer 目标配示例改为异构 CLI、"团队"叙事与单任务串行的期望落差说明

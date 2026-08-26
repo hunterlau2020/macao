@@ -493,5 +493,12 @@ MACAO 的借鉴：
 - v2.1: 按 2026-08-26 复审闭环状态作用域/Context 契约问题；PRD 新增第十一～十五部分
   （系统架构、Adapter Contract、配置规范、用户旅程、边界与非功能需求），产品定位收敛为
   「固定三 CLI 的本地协作 PoC 规格」
+- v2.1.1: PRD 新增第十六部分《部署形态与协作拓扑》：
+  角色单一写者原则 + 七阶段流程通道标注；单机同置（MVP）与跨机分布（v1.1：Gateway /
+  R1 push 前置校验 / hosts 配置段）两种场景下的角色协作设计
+- v2.2: 按 2026-08-26 三份复审闭环：MERGING 中间态承接 CI gate 失败回退、Reviewer 执行权限
+  边界强制 sandboxed+worktree、repository 路径统一、Task Schema 与 merge 配置段、State Store
+  DDL + 双写恢复算法、agmsg DLQ、输出自愈与 PTY 规范、docs/schemas/ 版本化 Schema + fixtures；
+  另补 docs/README.md 文档索引
 
 **下一步**：Review 本文档，反馈是否有理解偏差或遗漏之处。

@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "timestamp": "2024-01-15T10:55:00Z",
+  "checkpoint_ref": "a1b2c3d",
+  "executor": "cc-ds4",
+  "review_round": 1,
+  "reviewers_total": 2,
+  "reviewers_responded": 2,
+  "votes": [
+    { "reviewer": "cc-glm", "vote": "NO_APPROVE", "confidence": 0.92, "issues_count": 3 },
+    { "reviewer": "kimi", "vote": "NO_APPROVE", "confidence": 0.85, "issues_count": 1 }
+  ],
+  "consensus_rule": "2/3_majority",
+  "vote_breakdown": { "approve": 0, "reject": 2, "abstain": 0 },
+  "input_artifacts": [
+    { "kind": "review", "path": ".macao/.reviews/cc-glm.review.yml", "sha256": "9f2a7c1e5bd0", "message_id": "msg-20240115-003" },
+    { "kind": "review", "path": ".macao/.reviews/kimi.review.yml", "sha256": "b91c04d8e3af", "message_id": "msg-20240115-004" }
+  ],
+  "decision": "REWORK_REQUIRED"
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://macao.dev/schemas/v2.2/aep_envelope.schema.json",
+  "title": "MACAO AEP/1.0 Message Envelope (all 7 types)",
+  "type": "object",
+  "required": ["protocol", "message_id", "timestamp", "type", "from", "to", "payload"],
+  "properties": {
+    "protocol": { "const": "AEP/1.0" },
+    "message_id": { "type": "string", "pattern": "^msg-[0-9]{8}-[0-9]{3,}$" },
+    "timestamp": { "type": "string" },
+    "type": {
+      "enum": [
+        "DEVELOPMENT_STARTED",
+        "REVIEW_REQUEST",
+        "REVIEW_RESPONSE",
+        "REWORK_REQUEST",
+        "MERGE_COMPLETED",
+        "STATE_CHANGED",
+        "HUMAN_OVERRIDE_REQUEST"
+      ]
+    },
+    "from": { "type": "string", "minLength": 1 },
+    "to": {
+      "anyOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+      ]
+    },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}
