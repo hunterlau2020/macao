@@ -1100,7 +1100,7 @@ HUMAN_OVERRIDE_TRIGGERS = [
     {
         "condition": "Consensus deadlock",
         "description": "No consensus achievable (e.g., 50-50 vote)",
-        "action": "Ask user: 'APPROVED or REWORK?'",
+        "action": "Ask user: '--choice APPROVED | REWORK | RETRY_REVIEW'（枚举见 E7/E9）",
         "timeout": "10 minutes"
     },
     {

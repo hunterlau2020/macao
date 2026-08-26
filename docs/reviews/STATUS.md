@@ -31,6 +31,19 @@
 
 ## 下一步
 
-1. 对 PRD v2.3 申请下一轮独立复审（重点：review_context 单一结构、Deadlock→终局 vote_result 流程、10 态 FSM 一致性）；
-2. SIM 复核五场景（首次双批准 / CI gate 失败 E4b / 1:1 僵局 / 一人弃权 / 返工第二轮）+ Deadlock 人工裁定场景；
-3. 复审通过后定级 L1 DOC-ALIGNED / PG-0。
+1. ~~对 PRD v2.3 申请下一轮独立复审~~ **已发出**：`reviews/2026-08-26-review-request-PRD-v2.3.md`（含复核重点、机器校验复现指引、定级目标）；待独立 reviewer 认领并出具 result 报告；
+2. ~~五场景 + Deadlock 场景 SIM 复核~~ **已完成（2026-08-26，随 v2.3 修订执行）**：
+
+   | 场景 | 转移链（逐步命中） | 每步唯一性 |
+   |------|--------------------|-----------|
+   | S1 首次双批准 | E1 → 产物(.dev.yml) → E2 → E3 → E4 → E4a | ✓ |
+   | S2 CI gate 失败 | S1 至 MERGING → E4b → 产物(.dev.yml r2) → E6 → E2 → … 循环 | ✓ |
+   | S3 1:1 僵局 → 裁定 APPROVED | E1→…→E3（有效票 2 = 法定人数，占比均 <2/3）→ Deadlock → E7 落盘终局 vote_result(APPROVED, human_override) → E4 → E4a | ✓ |
+   | S4 一人弃权 + 1 反对 | …→ WAITING_REVIEW；超时降级流程完成 → CONSENSUS_CHECK（有效票 1 < 法定人数，不产出自动 decision）→ E7 裁定 REWORK → 落盘 → 按 E5 同规则转 REWORK | ✓ |
+   | S5 返工第二轮 | E5 → REWORK_REQUEST(round=2) → 产物(.dev.yml r2 新 commit) → E6 → E2 → … （r1 产物已归档，无遮蔽） | ✓ |
+   | S6 RETRY_REVIEW / CANCEL | CONSENSUS_CHECK —E9→ WAITING_REVIEW（意见作废归档、round 不变）；任意活动态 —E10→ CANCELLED 终态 | ✓ |
+
+   推演中修正一处残留：§6.1 Consensus Deadlock 提示语补齐 RETRY_REVIEW 选项（与 E7/E9 枚举一致）。
+   全部文档示例已通过对应 JSON Schema 机验（PRD 8 JSON + 5 YAML、EXEC 三示例、IMPROVEMENT_SUMMARY context）。
+
+3. 以上材料齐备后由独立 reviewer 复审定级 L1 DOC-ALIGNED / PG-0。

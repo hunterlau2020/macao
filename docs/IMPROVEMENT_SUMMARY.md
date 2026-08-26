@@ -167,30 +167,38 @@ Reviewer 有了全部信息，评审质量提升 ✅
 ### Context 结构详解
 
 ```yaml
+# 唯一权威完整模型见 PRD §5.2；本示例可通过 docs/schemas/review_context.schema.json 校验
 review_context:
-  
+
+  # ⓪ 传输块 - Reviewer 定位仓库与检查点所需
+  dev_checkpoint:
+    path: ".macao/.dev.yml"
+  repository:
+    workspace_path: "~/work/macao-demo"
+    remote_name: "origin"
+    fetch_policy: "fetch_before_diff"
+
   # 1️⃣ 任务背景 - 为什么评审？
   task_info:
     description: "实现数据库连接池重构"
     business_impact: "提升连接复用率 30%"
-    
+
   # 2️⃣ 代码变更 - 改了什么？（传 refs，Reviewer 本地自行取 diff）
   code_changes:
     refs:
       base_commit: "b2c3d4e"
       head_commit: "a1b2c3d"
     diff_command: "git diff b2c3d4e..a1b2c3d"  # 参考命令，非传输内容
+    summary: { files_changed: 2, insertions: 115, deletions: 42 }
     files_list:
-      - "src/db/connection.py (80 added, 30 deleted)"
-      - "tests/test_db.py (35 added, 12 deleted)"
-    
+      - { path: "src/db/connection.py", status: "modified", added_lines: 80, deleted_lines: 30 }
+      - { path: "tests/test_db.py", status: "modified", added_lines: 35, deleted_lines: 12 }
+
   # 3️⃣ 质量指标 - 质量多好？
   quality_snapshot:
-    tests_passed: 24
-    coverage_percent: 87
-    lint_errors: 0
-    security_issues: 0
-    
+    tests: { passed: 24, failed: 0, coverage: 0.87 }
+    static_analysis: { lint_errors: 0, security_issues: 0 }
+
   # 4️⃣ 开发者自评 - 应该关注什么？
   executor_self_assessment:
     review_focus:
@@ -199,12 +207,12 @@ review_context:
       - "Backward compatibility"
     known_limitations:
       - "Connection retry logic 暂未实现"
-    
+
   # 5️⃣ 历史上下文 - 这是第几次评审？
   history:
-    previous_reviews: 0  # 第一次
+    previous_reviews: 0
     previous_feedback: []
-    
+
   # 6️⃣ 参考资源 - 在哪里找更多信息？
   references:
     architecture_doc: "docs/db_design.md"
