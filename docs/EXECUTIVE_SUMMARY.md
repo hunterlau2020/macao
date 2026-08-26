@@ -1,14 +1,16 @@
 # MACAO 产品设计 - 执行摘要与快速参考
 
-> **文档地位**：本文档是 `MACAO_PRD_v2.md`（v2.0 权威基准文档）的执行摘要与快速参考，细节以 PRD 为准。
+> **文档地位**：本文档是 `MACAO_PRD_v2.md`（权威基准文档，现版本 v2.1）的执行摘要与快速参考，细节以 PRD 为准。
 >
-> **文档体系**：`SRSv1.md`（v1.0 历史基线）→ `MACAO_PRD_v2.md`（v2.0 主文档）→ 本文档（执行摘要）+ `IMPROVEMENT_SUMMARY.md`（v1.0 → v2.0 改进对比）
+> **文档体系**：`SRSv1.md`（v1.0 历史基线）→ `MACAO_PRD_v2.md`（主文档）→ 本文档（执行摘要）+ `IMPROVEMENT_SUMMARY.md`（改进对比）。PRD v2.1 新增第十一～十五部分：系统架构、Adapter Contract、配置规范、用户旅程与运行手册、边界声明。
 
 ---
 
 ## 📋 一句话说清楚
 
 > **MACAO** 是一个**规范化的 AI Coding Agent 编排平台**，通过**标准化流程与显式信号**，把多个 CLI 工具（Claude Code, Codex, Kimi 等）组织成一个**自动化的开发-评审-合并团队**。
+
+> **定位声明（重要）**：v2.x 的可交付范围是**固定三 CLI（Claude Code + Codex/Kimi）的本地单机协作 PoC 规格**，不是通用跨 CLI 编排平台——调度、远程、多租户等通用化能力的路线见 PRD 第四部分，边界与非功能约束见 PRD 第十五部分。
 
 ---
 
@@ -196,9 +198,11 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 ```
 问题：当前状态是什么？
 
-第 1 步：查找显式产物（.dev.yml / .review.yml / vote_result.json，按 PRD §3.2 校验）
+第 1 步：按「当前 FSM 状态 + 当前 checkpoint/round」查找该阶段对应的显式产物
+        （作用域规则见 PRD §3.2/§3.4；旧产物已归档，不会遮蔽后续阶段）
 ├─ 任一产物有效
-│  └─ ✅ 按产物映射直接确定状态（唯一能推进业务状态的途径）
+│  └─ ✅ 按产物映射直接确定状态（唯一能推进业务状态的途径之一，
+│        另一类来源是 AEP 命令型转移，统一登记于 PRD §3.3 转移表）
 └─ 全部缺失或无效
    └─ 第 2 步
 
@@ -257,6 +261,8 @@ vote: "NO_APPROVE"  # ← MACAO 读这行投票
 - [ ] ~~Gemini CLI / Cursor Agent 等其他 CLI~~
 
 **承诺**：集中力量把 MVP 做到 95% 完美，而不是 70% 的大而全。
+
+**配套章节（PRD v2.1）**：系统架构与技术栈（第十一部分）、Adapter Contract v1 与能力矩阵（第十二部分）、配置规范 macao.yaml（第十三部分）、用户旅程与运行手册含 Merge Policy（第十四部分）、边界声明与非功能需求含安全/成本/评审质量评测（第十五部分）。
 
 ---
 
@@ -369,6 +375,8 @@ Week 8: 文档与发布
 | Claude Code Hook API 不稳定 | 中 | 高 | Week 1-2 做 PoC 验证 |
 | Reviewer CLI 响应慢 | 中 | 中 | 设置合理超时 + 降级投票 |
 | Git merge 冲突导致卡死 | 低 | 高 | 自动检测 + 提前预警用户 |
+| Reviewer 被 prompt injection 操纵投票 | 低 | 高 | 评审输出 Schema 强校验 + review_focus 白名单 + 人工抽查点 |
+| 第三方 CLI 服务条款限制自动化编排 | 中 | 中 | PoC 前 ToS/法务核实；必要时半自动模式 |
 | .yml 文件损坏 | 低 | 中 | YAML Schema 验证 + 版本控制 |
 | 网络临时中断 | 低 | 中 | 本地队列缓冲 + 自动重试 |
 

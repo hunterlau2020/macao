@@ -2,8 +2,8 @@
 
 > **版本**：v1.0（2026-08-25）
 > **状态**：草案，供各角色评审 PRD/SRS 等设计文档、以及后续 Adapter / Workflow Engine 代码时使用
-> **改编自**：`docs/REVIEW_METHODOLOGY.md`（Washdb 项目财务数据评审方法论 v2.2，第三方项目文档）
-> **上位准则**：`docs/MACAO_PRD_v2.md`（v2.0 权威基准文档）
+> **改编自**：《Washdb 项目财务数据评审方法论 v2.2》（第三方项目文档，未随本仓库提供，仅作方法来源标注）
+> **上位准则**：`docs/MACAO_PRD_v2.md`（权威基准文档）
 
 本方法论保留原方法论的核心闭环，把评审对象从"财务数据 Loader/Pipeline"替换为"MACAO 的设计文档、协议 Schema、Adapter/Workflow 代码与状态机行为"：
 
@@ -72,7 +72,7 @@ docs/reviews/meta_<yyyy-mm>.md                       reviewer 连续漏审复盘
 | **PG-2** | 允许下游模块/团队依赖该规范 | PG-1 + 接口稳定 + 消费方场景测试 |
 | **PG-3** | 生产发布/对外演示 | L4 |
 
-**当前状态**：四份文档尚有 P0 级冲突未闭环（见最近一次 `docs/reviews/*-claude.md` / `*-codex.md`），处于 PG-0 与 PG-1 之间——可以开始 PoC 探索，但不应把四份文档作为可直接实现的完整规格。
+**当前状态**：实时门禁状态不记录在本文件内（见本文件"实时状态必须另存"规则），统一维护于 `docs/reviews/STATUS.md`。
 
 ---
 
@@ -241,4 +241,4 @@ agmsg / 简报中只发送结论、1–2 个 blocker 与详细报告路径；完
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| v1.0 | 2026-08-25 | 首个版本：改编自 `docs/REVIEW_METHODOLOGY.md`（Washdb v2.2），移除金融语义/SEC/DuckDB 专属章节，替换为 MACAO 状态机、投票协议、AEP Schema、文档对齐场景专用的声明矩阵、反例库与自审 checklist |
+| v1.0 | 2026-08-25 | 首个版本：改编自《Washdb 项目财务数据评审方法论 v2.2》（第三方文档，未随仓库提供），移除金融语义/SEC/DuckDB 专属章节，替换为 MACAO 状态机、投票协议、AEP Schema、文档对齐场景专用的声明矩阵、反例库与自审 checklist |

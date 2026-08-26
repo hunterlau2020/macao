@@ -590,7 +590,7 @@ messages
 
 输出：
 
-```json
+```text
 {
  state:
 
@@ -658,7 +658,7 @@ A → Agent
 
 例如：
 
-```json
+```text
 {
  type:
 
@@ -702,7 +702,7 @@ cc-ds4
 
 发送：
 
-```json
+```text
 {
 type:
 
@@ -731,7 +731,7 @@ reviewers:
 
 Reviewer：
 
-```json
+```text
 {
 type:
 
@@ -757,7 +757,7 @@ comments:
 
 Agent：
 
-```json
+```text
 {
 type:
 
