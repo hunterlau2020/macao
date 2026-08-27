@@ -315,15 +315,27 @@ def merge_approve(note: str):
     console.print(f"[bold green]✓ Merge signoff recorded for task '{task_id}'.[/bold green]")
 
 
-@cli.command()
-def usage():
-    """Display token and cost usage report (PRD §15.4)."""
-    console.print("[cyan]MACAO Usage & Cost Meter[/cyan]")
-    console.print("Phase: Development | Claude Code:  Usage tracked per session")
-    console.print("Phase: Review      | Codex:        Usage tracked per session")
-    console.print("Phase: Review      | OpenCode:     Usage tracked per session")
-    console.print("Phase: Review      | Antigravity:  Usage tracked per session")
-    console.print("[bold green]Usage metering active.[/bold green]")
+@cli.command("test-clis")
+@click.option("--cli", "target_cli", default="all", help="Target CLI to test (claude, codex, opencode, agy, all)")
+def test_clis(target_cli: str):
+    """Run controlled real CLI PTY spawn, ANSI strip, and process termination tests."""
+    from macao.adapter.integ_harness import verify_all_clis, verify_single_cli_pty
+    from macao.cli.ui import render_cli_integ_report
+
+    print_banner()
+    console.print(f"[bold cyan]Running Controlled Real CLI Integration Tests (Target: {target_cli})...[/bold cyan]\n")
+
+    if target_cli == "all":
+        results = verify_all_clis()
+    else:
+        results = [verify_single_cli_pty(target_cli)]
+
+    render_cli_integ_report(results)
+    all_pass = all(r.get("status") == "PASS" for r in results)
+    if all_pass:
+        console.print("[bold green]✓ All tested CLI PTY sessions spawned, stripped logs, and terminated cleanly (0 orphan processes).[/bold green]\n")
+    else:
+        console.print("[bold yellow]! Some CLI tests did not pass or were skipped.[/bold yellow]\n")
 
 
 if __name__ == "__main__":

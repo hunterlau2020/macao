@@ -3,11 +3,11 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-08-27（架构装配与配置单一事实源整改全部完成，28/28 测试通过）
-- **当前申请对象**：自 `2026-08-26-review-request-PRD-v2.3.1.md` 后的技术架构设计、核心代码整改实现与全套自动化测试套件
-- **当前目标等级**：**L2 SPEC-CODE-ALIGNED / PG-1 准入**（P0/P1 阻断项已闭环修复，28/28 PASS，待专家终审宣告）
+- **最新更新时间**：2026-08-27（第一阶段受控实机联调完成，33/33 测试全绿通过）
+- **当前申请对象**：自 `2026-08-26-review-request-PRD-v2.3.1.md` 后的技术架构设计、核心代码整改实现、受控实机联调套件与全套自动化测试
+- **当前目标等级**：**L2 SPEC-CODE-ALIGNED / PG-1 准入**（P0/P1 阻断项已闭环修复，33/33 PASS，待专家终审宣告）
 - **历史文档定级**：PRD **v2.3.1**（§3.2 Layer 1c 四值终局分支已单点闭环修复，达到 L1 DOC-ALIGNED / PG-0）
-- **当前代码机验**：`PYTHONPATH=src python3 -m unittest discover tests -v` **28 ran / 28 PASS (100%)**；`doctor` / `preflight` / `git diff --check` **全部 clean PASS**。
+- **当前代码机验**：`PYTHONPATH=src python3 -m unittest discover tests -v` **33 ran / 33 PASS (100%)**；`test-clis` / `doctor` / `preflight` / `git diff --check` **全部 clean PASS**。
 
 ---
 

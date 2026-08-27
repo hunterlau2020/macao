@@ -85,3 +85,34 @@ def render_task_status(task: Dict[str, Any], artifacts: List[Dict[str, Any]]) ->
                 consumed_str
             )
         console.print(art_table)
+
+
+def render_cli_integ_report(results: List[Dict[str, Any]]) -> None:
+    """Renders the Real CLI PTY Integration Test Report."""
+    table = Table(title="MACAO Real CLI PTY Integration Report", border_style="cyan")
+    table.add_column("Agent CLI", style="bold cyan")
+    table.add_column("Version", style="green")
+    table.add_column("PTY Spawn", style="white")
+    table.add_column("ANSI Strip", style="white")
+    table.add_column("Clean Kill", style="white")
+    table.add_column("Duration", style="yellow")
+    table.add_column("Verdict", style="bold")
+
+    for r in results:
+        status = r.get("status", "UNKNOWN")
+        verdict = f"[bold green]PASS[/bold green]" if status == "PASS" else f"[bold red]{status}[/bold red]"
+        spawn_str = "[green]✓ YES[/green]" if r.get("pty_spawn_ok") else "[red]✗ NO[/red]"
+        ansi_str = "[green]✓ YES[/green]" if r.get("ansi_stripped_ok") else "[yellow]—[/yellow]"
+        kill_str = "[green]✓ DEAD (0 Zombie)[/green]" if r.get("clean_kill_ok") else "[red]✗ ALIVE[/red]"
+
+        table.add_row(
+            r.get("cli", ""),
+            r.get("version", "N/A"),
+            spawn_str,
+            ansi_str,
+            kill_str,
+            f"{r.get('duration_sec', 0.0)}s",
+            verdict
+        )
+
+    console.print(table)
