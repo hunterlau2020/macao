@@ -1,7 +1,7 @@
 # MACAO 技术开发路线图 (Technical Development Roadmap)
 
-> **版本**：v1.0  
-> **基准**：基于 [`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威 PRD v2.3）与 [`docs/TECH_INTRUDUCE.md`](TECH_INTRUDUCE.md)  
+> **版本**：v1.1
+> **基准**：基于 [`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威 PRD v2.3.1）、[`docs/TECH_INTRUDUCE.md`](TECH_INTRUDUCE.md) 与 [`docs/PLAN.md`](PLAN.md)
 > **周期**：8 周（4 个两周迭代阶段）实现 MVP 交付，后续平滑演进至 v1.1+。
 
 ---
@@ -11,25 +11,25 @@
 ```text
 2026 Q3 / Q4 ─── 8 周 MVP 研发周期
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 0 (Week 1-2): 协议验证与适配器探针 (PoC & Adapter Spikes)                           │
-│ ├─ Claude Code / Codex / Kimi 真实 CLI 启停与 PTY 交互验证                                │
-│ ├─ .dev.yml / .review.yml 物理产物端到端读写验证                                        │
-│ └─ 达成里程碑 M0: PoC 三大核心假设验证闭环                                               │
+│ Phase 0 (Week 1-2): 协议验证与适配器探针 (PoC & Adapter Spikes) [代码完成/仿真通过]         │
+│ ├─ Claude Code / Codex / Kimi 真实 CLI 启停与 PTY 交互验证（待人工介入测试）                │
+│ ├─ .dev.yml / .review.yml 物理产物端到端读写验证 (PASS)                                 │
+│ └─ 达成里程碑 M0: PoC 三大核心假设验证闭环（仿真测试 100% 通过）                            │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ Phase 1 (Week 3-4): 核心状态机与共识仲裁引擎 (Core FSM & Consensus Engine)              │
-│ ├─ 10 状态有限状态机（E1~E10 转移表）与状态作用域产物读取                                │
-│ ├─ 2/3 多数 + 2 票法定人数仲裁引擎与终局 vote_result.json 生成                          │
-│ ├─ SQLite State Store 数据持久化与崩溃自动 Reconcile 恢复                                │
-│ └─ 达成里程碑 M1: 单机开发-评审-仲裁 Happy Path (S1) 自动化流转                         │
+│ Phase 1 (Week 3-4): 核心状态机与共识仲裁引擎 (Core FSM & Consensus Engine) [代码完成/通过] │
+│ ├─ 10 状态有限状态机（E1~E10 转移表）与状态作用域产物读取 (PASS)                         │
+│ ├─ 2/3 多数 + 2 票法定人数仲裁引擎与终局 vote_result.json 生成 (PASS)                   │
+│ ├─ SQLite State Store 数据持久化与崩溃自动 Reconcile 恢复 (PASS)                         │
+│ └─ 达成里程碑 M1: 单机开发-评审-仲裁 Happy Path (S1) 及 S2/S3/S6 仿真流转全部闭环 (PASS) │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ Phase 2 (Week 5-6): 合并流水线、安全沙箱与容灾治理 (Merge Pipeline & Resilience)        │
+│ Phase 2 (Week 5-6): 合并流水线、安全沙箱与容灾治理 (Merge Pipeline & Resilience) [待开展]  │
 │ ├─ MERGING 中间态流水线（Rebase 检查、Fast-forward 合并、CI Gate 门禁）                  │
 │ ├─ Reviewer 独立 Git Worktree 沙箱创建/生命周期管理与销毁                                │
 │ ├─ Consensus Deadlock 人工接管触发（10 分钟时限）与 E7/E9/E10 落地                       │
 │ ├─ agmsg 消息重试与死信队列（DLQ）治理                                                  │
 │ └─ 达成里程碑 M2: 返工循环 (S2) 与死锁接管 (S3/S6) 异常分支全闭环                        │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ Phase 3 (Week 7-8): CLI 生产就绪、全场景演练与 MVP 验收 (UX, E2E & PG-3 Gate)           │
+│ Phase 3 (Week 7-8): CLI 生产就绪、全场景演练与 MVP 验收 (UX, E2E & PG-3 Gate) [待开展]   │
 │ ├─ Click + Rich + prompt_toolkit 完整交互终端集成                                      │
 │ ├─ 六场景（S1~S6）端到端集成测试演练与 80%+ 自动化测试覆盖                              │
 │ ├─ 成本计量（Usage Meter）与日志脱敏审计就绪                                            │
@@ -45,13 +45,15 @@
 验证跨厂商 CLI 智能体在受控 PTY/Hook 环境下的真实通信能力，证伪或闭环 PoC 三大关键假设。
 
 ### 2. 详细任务拆解
-- **Task 0.1 真实 CLI 适配器联调 (PTY Wrapper Spikes)**：
-  - 针对 `Claude Code`：配置 Hook 与 PTY 非交互运行模式，验证任务注入（`inject_task`）与日志输出捕获。
-  - 针对 `Codex`：实现 PTY 包装器，验证参数传递与输出捕获。
-  - 针对 `Kimi`：验证非交互命令行模式下代码审查提示词的注入与执行。
+- **Task 0.1 真实 CLI 适配器与仿真适配器 (PTY Wrapper & Mock)**：
+  - 针对 `Claude Code`：配置 Hook 与 PTY 非交互运行模式，实现任务注入（`inject_task`）与日志输出捕获；
+  - 针对 `Codex`：实现 PTY 包装器，验证参数传递与输出捕获；
+  - 针对 `Kimi`：实现非交互审查模式与输出捕获；
+  - 实现 `MockAgentAdapter`：支持纯内存/离线状态下的自动化测试与多轮场景仿真。
 - **Task 0.2 物理产物读写契约实测**：
   - 验证 Executor 生成 `.macao/.dev.yml` 并通过 `dev_manifest.schema.json` 强校验；
-  - 验证 Reviewer 解析 `payload.review_context` 并写出 `.macao/.reviews/<id>.review.yml`。
+  - 验证 Reviewer 解析 `payload.review_context` 并写出 `.macao/.reviews/<id>.review.yml`；
+  - 实现 `ReviewContextBuilder` 构建符合 `review_context.schema.json` 的权威上下文。
 - **Task 0.3 PTY 会话稳定性与孤儿进程回收机制**：
   - 验证 `os.killpg` 对深层子进程树的强杀机制，确保 CLI 异常退出无孤儿进程残留。
 - **Task 0.4 Git Worktree 物理隔离实测**：
@@ -59,7 +61,7 @@
 
 ### 3. 里程碑交付物 (Milestone M0)
 - ✅ 产出《PoC 三假设验证技术报告》（CLI 启停可靠性、产物跨模型解析率 100%、Worktree 隔离零污染）；
-- ✅ 3 个 CLI Adapter 均能通过 `macao preflight` 真实探针检测。
+- ✅ 3 个 CLI Adapter 与 Mock Adapter 均能通过自动化测试；真实 CLI 联调待人工介入测试。
 
 ---
 
@@ -71,7 +73,7 @@
 ### 2. 详细任务拆解
 - **Task 1.1 10 状态 FSM 驱动器与作用域读取引擎**：
   - 实现 PRD §3.2 三层识别机制（Layer 1 显式产物优先，Layer 2 行为推断仅日志，Layer 3 诊断置信度）；
-  - 实现状态作用域产物读取（`CODING/REWORK` 只读 `.dev.yml`，`WAITING_REVIEW` 只读本轮 `.review.yml`，`CONSENSUS_CHECK` 只读 `vote_result.json`），彻底杜绝跨轮次旧产物遮蔽。
+  - 实现状态作用域产物读取（`CODING/REWORK` 只读 `.dev.yml`，`WAITING_REVIEW` 只读本轮 `.review.yml`，`CONSENSUS_CHECK` 只读 `vote_result.json`），杜绝跨轮次旧产物遮蔽。
 - **Task 1.2 2/3 多数 + 2 票最低法定人数仲裁引擎**：
   - 实现 `ConsensusEngine.evaluate`：精准处理 2 人/3 人配置下的全同意（APPROVED）、全反对（REWORK_REQUIRED）、1:1 僵局（DEADLOCK）与弃权降级；
   - 实现 `VoteAggregator` 收集 `.review.yml` 并生成符合 `vote_result.schema.json` 的终局落盘记录（含输入文件 SHA-256 与审计链）。
@@ -81,10 +83,13 @@
 - **Task 1.4 产物生命周期与归档管理**：
   - 实现 E2 触发时的 `.dev.yml` 归档到 `.macao/archive/<ref>/r<round>/`；
   - 实现 E4/E5 触发时的 `.review.yml` 与 `vote_result.json` 归档。
+- **Task 1.5 中央事件调度器 (Orchestrator)**：
+  - 实现 `Orchestrator` 串联 FSM、AEP 消息总线、Adapters、Consensus 与 Worktree 沙箱。
 
 ### 3. 里程碑交付物 (Milestone M1)
-- ✅ 单机首次开发双批准 Happy Path (S1) 自动化运行通过；
-- ✅ 状态转移全量记录于 SQLite 审计日志表与 Git 提交中。
+- ✅ 单机首次开发双批准 Happy Path (S1) 自动化流转通过；
+- ✅ S2（多轮返工）、S3（1:1 死锁人工裁决）、S6（任务取消）全场景端到端仿真全绿通过；
+- ✅ 状态转移全量记录于 SQLite 审计日志表与 Git 归档目录中。
 
 ---
 
@@ -110,8 +115,8 @@
   - 实现终端 ANSI 逃逸码清洗与 API Key/敏感 Token 自动掩码过滤。
 
 ### 3. 里程碑交付物 (Milestone M2)
-- ✅ 返工多轮迭代 (S5)、CI Gate 失败回退 (S2)、1:1 平票死锁人工裁决 (S3) 及重试取消 (S6) 全部实测通过；
-- ✅ 异常分支 100% 覆盖，无不可控挂起。
+- 🎯 返工多轮迭代 (S5)、CI Gate 失败回退 (S2)、1:1 平票死锁人工裁决 (S3) 及重试取消 (S6) 全部实测通过；
+- 🎯 异常分支 100% 覆盖，无不可控挂起。
 
 ---
 
@@ -121,7 +126,7 @@
 完成 CLI 人机交互体验打磨、六大典型业务场景端到端实操演练，达成全部 MVP 验收标准并正式发布。
 
 ### 2. 详细任务拆解
-- **Task 3.1 Click + Rich + prompt_toolkit 交互终端全面集成**：
+- **Task 3.1 Click + Rich + prompt_toolkit 完整交互集成**：
   - 实现高颜值彩色状态看板（`macao status` 实时渲染 FSM 状态、Checkpoint、当前轮次与产物清单）；
   - 实现交互式任务创建引导（`macao task create` 交互向导）；
   - 实现 Deadlock 交互式光标选择弹窗（`prompt_toolkit` 上下键选择裁定动作）。
@@ -139,8 +144,8 @@
   - 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 申请并通过 **PG-3 / L4 门禁**。
 
 ### 3. 里程碑交付物 (Milestone M3)
-- ✅ 自动化测试覆盖率 ≥ 80%，六大场景 100% 自动化回归通过；
-- ✅ MACAO v0.1.0-mvp 正式打包发布。
+- 🎯 自动化测试覆盖率 ≥ 80%，六大场景 100% 自动化回归通过；
+- 🎯 MACAO v0.1.0-mvp 正式打包发布。
 
 ---
 
@@ -169,7 +174,7 @@
 ## 📋 质量门禁与研发准则 (Engineering Guidelines)
 
 1. **门禁晋级硬约束**：
-   - 每个 Phase 结束前必须经过 `tests/` 自动化测试套件全绿验证；
+   - 每个 Phase 结束前必须经过 `tests/` 自动化测试套件全绿验证（当前 22 项测试全绿）；
    - 涉及数据结构或接口变更，必须先修改 `docs/schemas/` 中的 Schema 并跑通正反 fixtures 后方可修改业务代码。
 2. **零静默假设原则**：
    - 严禁在无明确显式产物（`.dev.yml` / `.review.yml` / `vote_result.json`）时自动跨状态流转；

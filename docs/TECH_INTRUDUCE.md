@@ -1,7 +1,7 @@
 # MACAO 技术架构与技术实现说明文档 (TECH_INTRODUCE)
 
-> **文档定位**：记录 MACAO (Multi-Agent CLI Agent Orchestrator) 的整体技术架构、已落地的核心技术组件选型、各模块职责分工、CLI 交互界面的实现方案、以及与全屏 TUI 的对比演进。  
-> **权威标准**：[`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威产品方案）与 [`docs/schemas/`](schemas/)（版本化契约）。
+> **文档定位**：记录 MACAO (Multi-Agent CLI Agent Orchestrator) 的整体技术架构、已落地的核心技术组件选型、各模块职责分工、CLI 交互界面的实现方案、以及与全屏 TUI 的对比演进。
+> **权威标准**：[`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威产品方案 v2.3.1）与 [`docs/schemas/`](schemas/)（版本化契约）。
 
 ---
 
@@ -26,6 +26,7 @@ MACAO 是一个面向 AI 软件开发团队的**跨终端 CLI Coding Agent 编�
                                       ▼
   ┌───────────────────────────────────────────────────────────────────────┐
   │  MACAO 核心编排引擎 (Orchestrator Core)                                 │
+  │  ├─ 中央事件调度器 (Orchestrator: 串联 FSM / 适配器 / 消息 / 仲裁)     │
   │  ├─ 10 状态有限状态机 (WorkflowFSM & TransitionTable E1~E10)          │
   │  ├─ 三层状态识别引擎 (StateRecognitionEngine: 作用域读取 + 显式信号)   │
   │  ├─ 共识与决策引擎 (ConsensusEngine: 2/3 多数 + 2 票法定人数仲裁)      │
@@ -48,7 +49,8 @@ MACAO 是一个面向 AI 软件开发团队的**跨终端 CLI Coding Agent 编�
   │  ├─ PTY 会话管理器 (PTYSession: ANSI 清洗 / os.killpg 进程组管理)      │
   │  ├─ ClaudeCodeAdapter (Full 权限模式，任务工作区执行)                   │
   │  ├─ CodexAdapter (Sandboxed 模式，独立 git worktree 隔离评审)         │
-  │  └─ KimiAdapter (Sandboxed 模式，独立 git worktree 隔离评审)          │
+  │  ├─ KimiAdapter (Sandboxed 模式，独立 git worktree 隔离评审)          │
+  │  └─ MockAgentAdapter (仿真适配器，用于安全、可重复的自动化测试)        │
   └───────────────────────────────────┬───────────────────────────────────┘
                                       │
                                       ▼
@@ -77,7 +79,7 @@ MACAO 是一个面向 AI 软件开发团队的**跨终端 CLI Coding Agent 编�
 | **共识与仲裁** | 多数共识算法 | 纯 Python 算法模块 | 严格实现 `2/3 多数 + 2 票最低法定人数（minimum_quorum）` 仲裁算法，精准判定全批准、全返工与 1:1 死锁。 |
 | **合并流水线** | Git 合并控制器 | `subprocess` (Git) | 实现 `MERGING` 阶段的检出、Fast-forward 合并、可选 CI Gate 门禁命令与人工签字校验。 |
 | **CLI 界面** | 终端命令行 | `click` + `rich` + `prompt_toolkit` | 实现现代美观的增强型 CLI 工具集（详见第三节）。 |
-| **测试框架** | 单元与集成测试 | `unittest` (兼容 `pytest`) | 覆盖 Schema 校验、状态机流转、共识判定、状态存储与消息总线的完整测试套件。 |
+| **测试框架** | 单元与集成测试 | `unittest` (兼容 `pytest`) | 覆盖 Schema 校验、状态机流转、共识判定、状态存储与消息总线的完整测试套件（22 项全绿）。 |
 
 ---
 
@@ -171,6 +173,8 @@ macao/
 ├── docs/                       # 设计文档与机器契约
 │   ├── MACAO_PRD_v2.md         # 权威基准 PRD
 │   ├── TECH_INTRODUCE.md       # 本文档（技术架构与实现说明）
+│   ├── PLAN.md                 # 8 周研发计划与任务分解（WBS）
+│   ├── ROADMAP.md              # 中长期技术演进路线图
 │   └── schemas/                # 6 个版本化 Draft-07 JSON Schema 与 fixtures
 ├── src/macao/                  # 核心源码
 │   ├── core/                   # 核心数据结构、类型枚举与 Schema 校验
@@ -189,32 +193,75 @@ macao/
 │   │   ├── pty_session.py      # PTY 进程管理、ANSI 清洗与进程组回收
 │   │   ├── claude.py           # ClaudeCodeAdapter（Full 权限模式）
 │   │   ├── codex.py            # CodexAdapter（Sandboxed + Worktree 模式）
-│   │   └── kimi.py             # KimiAdapter（Sandboxed + Worktree 模式）
+│   │   ├── kimi.py             # KimiAdapter（Sandboxed + Worktree 模式）
+│   │   └── mock.py             # MockAgentAdapter（仿真适配器，用于自动化测试）
 │   ├── consensus/              # 共识与仲裁引擎
 │   │   ├── engine.py           # 2/3 多数 + 2 票最低法定人数算法（PRD §2.3）
 │   │   └── vote.py             # .review.yml 收集与 vote_result.json 生成
 │   ├── workflow/               # 状态识别与 FSM 编排
 │   │   ├── state_engine.py     # 三层识别与作用域产物读取（PRD §3.2）
 │   │   ├── transitions.py      # 统一状态转移表（E1~E10 规则校验）
-│   │   └── fsm.py              # 10 状态 FSM 驱动器与产物归档
+│   │   ├── fsm.py              # 10 状态 FSM 驱动器与产物归档
+│   │   └── orchestrator.py     # Orchestrator 中央事件调度器（串联全生命周期）
 │   ├── merge/                  # 合并控制器
 │   │   └── controller.py       # MERGING 流水线（检出、FF merge、CI gate、push）
 │   ├── utils/                  # 基础设施工具
 │   │   ├── ansi.py             # ANSI 转义序列清洗工具
-│   │   └── git_utils.py        # Git 命令封装与 Worktree 独立沙箱管理
+│   │   ├── git_utils.py        # Git 命令封装与 Worktree 独立沙箱管理
+│   │   └── context_builder.py  # ReviewContext 权威构建器（PRD §5.2）
 │   └── cli/                    # 命令行交互入口
 │       ├── ui.py               # Rich 表格、仪表盘与诊断渲染
 │       └── main.py             # CLI 命令集合（preflight, init, doctor, task...）
-└── tests/                      # 自动化测试套件（12 项测试用例全部通过）
+└── tests/                      # 自动化测试套件（22 项测试用例全部通过）
+    ├── test_schema.py          # Schema 校验与正反向 fixture 测试
+    ├── test_context_builder.py # ReviewContextBuilder 校验测试
+    ├── test_mock_adapter.py    # MockAgentAdapter 能力与产物仿真测试
+    ├── test_consensus.py       # 2/3 多数与决策表单元测试
+    ├── test_state_store.py     # SQLite 状态与恢复测试
+    ├── test_reconcile_crash.py # 崩溃恢复真理源对齐测试
+    ├── test_fsm.py             # 10 态 FSM 状态流转测试
+    ├── test_msg_bus.py         # AEP 消息队列与 ACK 测试
+    └── test_orchestrator_sim.py# S1~S6 端到端多 Agent 编排仿真测试
 ```
 
 ---
 
 ## 五、运行与验证指引
 
-### 1. 运行自动化测试套件
+### 1. 运行自动化测试套件（22 项全绿）
 ```bash
 PYTHONPATH=src python3 -m unittest discover tests -v
+```
+
+**实测运行输出**：
+```text
+test_2_reviewer_consensus (test_consensus.TestConsensusEngine) ... ok
+test_quorum_calculation (test_consensus.TestConsensusEngine) ... ok
+test_full_review_context_builder (test_context_builder.TestReviewContextBuilder) ... ok
+test_minimal_review_context_builder (test_context_builder.TestReviewContextBuilder) ... ok
+test_fsm_transition_lifecycle (test_fsm.TestWorkflowFSM) ... ok
+test_transition_rules (test_fsm.TestWorkflowFSM) ... ok
+test_mock_capabilities (test_mock_adapter.TestMockAdapter) ... ok
+test_mock_simulate_dev_and_review_artifacts (test_mock_adapter.TestMockAdapter) ... ok
+test_aep_envelope_creation (test_msg_bus.TestMessageBus) ... ok
+test_message_bus_pub_sub_ack (test_msg_bus.TestMessageBus) ... ok
+test_scenario_s1_happy_path (test_orchestrator_sim.TestOrchestratorSimulation) ... ok
+test_scenario_s2_rework_loop (test_orchestrator_sim.TestOrchestratorSimulation) ... ok
+test_scenario_s3_deadlock_and_override_approved (test_orchestrator_sim.TestOrchestratorSimulation) ... ok
+test_scenario_s6_deadlock_and_cancel (test_orchestrator_sim.TestOrchestratorSimulation) ... ok
+test_reconcile_unconsumed_dev_manifest_after_crash (test_reconcile_crash.TestCrashReconcile) ... ok
+test_reconcile_vote_result_after_crash (test_reconcile_crash.TestCrashReconcile) ... ok
+test_aep_envelope_schema (test_schema.TestSchemaValidation) ... ok
+test_dev_manifest_schema (test_schema.TestSchemaValidation) ... ok
+test_review_manifest_schema (test_schema.TestSchemaValidation) ... ok
+test_vote_result_schema (test_schema.TestSchemaValidation) ... ok
+test_artifact_registration (test_state_store.TestStateStore) ... ok
+test_state_store_task_lifecycle (test_state_store.TestStateStore) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.648s
+
+OK
 ```
 
 ### 2. 执行 CLI 核心指令
