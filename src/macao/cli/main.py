@@ -15,6 +15,8 @@ from macao.storage.reconcile import StateReconciler
 from macao.workflow.orchestrator import Orchestrator
 from macao.adapter.claude import ClaudeCodeAdapter
 from macao.adapter.codex import CodexAdapter
+from macao.adapter.opencode import OpenCodeAdapter
+from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.kimi import KimiAdapter
 from macao.adapter.mock import MockAgentAdapter
 from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status
@@ -34,11 +36,14 @@ team:
     cli: "claude-code"
     adapter: "claude-hook"
   reviewers:
-    - id: "cc-glm"
+    - id: "codex"
       cli: "codex"
       adapter: "pty-wrapper"
-    - id: "kimi"
-      cli: "kimi"
+    - id: "opencode"
+      cli: "opencode"
+      adapter: "pty-wrapper"
+    - id: "antigravity"
+      cli: "agy"
       adapter: "pty-wrapper"
 
 policy:
@@ -69,7 +74,7 @@ cost:
   monthly_budget_usd: null
 
 security:
-  allowed_clis: ["claude-code", "codex", "kimi"]
+  allowed_clis: ["claude-code", "codex", "opencode", "agy", "antigravity", "kimi"]
   send_terminal_logs_to_reviewers: false
   secrets_masking: true
 
@@ -145,6 +150,8 @@ def preflight():
     adapters = [
         ClaudeCodeAdapter(),
         CodexAdapter(),
+        OpenCodeAdapter(),
+        AntigravityAdapter(),
         KimiAdapter(),
         MockAgentAdapter("mock-agent", "mock-cli")
     ]
@@ -312,9 +319,10 @@ def merge_approve(note: str):
 def usage():
     """Display token and cost usage report (PRD §15.4)."""
     console.print("[cyan]MACAO Usage & Cost Meter[/cyan]")
-    console.print("Phase: Development | Claude Code: Usage tracked per session")
-    console.print("Phase: Review      | Codex:       Usage tracked per session")
-    console.print("Phase: Review      | Kimi:        Usage tracked per session")
+    console.print("Phase: Development | Claude Code:  Usage tracked per session")
+    console.print("Phase: Review      | Codex:        Usage tracked per session")
+    console.print("Phase: Review      | OpenCode:     Usage tracked per session")
+    console.print("Phase: Review      | Antigravity:  Usage tracked per session")
     console.print("[bold green]Usage metering active.[/bold green]")
 
 

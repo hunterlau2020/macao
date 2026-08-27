@@ -12,6 +12,8 @@ from macao.cli.main import DEFAULT_CONFIG_TEMPLATE
 from macao.adapter.mock import MockAgentAdapter
 from macao.adapter.claude import ClaudeCodeAdapter
 from macao.adapter.codex import CodexAdapter
+from macao.adapter.opencode import OpenCodeAdapter
+from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.kimi import KimiAdapter
 from macao.workflow.orchestrator import Orchestrator
 
@@ -42,7 +44,7 @@ class TestConfigAndComposition(unittest.TestCase):
             self.assertTrue(mgr.require_human_signoff)
             self.assertTrue(mgr.auto_rebase_disabled)
             self.assertIsNone(mgr.ci_gate_command)
-            self.assertEqual(len(mgr.reviewers_config), 2)
+            self.assertEqual(len(mgr.reviewers_config), 3)
 
     def test_orchestrator_config_injection(self):
         """Verify Orchestrator receives injected configuration rather than hardcoded fallbacks."""
@@ -64,6 +66,8 @@ class TestConfigAndComposition(unittest.TestCase):
             MockAgentAdapter("mock-1", "mock-cli"),
             ClaudeCodeAdapter(),
             CodexAdapter(),
+            OpenCodeAdapter(),
+            AntigravityAdapter(),
             KimiAdapter()
         ]
         for adp in adapters:
