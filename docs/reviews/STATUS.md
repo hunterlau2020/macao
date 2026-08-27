@@ -1,42 +1,52 @@
-# MACAO 文档门禁状态（Live Status）
+# MACAO 文档与代码门禁状态（Live Status）
 
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- 更新时间：2026-08-26（v2.3.1 修订完成，待第四轮独立复审）
-- 最近复审对象：commit `cc77a94`（PRD v2.3），**五份独立评审结论一致：未达 L1**（2 P0 + 3 P1 + 9 P2 + 11 P3 + 1 分歧项），均已按下方清单在 **PRD v2.3.1** 修订闭环。
-- 当前等级：**PENDING_REVIEW**（v2.3.1 待独立复审定级；目标 L1 DOC-ALIGNED / PG-0）
-- 当前版本：PRD **v2.3.1**；schemas 6 个（$id 统一 v2.3）+ fixtures 11 个（正 7 反 4）；本轮机验 **18/18 PASS**。
+- **最新更新时间**：2026-08-27（Phase 0 / Phase 1 核心代码开发完成，全套 22 项自动化测试全绿，提交代码级独立评审申请）
+- **当前申请对象**：自 `2026-08-26-review-request-PRD-v2.3.1.md` 后的技术架构设计、核心代码实现与测试套件（commit `d137a05` .. `435eeea`）
+- **当前目标等级**：**L2 SPEC-CODE-ALIGNED / PG-1 预准入**（待专家评审定级）
+- **历史文档定级**：PRD **v2.3.1**（6 Schema + 11 fixtures，机验 18/18 PASS）
+- **当前代码机验**：`PYTHONPATH=src python3 -m unittest discover tests -v` **22/22 PASS**（含 S1~S6 场景仿真、崩溃 Reconcile、FSM、仲裁算法与 Context 构建）
+
+---
+
+## 评审申请记录全量对账表 (Review Registry)
+
+| 申请日期 | 申请文件 | 待审对象 / 范围 | 目标等级 | 评审状态 / 结论 |
+|---|---|---|---|---|
+| 2026-08-25 | `2026-08-25-review-result-ec60f70-*.md` | commit `ec60f70` (PRD v2.1) | L1 | 未通过（3 份评审：claude/codex/gemini） |
+| 2026-08-26 | `2026-08-26-review-request-PRD-v2.3.md` | commit `cc77a94` (PRD v2.3) | L1 | 未通过（5 份评审：claude/codex/gemini/kimi/opencode） |
+| 2026-08-26 | `2026-08-26-review-request-PRD-v2.3.1.md` | commit `403ddc7` (PRD v2.3.1) | L1 / PG-0 | 修订闭环完成（机验 18/18 PASS） |
+| 2026-08-27 | `2026-08-27-review-request-Phase0-Phase1-Code.md` | commit `d137a05` .. `435eeea`<br>(Phase 0/1 架构/代码/22 项测试) | L2 / PG-1 | **PENDING_REVIEW**（待专家独立复审） |
+
+---
 
 ## v2.3.1 修订闭环清单（对应 cc77a94 五份评审全部交付项）
 
-| 编号 | 级别 | 修订内容 | 落点 |
-|------|------|---------|------|
-| P0-1 | P0 | "评审对象=合并对象"硬绑定：rebase 豁免**废除**（MVP 任何新 hash 含 clean rebase/cherry-pick/amend → E4b）；E4a 增加 push 对象==checkpoint_ref 硬校验；受控 range-diff 门禁（三重条件）规划 v1.1；`rebase_before_merge` MVP 禁用 | PRD §14.5 步 1、§13 配置、§3.3 E4a |
-| P0-2 | P0 | worktree **强制化**：§16.3 三行改强制 + 拓扑图改"主工作区+每 Reviewer 独立 worktree"；Type B/§5.2/三个 fixture 的 workspace_path 改注入后 worktree 路径；§12.2 增加 `supports_worktree=true` 准入硬条件（preflight/Conformance） | PRD §16.3/§12.2/§2.4/§5.2、schemas fixtures |
-| P1-1 | P1 | 弃权口径裁决（方案②）：`.review.yml` vote 枚举**移出 ABSTAIN**；§2.2 注明"弃权仅由 Orchestrator 超时降级写入 vote_result"；新增反例 fixture | review_manifest.schema.json、PRD §2.2、fixtures/invalid/review_abstain_invalid.yml |
-| P1-2 | P1 | artifacts 改 `artifact_id` 自增主键 + `(task_id,kind,ref,round,reviewer_id)` 唯一约束；§11.5 增加"追加归档语义"（新插行非 upsert、历史行只读） | PRD §11.4 DDL、§11.5 |
-| P1-3 | P1 | 治理对账：STATUS 与 reviews/ 全量对账完成（8ab9be7 五份 + cc77a94 五份全部登记）；对账规则固化于本文档引言 | STATUS.md（本文件） |
-| 分歧项 | — | Deadlock 入口边按**并集方案 B** 落文：E3 伴随动作内联确定性票数判定（Deadlock→发 Type G + HOLD + 不写 vote_result）；§3.4 补场景三（1:1 平票 + REWORK/RETRY/CANCEL/弃权变体） | PRD §3.3 E3 行、§3.4 |
-| P2-1 | P2 | E7 CANCEL→E10、E10 触发补 override 路径；Type G options/§6.1 trigger 3/§2.3 枚举补 CANCEL | PRD §3.3/§2.4/§6.1/§2.3 |
-| P2-2 | P2 | Layer 1c 补 max_rework_rounds 守卫（达上限不落盘自动 decision，发 Type G → E7） | PRD §3.2 伪代码 |
-| P2-3 | P2 | §11.4 DDL 注释改"10 态之一（含 CANCELLED）" | PRD §11.4 |
-| P2-4 | P2 | IMPROVEMENT_SUMMARY L160 `quality_metrics`→`quality_snapshot` | IMPROVEMENT_SUMMARY |
-| P2-5 | P2 | PRD §10 成功标志 ✅ → `[ ]` 验收标准（未达成前不得勾选） | PRD §10 |
-| P2-6 | P2 | `macao merge approve` 补入 §14.2 命令表（注明与 override resolve 区别） | PRD §14.2 |
-| P2-7 | P2 | §16.3"其余全自动"→"…`merge approve` 签字放行，其余自动" | PRD §16.3 |
-| P2-8 | P2 | AEP per-type payload Schema：维持登记为 PoC 前置工作（schemas/README 如实表述覆盖面） | schemas/README |
-| P2-9 | P2 | §3.4 场景三落文；新增终局 fixture（decision=APPROVED+resolution=human_override）；vote_result decision 枚举扩 RETRY_REVIEW/CANCELLED + 两值强制 human_override 的 if/then | PRD §3.4、vote_result.schema.json、fixtures/valid/vote_result_human_override.json |
-| P3-1~P3-11 | P3 | 版本指针统一 v2.3.1（EXEC/README/IMPROVEMENT 标题）；§1.1 REVIEWING→WAITING_REVIEW、REJECTED→REWORK_REQUIRED；§2.4"4 个"→"7 个"；§16.1 E1~E10；Schema $id 全部 v2.3；§12.4/README 清单补 review_context；§14.1"14.6"勘误；README"L0~L4"→"L1~L4"；EXEC"100% 可靠"加设计目标标注；IMPROVEMENT 叙事数字豁免登记 | 各文档及 Schema |
+| 编号 | 级别 | 修订内容 | 落点 | 代码实现落点 (commit 435eeea) |
+|------|------|---------|------|------------------------------|
+| P0-1 | P0 | "评审对象=合并对象"硬绑定：rebase 豁免**废除**；E4a push 对象==checkpoint_ref 硬校验 | PRD §14.5 步 1、§13、§3.3 E4a | `src/macao/merge/controller.py` |
+| P0-2 | P0 | worktree **强制化**：独立 worktree 路径注入；准入硬条件 | PRD §16.3/§12.2/§2.4/§5.2 | `src/macao/utils/git_utils.py` |
+| P1-1 | P1 | 弃权口径裁决：`.review.yml` 移出 ABSTAIN；弃权仅 Orchestrator 终局落盘 | review_manifest.schema.json、PRD §2.2 | `src/macao/consensus/engine.py`<br>`src/macao/workflow/orchestrator.py` |
+| P1-2 | P1 | artifacts 改 `artifact_id` 自增主键 + 五元组唯一约束 + 追加归档语义 | PRD §11.4 DDL、§11.5 | `src/macao/storage/db.py`<br>`src/macao/storage/store.py` |
+| P1-3 | P1 | 治理对账：STATUS 与 reviews/ 全量对账完成 | STATUS.md（本文件） | 已在每次申请前完成全量对账 |
+| 分歧项 | — | Deadlock 入口边按并集方案 B 落文（E3 伴随动作内联判定 + 场景三） | PRD §3.3 E3 行、§3.4 | `src/macao/workflow/orchestrator.py`<br>`tests/test_orchestrator_sim.py` |
+| P2-9 | P2 | vote_result 终局四值决策模型 + human_override 强制校验 | PRD §3.4、vote_result.schema.json | `src/macao/consensus/vote.py` |
 
-**机验结果（本轮修订后独立重跑）**：6 Schema 自检 PASS；fixtures 7 正例 VALID + 4 反例被正确拒绝（含新增 human_override 正例、ABSTAIN 反例）；PRD §2.4 Type B/§5.2 完整模型/§2.3 vote_result 示例、EXEC 三示例、IMPROVEMENT context 示例全部 PASS；合计 **18/18**。
+---
 
-## 评审专家分工评估结论（2026-08-26，供下一轮排班参考）
+## 评审专家分工与排班（依据 docs/EXPERT_QUALITY.md）
 
-依据对全部 16 份评审报告的四轮质量评估：保留核心三人组 **claude（语义/产品轴）+ codex（安全/审计轴）+ opencode（治理/法证轴）**；**gemini 退出定级轮**（两次定级误判史 + 与 codex 角度重合）；kimi 与 opencode 角度同构，同轮不同时出场。详见评审申请时的排班说明。
+- **本轮代码评审阵容**：
+  - **claude**（语义/业务流转轴）：主审 10 态 FSM、Orchestrator 多 Agent 事件循环与多轮返工；
+  - **codex**（安全/沙箱/存储轴）：主审 Git Worktree 物理隔离、PTY 进程组强杀回收、SQLite WAL 存储与 Reconcile 恢复；
+  - **opencode**（治理/Schema 契约轴）：主审 Schema 强校验落点、AEP 消息规范与评审治理闭环。
 
-## 下一步
+---
 
-1. 对 **PRD v2.3.1** 提出新一轮独立复审申请（随本次修订一并提交），重点核查：P0-1 rebase 硬校验闭环、P0-2 worktree 三处一致性、Deadlock 入口边（E3 伴随动作）+ §3.4 场景三的转移唯一性、ABSTAIN 口径与 artifacts 追加语义、vote_result 四值终局模型的 Schema 强制性；
-2. 若无新 P0/P1，仅余 P2/P3 → 宣告 **L1 DOC-ALIGNED / PG-0**，正式启动 Week 1-2 PoC；
-3. P2-8（AEP per-type Schema）与 E2E 测试矩阵随 PoC 前置工作产出并回填。
+## 下一步行动
+
+1. 组织专家对 `docs/reviews/2026-08-27-review-request-Phase0-Phase1-Code.md` 开展独立代码复审；
+2. 若复审通过，宣告达成 **L2 SPEC-CODE-ALIGNED / PG-1 准入**；
+3. 申请用户介入监督，开展真实三方 CLI（`claude-code`, `codex`, `kimi`）环境探针与实机连通性测试。
