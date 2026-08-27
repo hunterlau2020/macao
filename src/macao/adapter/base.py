@@ -2,22 +2,8 @@
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Callable
-from dataclasses import dataclass, field
 
-from macao.core.types import ExecutionMode, PreflightCheckResult
-
-
-@dataclass
-class CapabilityManifest:
-    """Capability Manifest of an Agent CLI Adapter (PRD §12.2)."""
-    can_execute: bool
-    can_review: bool
-    supports_hook: bool
-    supports_noninteractive: bool
-    supports_worktree: bool
-    execution_mode: ExecutionMode
-    supported_os: List[str] = field(default_factory=lambda: ["linux", "darwin"])
-    cli_version_range: str = ">=1.0.0"
+from macao.core.types import ExecutionMode, PreflightCheckResult, CapabilityManifest
 
 
 class AgentAdapter(ABC):
@@ -57,14 +43,4 @@ class AgentAdapter(ABC):
     @abstractmethod
     def ack(self, message_id: str) -> bool:
         """Idempotent ACK for received message."""
-        pass
-
-    @abstractmethod
-    def cancel(self, reason: str = "user_cancel") -> bool:
-        """Cancels current task and terminates process tree."""
-        pass
-
-    @abstractmethod
-    def get_logs(self, tail_lines: int = 300) -> str:
-        """Returns cleaned ANSI-stripped terminal logs."""
         pass

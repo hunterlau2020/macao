@@ -3,7 +3,7 @@
 import os
 import unittest
 import tempfile
-from macao.core.types import MessageType
+from macao.core.types import AEPType
 from macao.msg.envelope import AEPEnvelope
 from macao.msg.bus import MessageBus
 
@@ -12,7 +12,7 @@ class TestMessageBus(unittest.TestCase):
 
     def test_aep_envelope_creation(self):
         env = AEPEnvelope.create(
-            msg_type=MessageType.DEVELOPMENT_STARTED,
+            msg_type=AEPType.DEVELOPMENT_STARTED,
             from_agent="macao",
             to_agent="cc-ds4",
             payload={"task_description": "Build FSM"}
@@ -21,35 +21,35 @@ class TestMessageBus(unittest.TestCase):
         self.assertEqual(env["type"], "DEVELOPMENT_STARTED")
         self.assertTrue(env["message_id"].startswith("msg-"))
 
-    def test_message_bus_pub_sub_ack(self):
+    def test_message_bus_fanout_independent_ack(self):
+        """Verify that multiple recipients receiving a broadcast have independent ACK states."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "state.db")
             bus = MessageBus(db_path)
 
-            # Publish
+            # Publish to 2 reviewers
             published = bus.publish(
-                msg_type=MessageType.REVIEW_REQUEST,
+                msg_type=AEPType.REVIEW_REQUEST,
                 from_agent="macao",
                 to_agent=["cc-glm", "kimi"],
                 payload={"checkpoint_ref": "c1"}
             )
             msg_id = published["message_id"]
 
-            # Receive for cc-glm
-            pending = bus.receive_pending("cc-glm")
-            self.assertEqual(len(pending), 1)
-            self.assertEqual(pending[0]["message_id"], msg_id)
+            # Both should see pending
+            self.assertEqual(len(bus.receive_pending("cc-glm")), 1)
+            self.assertEqual(len(bus.receive_pending("kimi")), 1)
 
-            # Receive for kimi
-            pending_kimi = bus.receive_pending("kimi")
-            self.assertEqual(len(pending_kimi), 1)
+            # cc-glm ACKs its delivery
+            self.assertTrue(bus.ack(msg_id, recipient="cc-glm"))
 
-            # ACK
-            ack_success = bus.ack(msg_id)
-            self.assertTrue(ack_success)
-
-            # Receive again should be empty
+            # cc-glm has 0 pending, but kimi MUST STILL HAVE 1 pending!
             self.assertEqual(len(bus.receive_pending("cc-glm")), 0)
+            self.assertEqual(len(bus.receive_pending("kimi")), 1)
+
+            # kimi ACKs
+            self.assertTrue(bus.ack(msg_id, recipient="kimi"))
+            self.assertEqual(len(bus.receive_pending("kimi")), 0)
 
 
 if __name__ == "__main__":

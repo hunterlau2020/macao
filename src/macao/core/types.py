@@ -1,7 +1,4 @@
-"""Core Data Types and Enumerations for MACAO.
-
-Based on docs/MACAO_PRD_v2.md (v2.3.1) and docs/schemas/*.
-"""
+"""Core Data Types, Enums, and Unified DTOs for MACAO (PRD v2.3.1)."""
 
 from enum import Enum
 from typing import Dict, Any, Optional, List
@@ -31,6 +28,10 @@ class AEPType(str, Enum):
     MERGE_COMPLETED = "MERGE_COMPLETED"
     STATE_CHANGED = "STATE_CHANGED"
     HUMAN_OVERRIDE_REQUEST = "HUMAN_OVERRIDE_REQUEST"
+
+
+# Alias for backward compatibility
+MessageType = AEPType
 
 
 class Vote(str, Enum):
@@ -78,6 +79,45 @@ class OverrideChoice(str, Enum):
 
 
 @dataclass
+class CapabilityManifest:
+    """Capability Manifest of an Agent CLI Adapter (PRD §12.1 / §12.2)."""
+    can_execute: bool = False
+    can_review: bool = False
+    supports_hook: bool = False
+    supports_noninteractive: bool = False
+    supports_worktree: bool = True
+    execution_mode: ExecutionMode = ExecutionMode.SANDBOXED
+    supported_os: List[str] = field(default_factory=lambda: ["linux", "darwin"])
+    cli_version_range: str = ">=1.0.0"
+    allowed_flags: List[str] = field(default_factory=list)
+
+
+@dataclass
+class PreflightCheckResult:
+    """Result of agent preflight capability probe (PRD §12.2)."""
+    agent_id: str = ""
+    cli_name: str = ""
+    installed: bool = False
+    version: Optional[str] = None
+    execution_mode: Optional[ExecutionMode] = None
+    auth_valid: bool = True
+    in_matrix: bool = True
+    details: Optional[str] = None
+    remediation: Optional[str] = None
+    error: Optional[str] = None
+
+    def __post_init__(self):
+        if not self.cli_name and self.agent_id:
+            self.cli_name = self.agent_id
+        if not self.agent_id and self.cli_name:
+            self.agent_id = self.cli_name
+
+    @property
+    def is_ok(self) -> bool:
+        return self.installed and self.auth_valid and (self.error is None)
+
+
+@dataclass
 class AEPEnvelope:
     """AEP/1.0 Standard Message Envelope (PRD §2.4)."""
     message_id: str
@@ -91,20 +131,6 @@ class AEPEnvelope:
 
 
 @dataclass
-class CapabilityManifest:
-    """Adapter Capability Manifest (PRD §12.1)."""
-    agent_id: str
-    cli_name: str
-    version: str
-    execution_mode: ExecutionMode
-    can_execute: bool
-    can_review: bool
-    supports_worktree: bool
-    supports_hook: bool
-    allowed_flags: List[str] = field(default_factory=list)
-
-
-@dataclass
 class StateChange:
     """FSM State Transition Result."""
     task_id: str
@@ -114,20 +140,3 @@ class StateChange:
     review_round: int
     checkpoint_ref: Optional[str] = None
     note: Optional[str] = None
-
-# Alias for backward compatibility
-MessageType = AEPType
-
-
-@dataclass
-class PreflightCheckResult:
-    """Result of agent preflight capability probe."""
-    agent_id: str
-    installed: bool
-    version: Optional[str] = None
-    execution_mode: Optional[ExecutionMode] = None
-    error: Optional[str] = None
-
-    @property
-    def is_ok(self) -> bool:
-        return self.installed and self.error is None

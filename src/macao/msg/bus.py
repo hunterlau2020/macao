@@ -1,4 +1,4 @@
-"""Local Message Queue (agmsg SQLite Implementation with DLQ, PRD §11.6)."""
+"""Local Message Queue (agmsg SQLite Implementation with DLQ and Fan-Out Deliveries, PRD §11.6)."""
 
 import json
 import datetime
@@ -26,14 +26,16 @@ class MessageBus:
         payload: Dict[str, Any],
         deadline: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Publishes an AEP message to the queue."""
+        """Publishes an AEP message to the queue and creates per-recipient deliveries."""
         envelope = AEPEnvelope.create(msg_type, from_agent, to_agent, payload)
         now = self._now()
 
-        to_str = json.dumps(to_agent) if isinstance(to_agent, list) else json.dumps([to_agent])
+        recipients = to_agent if isinstance(to_agent, list) else [to_agent]
+        to_str = json.dumps(recipients)
         payload_str = json.dumps(payload, ensure_ascii=False)
 
         with self.db.connection() as conn:
+            # 1. Insert master message
             conn.execute(
                 """
                 INSERT INTO message_queue (message_id, type, from_agent, to_agent, payload, status, retry_count, deadline, created_at)
@@ -42,45 +44,80 @@ class MessageBus:
                 (envelope["message_id"], envelope["type"], from_agent, to_str, payload_str, deadline, now)
             )
 
+            # 2. Insert per-recipient deliveries for independent ACK and fan-out
+            for r in recipients:
+                conn.execute(
+                    """
+                    INSERT INTO message_deliveries (message_id, recipient, status, retry_count, created_at)
+                    VALUES (?, ?, 'PENDING', 0, ?)
+                    """,
+                    (envelope["message_id"], r, now)
+                )
+
         return envelope
 
     def receive_pending(self, recipient: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Retrieves pending messages targeted at a specific recipient."""
         messages = []
         with self.db.connection() as conn:
+            # Check direct recipient delivery or wildcard deliveries
             rows = conn.execute(
-                "SELECT * FROM message_queue WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT ?",
-                (limit * 3,)
+                """
+                SELECT q.message_id, q.type, q.from_agent, q.to_agent, q.payload, q.created_at, d.status as delivery_status
+                FROM message_deliveries d
+                JOIN message_queue q ON d.message_id = q.message_id
+                WHERE (d.recipient = ? OR d.recipient IN ('all', '*')) AND d.status = 'PENDING'
+                ORDER BY d.created_at ASC LIMIT ?
+                """,
+                (recipient, limit)
             ).fetchall()
 
             for row in rows:
                 recipients = json.loads(row["to_agent"])
-                if recipient in recipients or "all" in recipients or "*" in recipients:
-                    payload = json.loads(row["payload"])
-                    msg = {
-                        "protocol": "AEP/1.0",
-                        "message_id": row["message_id"],
-                        "timestamp": row["created_at"],
-                        "type": row["type"],
-                        "from": row["from_agent"],
-                        "to": recipients if len(recipients) > 1 else recipients[0],
-                        "payload": payload,
-                    }
-                    messages.append(msg)
-                    if len(messages) >= limit:
-                        break
+                payload = json.loads(row["payload"])
+                msg = {
+                    "protocol": "AEP/1.0",
+                    "message_id": row["message_id"],
+                    "timestamp": row["created_at"],
+                    "type": row["type"],
+                    "from": row["from_agent"],
+                    "to": recipients if len(recipients) > 1 else recipients[0],
+                    "payload": payload,
+                }
+                messages.append(msg)
 
         return messages
 
-    def ack(self, message_id: str) -> bool:
-        """Acknowledge message processing completion."""
+    def ack(self, message_id: str, recipient: Optional[str] = None) -> bool:
+        """Acknowledge message processing completion for a specific recipient or all."""
         now = self._now()
         with self.db.connection() as conn:
-            cursor = conn.execute(
-                "UPDATE message_queue SET status = 'ACKED', acked_at = ? WHERE message_id = ?",
-                (now, message_id)
-            )
-            return cursor.rowcount > 0
+            if recipient:
+                cursor = conn.execute(
+                    "UPDATE message_deliveries SET status = 'ACKED', acked_at = ? WHERE message_id = ? AND recipient = ?",
+                    (now, message_id, recipient)
+                )
+                acked_deliveries = cursor.rowcount > 0
+            else:
+                cursor = conn.execute(
+                    "UPDATE message_deliveries SET status = 'ACKED', acked_at = ? WHERE message_id = ?",
+                    (now, message_id)
+                )
+                acked_deliveries = cursor.rowcount > 0
+
+            # Check if all deliveries are ACKed
+            pending = conn.execute(
+                "SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND status = 'PENDING'",
+                (message_id,)
+            ).fetchone()[0]
+
+            if pending == 0:
+                conn.execute(
+                    "UPDATE message_queue SET status = 'ACKED', acked_at = ? WHERE message_id = ?",
+                    (now, message_id)
+                )
+
+            return acked_deliveries
 
     def fail_to_dlq(self, message_id: str, reason: str) -> None:
         """Moves an unprocessable/expired message to Dead Letter Queue."""
@@ -98,3 +135,4 @@ class MessageBus:
                     (message_id, row["type"], row["payload"], row["retry_count"] + 1, reason, now)
                 )
                 conn.execute("UPDATE message_queue SET status = 'DEAD' WHERE message_id = ?", (message_id,))
+                conn.execute("UPDATE message_deliveries SET status = 'DEAD' WHERE message_id = ?", (message_id,))

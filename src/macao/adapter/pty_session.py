@@ -108,6 +108,14 @@ class PTYSession:
         except OSError:
             return False
 
+    def write_input(self, text: str) -> bool:
+        """Alias for send_input."""
+        return self.send_input(text)
+
+    def get_clean_logs(self) -> List[str]:
+        """Returns captured output logs."""
+        return list(self.logs)
+
     def terminate(self, timeout_sec: float = 3.0) -> None:
         """Terminates process group cleanly using SIGTERM then SIGKILL (PRD §12.6)."""
         self._stop_event.set()
