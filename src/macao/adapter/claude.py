@@ -43,6 +43,7 @@ class ClaudeCodeAdapter(AgentAdapter):
                 cli_name=self.cli_name,
                 installed=True,
                 version=version,
+                execution_mode=self.capabilities().execution_mode,
                 auth_valid=True,
                 in_matrix=True,
                 details=f"Found {claude_path} ({version})"
@@ -51,6 +52,7 @@ class ClaudeCodeAdapter(AgentAdapter):
             return PreflightCheckResult(
                 cli_name=self.cli_name,
                 installed=True,
+                execution_mode=self.capabilities().execution_mode,
                 details=f"Version probe error: {e}",
                 remediation="Ensure claude-code is properly authenticated."
             )

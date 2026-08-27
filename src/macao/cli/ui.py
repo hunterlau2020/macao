@@ -39,11 +39,13 @@ def render_preflight_report(results: List[Any]) -> None:
             mode = getattr(r, "execution_mode", "sandboxed")
             st = "[green]OK[/green]" if getattr(r, "is_ok", True) else "[red]FAIL[/red]"
 
+        mode_val = getattr(mode, "value", str(mode)) if mode is not None else "N/A"
+
         table.add_row(
             str(name),
             "[green]YES[/green]" if inst else "[red]NO[/red]",
             str(ver),
-            str(mode),
+            str(mode_val),
             st
         )
 

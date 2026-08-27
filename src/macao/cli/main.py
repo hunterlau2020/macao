@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from macao.core.config import ConfigManager
-from macao.core.types import AgentState, OverrideChoice, PreflightCheckResult
+from macao.core.types import AgentState, OverrideChoice, PreflightCheckResult, ExecutionMode
 from macao.storage.store import StateStore
 from macao.storage.reconcile import StateReconciler
 from macao.workflow.orchestrator import Orchestrator
@@ -115,6 +115,7 @@ def preflight():
         cli_name="Environment: Git",
         installed=bool(git_path),
         version="system",
+        execution_mode=ExecutionMode.FULL,
         auth_valid=True,
         in_matrix=True,
         details=f"Path: {git_path}" if git_path else "Git not found in PATH"
@@ -134,6 +135,7 @@ def preflight():
         cli_name="Environment: SQLite (WAL)",
         installed=sqlite_ok,
         version=sqlite3.sqlite_version,
+        execution_mode=ExecutionMode.FULL,
         auth_valid=True,
         in_matrix=True,
         details="WAL journal mode supported"

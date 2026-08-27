@@ -48,6 +48,7 @@ class MockAgentAdapter(AgentAdapter):
             cli_name=self.cli_name,
             installed=True,
             version="1.0.0-mock",
+            execution_mode=self.capabilities().execution_mode,
             auth_valid=True,
             in_matrix=True,
             details=f"Mock {self.cli_name} adapter ready"

@@ -39,6 +39,7 @@ class KimiAdapter(AgentAdapter):
             cli_name=self.cli_name,
             installed=True,
             version="1.0.0",
+            execution_mode=self.capabilities().execution_mode,
             auth_valid=True,
             in_matrix=True,
             details=f"Found {exe}"
