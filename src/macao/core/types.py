@@ -1,13 +1,15 @@
-"""MACAO Core Types, Enumerations, and Data Models."""
+"""Core Data Types and Enumerations for MACAO.
+
+Based on docs/MACAO_PRD_v2.md (v2.3.1) and docs/schemas/*.
+"""
 
 from enum import Enum
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
-import datetime
 
 
 class AgentState(str, Enum):
-    """10 FSM Business States (PRD §3.3)."""
+    """10 FSM States defined in PRD §3.1."""
     IDLE = "IDLE"
     CODING = "CODING"
     READY_FOR_REVIEW = "READY_FOR_REVIEW"
@@ -20,8 +22,8 @@ class AgentState(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
-class MessageType(str, Enum):
-    """7 AEP Message Types (PRD §2.4)."""
+class AEPType(str, Enum):
+    """7 AEP/1.0 Message Types defined in PRD §2.4."""
     DEVELOPMENT_STARTED = "DEVELOPMENT_STARTED"
     REVIEW_REQUEST = "REVIEW_REQUEST"
     REVIEW_RESPONSE = "REVIEW_RESPONSE"
@@ -32,25 +34,26 @@ class MessageType(str, Enum):
 
 
 class Vote(str, Enum):
-    """Reviewer Vote Enumeration (PRD §2.2)."""
+    """Reviewer Vote Enumeration (PRD §2.2, review_manifest.schema.json)."""
     YES_APPROVE = "YES_APPROVE"
     NO_APPROVE = "NO_APPROVE"
-    ABSTAIN = "ABSTAIN"
+    ABSTAIN = "ABSTAIN"  # Used internally by Orchestrator upon timeout degradation
 
 
 class OpinionStatus(str, Enum):
-    """Reviewer Opinion Status (PRD §2.2)."""
+    """Reviewer Opinion Status (PRD §2.2, review_manifest.schema.json)."""
     APPROVED = "APPROVED"
     CHANGES_REQUESTED = "CHANGES_REQUESTED"
     REJECTED = "REJECTED"
-    ABSTAIN = "ABSTAIN"
 
 
 class Decision(str, Enum):
-    """Consensus Decision Result (PRD §2.3)."""
+    """Consensus Decision Result (PRD §2.3, vote_result.schema.json)."""
     APPROVED = "APPROVED"
     REWORK_REQUIRED = "REWORK_REQUIRED"
-    DEADLOCK = "DEADLOCK"
+    RETRY_REVIEW = "RETRY_REVIEW"
+    CANCELLED = "CANCELLED"
+    DEADLOCK = "DEADLOCK"  # Intermediate consensus state, never written to vote_result.json
 
 
 class Resolution(str, Enum):
@@ -75,23 +78,56 @@ class OverrideChoice(str, Enum):
 
 
 @dataclass
+class AEPEnvelope:
+    """AEP/1.0 Standard Message Envelope (PRD §2.4)."""
+    message_id: str
+    timestamp: int
+    type: AEPType
+    from_agent: str
+    to_agent: str
+    payload: Dict[str, Any]
+    trace_id: Optional[str] = None
+    reply_to: Optional[str] = None
+
+
+@dataclass
+class CapabilityManifest:
+    """Adapter Capability Manifest (PRD §12.1)."""
+    agent_id: str
+    cli_name: str
+    version: str
+    execution_mode: ExecutionMode
+    can_execute: bool
+    can_review: bool
+    supports_worktree: bool
+    supports_hook: bool
+    allowed_flags: List[str] = field(default_factory=list)
+
+
+@dataclass
 class StateChange:
-    """Represents a state machine transition event."""
+    """FSM State Transition Result."""
+    task_id: str
     from_state: AgentState
     to_state: AgentState
-    source: str
-    transition_id: Optional[str] = None
-    detail: Optional[Dict[str, Any]] = None
-    timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
+    trigger: str
+    review_round: int
+    checkpoint_ref: Optional[str] = None
+    note: Optional[str] = None
+
+# Alias for backward compatibility
+MessageType = AEPType
 
 
 @dataclass
 class PreflightCheckResult:
-    """Result of CLI preflight probe."""
-    cli_name: str
+    """Result of agent preflight capability probe."""
+    agent_id: str
     installed: bool
     version: Optional[str] = None
-    auth_valid: bool = False
-    in_matrix: bool = False
-    details: str = ""
-    remediation: Optional[str] = None
+    execution_mode: Optional[ExecutionMode] = None
+    error: Optional[str] = None
+
+    @property
+    def is_ok(self) -> bool:
+        return self.installed and self.error is None

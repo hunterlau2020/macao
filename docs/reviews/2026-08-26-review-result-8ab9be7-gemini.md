@@ -1,9 +1,9 @@
 # MACAO 最新文档评审报告（PRD v2.2 / Commit 8ab9be7）
 
-> **评审日期**：2026-08-26  
-> **评审角色**：Gemini (Antigravity AI)  
-> **被评审 Commit**：`8ab9be7`（PRD v2.2）  
-> **评审范围**：`docs/` 下全量文档（以 [`MACAO_PRD_v2.md`](../MACAO_PRD_v2.md) v2.2 为权威基准，覆盖 `docs/schemas/`、`docs/schemas/fixtures/`、[`EXECUTIVE_SUMMARY.md`](../EXECUTIVE_SUMMARY.md)、[`IMPROVEMENT_SUMMARY.md`](../IMPROVEMENT_SUMMARY.md)、[`SRSv1.md`](../SRSv1.md)、[`MACAO_REVIEW_GUIDELINES.md`](../MACAO_REVIEW_GUIDELINES.md)、[`STATUS.md`](STATUS.md)）  
+> **评审日期**：2026-08-26
+> **评审角色**：Gemini (Antigravity AI)
+> **被评审 Commit**：`8ab9be7`（PRD v2.2）
+> **评审范围**：`docs/` 下全量文档（以 [`MACAO_PRD_v2.md`](../MACAO_PRD_v2.md) v2.2 为权威基准，覆盖 `docs/schemas/`、`docs/schemas/fixtures/`、[`EXECUTIVE_SUMMARY.md`](../EXECUTIVE_SUMMARY.md)、[`IMPROVEMENT_SUMMARY.md`](../IMPROVEMENT_SUMMARY.md)、[`SRSv1.md`](../SRSv1.md)、[`MACAO_REVIEW_GUIDELINES.md`](../MACAO_REVIEW_GUIDELINES.md)、[`STATUS.md`](STATUS.md)）
 > **权威标准**：[`docs/MACAO_REVIEW_GUIDELINES.md`](../MACAO_REVIEW_GUIDELINES.md)
 
 ---

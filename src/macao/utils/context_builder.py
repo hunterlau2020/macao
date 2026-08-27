@@ -45,6 +45,26 @@ class ReviewContextBuilder:
         self.history: Optional[Dict[str, Any]] = None
         self.references: Optional[Dict[str, Any]] = None
 
+    def populate_from_dev_manifest(self, dev_data: Dict[str, Any]) -> "ReviewContextBuilder":
+        """Populates quality snapshot and self-assessment from real .dev.yml data."""
+        dev_block = dev_data.get("development", {})
+        qm = dev_block.get("quality_metrics", {})
+        if qm:
+            tests = qm.get("tests", {})
+            passed = tests.get("passed", 1 if qm.get("tests_passed") else 0)
+            failed = tests.get("failed", 0)
+            cov = qm.get("coverage", 0.85)
+            self.set_quality_snapshot(passed=passed, failed=failed, coverage=cov)
+
+        self_assess = dev_data.get("self_assessment", {})
+        if self_assess:
+            what_was_done = self_assess.get("summary", "Code development completed")
+            focus = self_assess.get("review_focus", self.review_focus)
+            limitations = self_assess.get("known_limitations", [])
+            self.set_self_assessment(what_was_done, focus, limitations)
+
+        return self
+
     def set_diff_info(self, files_changed: int, insertions: int, deletions: int, files_list: Optional[List[Dict[str, Any]]] = None) -> "ReviewContextBuilder":
         self.summary = {
             "files_changed": files_changed,

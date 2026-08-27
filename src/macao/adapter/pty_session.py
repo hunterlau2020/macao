@@ -1,7 +1,7 @@
 """PTY Session Management, Process Group Signals, and Output Capture (PRD §12.6)."""
 
 import os
-import pty
+import sys
 import select
 import signal
 import subprocess
@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from macao.utils.ansi import strip_ansi
+
+try:
+    import pty
+except ImportError:
+    pty = None
 
 
 class PTYSession:
@@ -28,9 +33,14 @@ class PTYSession:
 
     def start(self) -> bool:
         """Starts process in a new session with PTY and sets process group."""
+        if pty is None:
+            raise RuntimeError("PTY is not supported on this platform (requires POSIX / pty module).")
+
         try:
             master, slave = pty.openpty()
             self.master_fd = master
+
+            preexec = os.setsid if hasattr(os, "setsid") else None
 
             self.process = subprocess.Popen(
                 self.cmd,
@@ -39,70 +49,103 @@ class PTYSession:
                 stderr=slave,
                 cwd=self.cwd,
                 env=self.env,
-                preexec_fn=os.setsid,  # Create new process group
+                preexec_fn=preexec,  # Create new process group
                 close_fds=True,
             )
             os.close(slave)
 
             self._stop_event.clear()
-            self._reader_thread = threading.Thread(target=self._read_output, daemon=True)
+            self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
             self._reader_thread.start()
             return True
         except Exception as e:
-            self.logs.append(f"[PTY Error] Failed to start {self.cmd}: {e}")
+            self.logs.append(f"[PTY Error] Failed to spawn process: {e}")
+            if self.master_fd is not None:
+                try:
+                    os.close(self.master_fd)
+                except OSError:
+                    pass
+                self.master_fd = None
             return False
 
-    def _read_output(self) -> None:
-        """Background thread reading master PTY fd."""
-        while not self._stop_event.is_set() and self.master_fd is not None:
+    def _read_loop(self) -> None:
+        """Reads raw bytes from PTY master and strips ANSI codes."""
+        if self.master_fd is None:
+            return
+
+        buffer = ""
+        while not self._stop_event.is_set():
             try:
-                r, _, _ = select.select([self.master_fd], [], [], 0.2)
-                if r:
+                r, _, _ = select.select([self.master_fd], [], [], 0.1)
+                if self.master_fd in r:
                     data = os.read(self.master_fd, 4096)
                     if not data:
                         break
                     text = data.decode("utf-8", errors="replace")
-                    cleaned = strip_ansi(text)
-                    self.logs.append(cleaned)
+                    buffer += text
+                    lines = buffer.split("\n")
+                    buffer = lines[-1]
+                    for line in lines[:-1]:
+                        clean_line = strip_ansi(line.strip("\r"))
+                        if clean_line:
+                            self.logs.append(clean_line)
             except (OSError, ValueError):
                 break
 
-    def write_input(self, text: str) -> bool:
-        """Sends input string to CLI stdin."""
-        if self.master_fd is not None:
-            try:
-                if not text.endswith("\n"):
-                    text += "\n"
-                os.write(self.master_fd, text.encode("utf-8"))
-                return True
-            except OSError:
-                return False
-        return False
+        if buffer:
+            clean_line = strip_ansi(buffer.strip("\r"))
+            if clean_line:
+                self.logs.append(clean_line)
 
-    def get_clean_logs(self, tail_lines: int = 300) -> str:
-        """Returns the tail lines of clean text logs."""
-        full_text = "".join(self.logs)
-        lines = full_text.splitlines()
-        return "\n".join(lines[-tail_lines:])
+    def send_input(self, text: str) -> bool:
+        """Injects text input into PTY slave stdin."""
+        if self.master_fd is None or self.process is None:
+            return False
+        try:
+            payload = (text + "\n").encode("utf-8")
+            os.write(self.master_fd, payload)
+            return True
+        except OSError:
+            return False
 
-    def terminate(self, grace_period_sec: float = 2.0) -> bool:
-        """Gracefully terminates process group (SIGTERM -> SIGKILL)."""
+    def terminate(self, timeout_sec: float = 3.0) -> None:
+        """Terminates process group cleanly using SIGTERM then SIGKILL (PRD §12.6)."""
         self._stop_event.set()
-        if self.process is not None and self.process.poll() is None:
-            try:
-                pgid = os.getpgid(self.process.pid)
-                os.killpg(pgid, signal.SIGTERM)
-                
-                # Wait grace period
-                start_t = time.time()
-                while time.time() - start_t < grace_period_sec:
-                    if self.process.poll() is not None:
-                        break
-                    time.sleep(0.1)
+        if self.process is None:
+            return
 
-                if self.process.poll() is None:
+        pid = self.process.pid
+        pgid = None
+        if hasattr(os, "getpgid"):
+            try:
+                pgid = os.getpgid(pid)
+            except OSError:
+                pass
+
+        # Try SIGTERM to process group
+        try:
+            if pgid and hasattr(os, "killpg") and hasattr(signal, "SIGTERM"):
+                os.killpg(pgid, signal.SIGTERM)
+            else:
+                self.process.terminate()
+        except OSError:
+            pass
+
+        # Wait for exit
+        start_t = time.time()
+        while time.time() - start_t < timeout_sec:
+            if self.process.poll() is not None:
+                break
+            time.sleep(0.1)
+
+        # Force SIGKILL to process group if still alive
+        if self.process.poll() is None:
+            try:
+                if pgid and hasattr(os, "killpg") and hasattr(signal, "SIGKILL"):
                     os.killpg(pgid, signal.SIGKILL)
-            except Exception:
+                else:
+                    self.process.kill()
+            except OSError:
                 pass
 
         if self.master_fd is not None:
@@ -111,5 +154,3 @@ class PTYSession:
             except OSError:
                 pass
             self.master_fd = None
-
-        return True

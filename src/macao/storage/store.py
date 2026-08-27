@@ -22,7 +22,7 @@ class StateStore:
     # --- Task Operations ---
     def create_task(self, task_id: str, title: str, source_branch: str, target_branch: str) -> Dict[str, Any]:
         now = self._now()
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO tasks (task_id, title, source_branch, target_branch, state, checkpoint_ref, review_round, created_at, updated_at)
@@ -30,16 +30,15 @@ class StateStore:
                 """,
                 (task_id, title, source_branch, target_branch, AgentState.IDLE.value, now, now)
             )
-            conn.commit()
         return self.get_task(task_id)
 
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
             return dict(row) if row else None
 
     def get_active_task(self) -> Optional[Dict[str, Any]]:
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             row = conn.execute(
                 "SELECT * FROM tasks WHERE state NOT IN (?, ?) ORDER BY created_at DESC LIMIT 1",
                 (AgentState.DONE.value, AgentState.CANCELLED.value)
@@ -48,7 +47,7 @@ class StateStore:
 
     def update_task_state(self, task_id: str, state: AgentState, checkpoint_ref: Optional[str] = None, review_round: Optional[int] = None) -> None:
         now = self._now()
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             updates = ["state = ?", "updated_at = ?"]
             params = [state.value, now]
             if checkpoint_ref is not None:
@@ -60,7 +59,6 @@ class StateStore:
             params.append(task_id)
 
             conn.execute(f"UPDATE tasks SET {', '.join(updates)} WHERE task_id = ?", params)
-            conn.commit()
 
     # --- Artifact Operations ---
     def register_artifact(
@@ -73,24 +71,44 @@ class StateStore:
         reviewer_id: str = "",
         sha256: Optional[str] = None
     ) -> None:
+        """Registers an artifact preserving history (non-destructive append or update)."""
         now = self._now()
         if sha256 is None and Path(path).exists():
             with open(path, "rb") as f:
                 sha256 = hashlib.sha256(f.read()).hexdigest()
 
-        with self.db.get_connection() as conn:
-            conn.execute(
+        with self.db.connection() as conn:
+            # Check if artifact already registered for this 5-tuple
+            existing = conn.execute(
                 """
-                INSERT OR REPLACE INTO artifacts
-                (task_id, kind, checkpoint_ref, review_round, reviewer_id, path, sha256, consumed, archived_path, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)
+                SELECT artifact_id, consumed, archived_path FROM artifacts
+                WHERE task_id = ? AND kind = ? AND checkpoint_ref = ? AND review_round = ? AND reviewer_id = ?
                 """,
-                (task_id, kind, checkpoint_ref, review_round, reviewer_id, path, sha256 or "", now)
-            )
-            conn.commit()
+                (task_id, kind, checkpoint_ref, review_round, reviewer_id)
+            ).fetchone()
+
+            if existing:
+                # Update path & sha256 without resetting consumed / archived_path
+                conn.execute(
+                    """
+                    UPDATE artifacts
+                    SET path = ?, sha256 = ?, created_at = ?
+                    WHERE artifact_id = ?
+                    """,
+                    (path, sha256 or "", now, existing["artifact_id"])
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO artifacts
+                    (task_id, kind, checkpoint_ref, review_round, reviewer_id, path, sha256, consumed, archived_path, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)
+                    """,
+                    (task_id, kind, checkpoint_ref, review_round, reviewer_id, path, sha256 or "", now)
+                )
 
     def mark_artifact_consumed(self, task_id: str, kind: str, checkpoint_ref: str, review_round: int, archived_path: str, reviewer_id: str = "") -> None:
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             conn.execute(
                 """
                 UPDATE artifacts
@@ -99,32 +117,30 @@ class StateStore:
                 """,
                 (archived_path, task_id, kind, checkpoint_ref, review_round, reviewer_id)
             )
-            conn.commit()
 
     def list_artifacts(self, task_id: str, review_round: Optional[int] = None) -> List[Dict[str, Any]]:
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             if review_round is not None:
                 rows = conn.execute(
-                    "SELECT * FROM artifacts WHERE task_id = ? AND review_round = ?",
+                    "SELECT * FROM artifacts WHERE task_id = ? AND review_round = ? ORDER BY artifact_id ASC",
                     (task_id, review_round)
                 ).fetchall()
             else:
-                rows = conn.execute("SELECT * FROM artifacts WHERE task_id = ?", (task_id,)).fetchall()
+                rows = conn.execute("SELECT * FROM artifacts WHERE task_id = ? ORDER BY artifact_id ASC", (task_id,)).fetchall()
             return [dict(r) for r in rows]
 
     # --- Audit Log Operations ---
     def log_audit_event(self, task_id: Optional[str], event_type: str, detail: Dict[str, Any]) -> int:
         now = self._now()
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             cursor = conn.execute(
                 "INSERT INTO audit_events (ts, task_id, type, detail) VALUES (?, ?, ?, ?)",
                 (now, task_id, event_type, json.dumps(detail, ensure_ascii=False))
             )
-            conn.commit()
             return cursor.lastrowid
 
     def list_audit_events(self, task_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             if task_id:
                 rows = conn.execute(
                     "SELECT * FROM audit_events WHERE task_id = ? ORDER BY sequence_id DESC LIMIT ?",
@@ -145,10 +161,9 @@ class StateStore:
             "choice": choice,
             "note": note
         })
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             cursor = conn.execute(
                 "INSERT INTO overrides (sequence_id, task_id, trigger, choice, note, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (seq_id, task_id, trigger, choice, note or "", now)
             )
-            conn.commit()
             return cursor.lastrowid

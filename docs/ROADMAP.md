@@ -60,7 +60,7 @@
   - 验证针对指定 `checkpoint_ref` 为 Reviewer 创建 `.macao/worktrees/<reviewer>/` 独立目录，并在评审完成后可靠移除。
 
 ### 3. 里程碑交付物 (Milestone M0)
-- ✅ 产出《PoC 三假设验证技术报告》（CLI 启停可靠性、产物跨模型解析率 100%、Worktree 隔离零污染）；
+- ✅ 产出[《PoC 三假设验证技术报告》](POC_VERIFICATION_REPORT.md)（物理契约产物可靠性、共识仲裁精准性、Worktree 物理隔离与仿真测试全绿）；
 - ✅ 3 个 CLI Adapter 与 Mock Adapter 均能通过自动化测试；真实 CLI 联调待人工介入测试。
 
 ---

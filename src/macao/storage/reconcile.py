@@ -1,6 +1,8 @@
 """Crash Recovery and State Reconciliation Protocol (PRD §11.5)."""
 
 import os
+import json
+import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -33,16 +35,26 @@ class StateReconciler:
         vote_result_file = self.root / ".macao" / "vote_result.json"
         if vote_result_file.exists():
             try:
-                import json
-                with open(vote_result_file, "r") as f:
+                with open(vote_result_file, "r", encoding="utf-8") as f:
                     vdata = json.load(f)
                 is_valid, _ = validate_vote_result(vdata)
                 if is_valid and vdata.get("review_round") == rnd:
                     decision = vdata.get("decision")
-                    target_st = AgentState.MERGING if decision == "APPROVED" else AgentState.REWORK
-                    if current_st != target_st:
-                        self.store.update_task_state(task_id, target_st, ref, rnd)
-                        reconcile_notes.append(f"Reconciled state to {target_st} from physical vote_result.json")
+                    v_ref = vdata.get("checkpoint_ref", ref)
+
+                    target_st = None
+                    if decision == "APPROVED":
+                        target_st = AgentState.MERGING
+                    elif decision == "REWORK_REQUIRED":
+                        target_st = AgentState.REWORK
+                    elif decision == "RETRY_REVIEW":
+                        target_st = AgentState.WAITING_REVIEW
+                    elif decision == "CANCELLED":
+                        target_st = AgentState.CANCELLED
+
+                    if target_st and current_st != target_st:
+                        self.store.update_task_state(task_id, target_st, v_ref, rnd)
+                        reconcile_notes.append(f"Reconciled state to {target_st.value} from physical vote_result.json ({decision})")
             except Exception as e:
                 reconcile_notes.append(f"Failed to parse vote_result.json during reconcile: {e}")
 
@@ -50,8 +62,7 @@ class StateReconciler:
         dev_file = self.root / ".macao" / ".dev.yml"
         if dev_file.exists() and current_st in (AgentState.CODING, AgentState.REWORK):
             try:
-                import yaml
-                with open(dev_file, "r") as f:
+                with open(dev_file, "r", encoding="utf-8") as f:
                     ddata = yaml.safe_load(f)
                 is_valid, _ = validate_dev_manifest(ddata)
                 if is_valid and ddata.get("review_round", 1) == rnd and ddata.get("status") == "ready_for_review":

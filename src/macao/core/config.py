@@ -3,7 +3,7 @@
 import os
 import math
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 import yaml
 
 from macao.core.schema import validate_config
@@ -20,12 +20,13 @@ class ConfigManager:
         self.data: Dict[str, Any] = {}
         self.is_loaded: bool = False
 
-    def load(self) -> Dict[str, Any]:
+    def load(self, config_path: Optional[str] = None) -> Dict[str, Any]:
         """Load and validate configuration against macao_config.schema.json."""
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
+        target_path = Path(config_path) if config_path else self.config_path
+        if not target_path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {target_path}")
 
-        with open(self.config_path, "r", encoding="utf-8") as f:
+        with open(target_path, "r", encoding="utf-8") as f:
             content = yaml.safe_load(f)
 
         if not isinstance(content, dict):
@@ -38,7 +39,7 @@ class ConfigManager:
         # Compute derived defaults (e.g. min_effective_votes = ceil(2 * N / 3))
         reviewers = content.get("team", {}).get("reviewers", [])
         num_reviewers = len(reviewers)
-        derived_quorum = math.ceil(2 * num_reviewers / 3)
+        derived_quorum = math.ceil(2 * num_reviewers / 3) if num_reviewers > 0 else 2
 
         policy = content.setdefault("policy", {})
         configured_quorum = policy.get("min_effective_votes")
@@ -49,6 +50,11 @@ class ConfigManager:
         self.is_loaded = True
         return self.data
 
+    @classmethod
+    def load_config(cls, config_path: str = DEFAULT_CONFIG_FILENAME) -> Dict[str, Any]:
+        mgr = cls(config_path)
+        return mgr.load()
+
     @property
     def project_name(self) -> str:
         return self.data.get("project", {}).get("name", "macao-project")
@@ -58,32 +64,25 @@ class ConfigManager:
         return self.data.get("project", {}).get("repository", {}).get("workspace_path", ".")
 
     @property
-    def default_branch(self) -> str:
-        return self.data.get("project", {}).get("repository", {}).get("default_branch", "main")
-
-    @property
-    def remote_name(self) -> str:
-        return self.data.get("project", {}).get("repository", {}).get("remote_name", "origin")
-
-    @property
-    def executor_id(self) -> str:
-        return self.data.get("team", {}).get("executor", {}).get("id", "cc-ds4")
-
-    @property
-    def reviewer_ids(self) -> list:
-        return [r.get("id") for r in self.data.get("team", {}).get("reviewers", [])]
+    def auto_rebase_disabled(self) -> bool:
+        """PRD §13/§14.5: MVP mandates rebase_before_merge is disabled."""
+        policy = self.data.get("policy", {})
+        rebase_policy = policy.get("rebase_policy", {})
+        return not rebase_policy.get("allow_clean_rebase", False)
 
     @property
     def min_effective_votes(self) -> int:
-        return self.data.get("policy", {}).get("min_effective_votes", 2)
+        policy = self.data.get("policy", {})
+        return policy.get("min_effective_votes", 2)
 
     @property
     def max_rework_rounds(self) -> int:
-        return self.data.get("policy", {}).get("max_rework_rounds", 3)
+        policy = self.data.get("policy", {})
+        rework_policy = policy.get("rework_policy", {})
+        return rework_policy.get("max_rework_rounds", 3)
 
-
-# Global helper instance
-def load_config(path: Optional[str] = None) -> ConfigManager:
-    cfg = ConfigManager(path)
-    cfg.load()
-    return cfg
+    @property
+    def require_human_signoff(self) -> bool:
+        policy = self.data.get("policy", {})
+        merge_policy = policy.get("merge_policy", {})
+        return merge_policy.get("require_human_signoff", True)

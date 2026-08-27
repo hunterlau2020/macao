@@ -4,6 +4,7 @@ import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
+from contextlib import contextmanager
 
 
 DEFAULT_DB_PATH = ".macao/state.db"
@@ -22,9 +23,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at      TEXT NOT NULL
 );
 
--- Artifacts Table (Composite Key for multi-task / multi-round resilience)
+-- Artifacts Table (PRD §11.4: AUTOINCREMENT artifact_id + 5-tuple UNIQUE + REFERENCES tasks)
 CREATE TABLE IF NOT EXISTS artifacts (
-    task_id         TEXT NOT NULL,
+    artifact_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id         TEXT NOT NULL REFERENCES tasks(task_id),
     kind            TEXT NOT NULL,              -- dev_manifest | review_manifest | vote_result
     checkpoint_ref  TEXT NOT NULL,
     review_round    INTEGER NOT NULL,
@@ -34,7 +36,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
     consumed        INTEGER NOT NULL DEFAULT 0,
     archived_path   TEXT,
     created_at      TEXT NOT NULL,
-    PRIMARY KEY (task_id, kind, checkpoint_ref, review_round, reviewer_id)
+    UNIQUE(task_id, kind, checkpoint_ref, review_round, reviewer_id)
 );
 
 -- Audit Events Table (Immutable Event Log)
@@ -91,7 +93,24 @@ class DatabaseManager:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
+    @contextmanager
+    def connection(self):
+        """Context manager that guarantees transaction commit/rollback and connection close."""
+        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def get_connection(self) -> sqlite3.Connection:
+        """Returns a connection for manual handling."""
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
@@ -99,9 +118,8 @@ class DatabaseManager:
         return conn
 
     def _init_db(self) -> None:
-        with self.get_connection() as conn:
+        with self.connection() as conn:
             conn.executescript(SCHEMA_DDL)
-            conn.commit()
 
 
 _db_manager: Optional[DatabaseManager] = None

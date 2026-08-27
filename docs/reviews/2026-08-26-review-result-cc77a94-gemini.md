@@ -1,10 +1,10 @@
 # MACAO PRD v2.3 独立复审报告（响应 review-request-PRD-v2.3）
 
-> **评审日期**：2026-08-26  
-> **评审角色**：Gemini (Antigravity AI)  
-> **被评审 Commit**：`cc77a94`（PRD v2.3）  
-> **复审申请来源**：[`docs/reviews/2026-08-26-review-request-PRD-v2.3.md`](2026-08-26-review-request-PRD-v2.3.md)  
-> **评审范围**：[`docs/MACAO_PRD_v2.md`](../MACAO_PRD_v2.md)（v2.3 权威基准）、`docs/schemas/*`（含新增 `review_context.schema.json` 与 9 个 fixtures）、[`docs/EXECUTIVE_SUMMARY.md`](../EXECUTIVE_SUMMARY.md)、[`docs/IMPROVEMENT_SUMMARY.md`](../IMPROVEMENT_SUMMARY.md)、[`docs/README.md`](../README.md)、[`docs/reviews/STATUS.md`](STATUS.md)  
+> **评审日期**：2026-08-26
+> **评审角色**：Gemini (Antigravity AI)
+> **被评审 Commit**：`cc77a94`（PRD v2.3）
+> **复审申请来源**：[`docs/reviews/2026-08-26-review-request-PRD-v2.3.md`](2026-08-26-review-request-PRD-v2.3.md)
+> **评审范围**：[`docs/MACAO_PRD_v2.md`](../MACAO_PRD_v2.md)（v2.3 权威基准）、`docs/schemas/*`（含新增 `review_context.schema.json` 与 9 个 fixtures）、[`docs/EXECUTIVE_SUMMARY.md`](../EXECUTIVE_SUMMARY.md)、[`docs/IMPROVEMENT_SUMMARY.md`](../IMPROVEMENT_SUMMARY.md)、[`docs/README.md`](../README.md)、[`docs/reviews/STATUS.md`](STATUS.md)
 > **定级申请目标**：L1 DOC-ALIGNED / PG-0
 
 ---

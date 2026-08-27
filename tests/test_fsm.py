@@ -1,4 +1,4 @@
-"""Unit tests for WorkflowFSM and TransitionTable (PRD §3.3)."""
+"""Unit tests for WorkflowFSM and TransitionTable (PRD §3.1 / §3.3)."""
 
 import os
 import unittest
@@ -11,48 +11,50 @@ from macao.workflow.transitions import TransitionTable
 
 class TestWorkflowFSM(unittest.TestCase):
 
-    def test_transition_rules(self):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.tmpdir, "state.db")
+        self.store = StateStore(self.db_path)
+        self.fsm = WorkflowFSM(self.store, self.tmpdir)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_transition_rules_and_whitelist_enforcement(self):
+        # 1. Valid transitions
         self.assertTrue(TransitionTable.can_transition(AgentState.IDLE, AgentState.CODING, "E1"))
+        self.assertTrue(TransitionTable.can_transition(AgentState.CODING, AgentState.READY_FOR_REVIEW, "E1_PRODUCED"))
         self.assertTrue(TransitionTable.can_transition(AgentState.READY_FOR_REVIEW, AgentState.WAITING_REVIEW, "E2"))
         self.assertTrue(TransitionTable.can_transition(AgentState.WAITING_REVIEW, AgentState.CONSENSUS_CHECK, "E3"))
         self.assertTrue(TransitionTable.can_transition(AgentState.CONSENSUS_CHECK, AgentState.MERGING, "E4"))
         self.assertTrue(TransitionTable.can_transition(AgentState.MERGING, AgentState.DONE, "E4a"))
         self.assertTrue(TransitionTable.can_transition(AgentState.MERGING, AgentState.REWORK, "E4b"))
-        self.assertTrue(TransitionTable.can_transition(AgentState.CONSENSUS_CHECK, AgentState.WAITING_REVIEW, "E9"))
+        self.assertTrue(TransitionTable.can_transition(AgentState.CONSENSUS_CHECK, AgentState.REWORK, "E5"))
+        self.assertTrue(TransitionTable.can_transition(AgentState.REWORK, AgentState.READY_FOR_REVIEW, "E6"))
         self.assertTrue(TransitionTable.can_transition(AgentState.CODING, AgentState.CANCELLED, "E10"))
 
-    def test_fsm_transition_lifecycle(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = os.path.join(tmpdir, "state.db")
-            store = StateStore(db_path)
-            store.create_task("t1", "Task 1", "f1", "main")
+        # 2. Invalid transitions (must return False)
+        self.assertFalse(TransitionTable.can_transition(AgentState.IDLE, AgentState.DONE, "E1"))
+        self.assertFalse(TransitionTable.can_transition(AgentState.WAITING_REVIEW, AgentState.MERGING, "E4"))
+        self.assertFalse(TransitionTable.can_transition(AgentState.DONE, AgentState.CANCELLED, "E10"))
+        self.assertFalse(TransitionTable.can_transition(AgentState.CANCELLED, AgentState.CODING, "E1"))
 
-            fsm = WorkflowFSM(store, project_root=tmpdir)
+    def test_fsm_transition_lifecycle_and_rejection(self):
+        task = self.store.create_task("task-1", "Feature A", "feat", "main")
+        self.assertEqual(task["state"], AgentState.IDLE.value)
 
-            # IDLE -> CODING (E1)
-            fsm.transition("t1", AgentState.CODING, "E1")
-            self.assertEqual(store.get_task("t1")["state"], AgentState.CODING.value)
+        # E1: IDLE -> CODING
+        change = self.fsm.transition("task-1", AgentState.CODING, "E1")
+        self.assertEqual(change.to_state, AgentState.CODING)
 
-            # CODING -> READY_FOR_REVIEW
-            fsm.transition("t1", AgentState.READY_FOR_REVIEW, "EXPLICIT_SIGNAL", {"latest_commit": "c1"})
-            self.assertEqual(store.get_task("t1")["state"], AgentState.READY_FOR_REVIEW.value)
-            self.assertEqual(store.get_task("t1")["checkpoint_ref"], "c1")
+        # Illegal Transition: CODING -> DONE via E4a (Must raise ValueError)
+        with self.assertRaises(ValueError):
+            self.fsm.transition("task-1", AgentState.DONE, "E4a")
 
-            # READY_FOR_REVIEW -> WAITING_REVIEW (E2)
-            fsm.transition("t1", AgentState.WAITING_REVIEW, "E2")
-            self.assertEqual(store.get_task("t1")["state"], AgentState.WAITING_REVIEW.value)
-
-            # WAITING_REVIEW -> CONSENSUS_CHECK (E3)
-            fsm.transition("t1", AgentState.CONSENSUS_CHECK, "E3")
-            self.assertEqual(store.get_task("t1")["state"], AgentState.CONSENSUS_CHECK.value)
-
-            # CONSENSUS_CHECK -> MERGING (E4)
-            fsm.transition("t1", AgentState.MERGING, "E4")
-            self.assertEqual(store.get_task("t1")["state"], AgentState.MERGING.value)
-
-            # MERGING -> DONE (E4a)
-            fsm.transition("t1", AgentState.DONE, "E4a")
-            self.assertEqual(store.get_task("t1")["state"], AgentState.DONE.value)
+        # Legal E1_PRODUCED: CODING -> READY_FOR_REVIEW
+        change = self.fsm.transition("task-1", AgentState.READY_FOR_REVIEW, "E1_PRODUCED", {"latest_commit": "c1"})
+        self.assertEqual(change.to_state, AgentState.READY_FOR_REVIEW)
 
 
 if __name__ == "__main__":

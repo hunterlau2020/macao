@@ -5,7 +5,7 @@ import datetime
 from typing import Optional, List, Dict, Any, Union
 
 from macao.storage.db import get_db, DatabaseManager
-from macao.core.types import MessageType
+from macao.core.types import AEPType
 from macao.msg.envelope import AEPEnvelope
 
 
@@ -20,7 +20,7 @@ class MessageBus:
 
     def publish(
         self,
-        msg_type: Union[MessageType, str],
+        msg_type: Union[AEPType, str],
         from_agent: str,
         to_agent: Union[str, List[str]],
         payload: Dict[str, Any],
@@ -33,7 +33,7 @@ class MessageBus:
         to_str = json.dumps(to_agent) if isinstance(to_agent, list) else json.dumps([to_agent])
         payload_str = json.dumps(payload, ensure_ascii=False)
 
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO message_queue (message_id, type, from_agent, to_agent, payload, status, retry_count, deadline, created_at)
@@ -41,14 +41,13 @@ class MessageBus:
                 """,
                 (envelope["message_id"], envelope["type"], from_agent, to_str, payload_str, deadline, now)
             )
-            conn.commit()
 
         return envelope
 
     def receive_pending(self, recipient: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Retrieves pending messages targeted at a specific recipient."""
         messages = []
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             rows = conn.execute(
                 "SELECT * FROM message_queue WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT ?",
                 (limit * 3,)
@@ -76,26 +75,26 @@ class MessageBus:
     def ack(self, message_id: str) -> bool:
         """Acknowledge message processing completion."""
         now = self._now()
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             cursor = conn.execute(
                 "UPDATE message_queue SET status = 'ACKED', acked_at = ? WHERE message_id = ?",
                 (now, message_id)
             )
-            conn.commit()
             return cursor.rowcount > 0
 
     def fail_to_dlq(self, message_id: str, reason: str) -> None:
         """Moves an unprocessable/expired message to Dead Letter Queue."""
         now = self._now()
-        with self.db.get_connection() as conn:
+        with self.db.connection() as conn:
             row = conn.execute("SELECT * FROM message_queue WHERE message_id = ?", (message_id,)).fetchone()
             if row:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO dead_letter_queue (message_id, type, payload, retry_count, reason, ts)
+                    INSERT INTO dead_letter_queue (message_id, type, payload, retry_count, reason, ts)
                     VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(message_id) DO UPDATE SET
+                    retry_count = retry_count + 1, reason = excluded.reason, ts = excluded.ts
                     """,
                     (message_id, row["type"], row["payload"], row["retry_count"] + 1, reason, now)
                 )
                 conn.execute("UPDATE message_queue SET status = 'DEAD' WHERE message_id = ?", (message_id,))
-                conn.commit()

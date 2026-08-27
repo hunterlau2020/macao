@@ -153,7 +153,7 @@ executor:
 development:
   phase: "backend-refactor"
   description: "Refactored database connection pooling with timeout config"
-  
+
   # 核心产物
   artifacts:
     - type: "source_code"
@@ -174,7 +174,7 @@ development:
     lint_errors: 0
     security_scan_passed: true
     tests_exempt: false   # 项目无测试时置 true，并在 checklist 中说明原因
-    
+
   # 关键检查清单
   checklist:
     - ✓ All tests pass
@@ -182,7 +182,7 @@ development:
     - ✓ Security review passed
     - ✓ Documentation updated
     - ✓ Performance benchmarked
-    
+
   git:
     latest_commit: "a1b2c3d"
     branch: "feature/db-refactor"
@@ -255,7 +255,7 @@ review_round: 1            # 评审轮次；checkpoint_ref + review_round 双匹
 opinion:
   status: "CHANGES_REQUESTED"  # APPROVED | CHANGES_REQUESTED | REJECTED
   confidence: 0.92
-  
+
   # 对 Executor 的反馈
   feedback:
     summary: "设计合理，但需补充异常处理"
@@ -269,13 +269,13 @@ opinion:
         location: "src/db/connection.py:82"
         issue: "Missing exception handling for socket timeout"
         suggestion: "Wrap in try-except with proper logging"
-        
+
       - type: "style"
         severity: "minor"
         location: "src/db/connection.py:105"
         issue: "Variable naming inconsistent with codebase"
         suggestion: "Rename pool_cfg to connection_pool_config"
-  
+
   # 检查清单
   review_checklist:
     - "✓ Logic is sound"
@@ -283,7 +283,7 @@ opinion:
     - "⚠ Error handling incomplete"
     - "✓ Tests are comprehensive"
     - "✓ Documentation is clear"
-  
+
   # 可选：自动工具检查结果
   automated_checks:
     - tool: "bandit"
@@ -331,14 +331,14 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE（ABSTAIN 不在此枚举：Revie
 {
   "version": "1.0",
   "timestamp": "2024-01-15T10:55:00Z",
-  
+
   "checkpoint_ref": "a1b2c3d",
   "executor": "cc-ds4",
-  
+
   "review_round": 1,
   "reviewers_total": 2,
   "reviewers_responded": 2,
-  
+
   "votes": [
     {
       "reviewer": "cc-glm",
@@ -353,7 +353,7 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE（ABSTAIN 不在此枚举：Revie
       "issues_count": 1
     }
   ],
-  
+
   "input_artifacts": [
     {"kind": "review", "path": ".macao/.reviews/cc-glm.review.yml", "sha256": "9f2a7c1e5bd0", "message_id": "msg-20240115-003"},
     {"kind": "review", "path": ".macao/.reviews/kimi.review.yml", "sha256": "b91c04d8e3af", "message_id": "msg-20240115-004"}
@@ -365,17 +365,17 @@ vote: "NO_APPROVE"  # YES_APPROVE | NO_APPROVE（ABSTAIN 不在此枚举：Revie
     "reject": 2,
     "abstain": 0
   },
-  
+
   "decision": "REWORK_REQUIRED",
   "decision_confidence": 0.88,
-  
+
   "summary": {
     "critical_issues": 0,
     "major_issues": 1,
     "minor_issues": 3,
     "action": "Send REWORK_REQUEST to executor"
   },
-  
+
   "next_step": {
     "action": "REWORK",
     "deadline": "2024-01-15T12:55:00Z",
@@ -447,11 +447,11 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   "protocol": "AEP/1.0",
   "message_id": "msg-20240115-001",
   "timestamp": "2024-01-15T10:00:00Z",
-  
+
   "type": "DEVELOPMENT_STARTED",
   "from": "macao",
   "to": "cc-ds4",
-  
+
   "payload": {
     "project": "macao-demo",
     "task_id": "task-20240115-001",
@@ -478,11 +478,11 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   "protocol": "AEP/1.0",
   "message_id": "msg-20240115-002",
   "timestamp": "2024-01-15T10:35:00Z",
-  
+
   "type": "REVIEW_REQUEST",
   "from": "macao",
   "to": ["cc-glm", "kimi"],
-  
+
   "payload": {
     "project": "macao-demo",
     "executor": "cc-ds4",
@@ -544,7 +544,7 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
 
       "references": { "architecture_doc": "docs/db_design.md", "related_tickets": ["TASK-123"] }
     },
-    
+
     "review_deadline": "2024-01-15T11:05:00Z",
     "expected_output": {
       "format": ".review.yml",
@@ -567,20 +567,20 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   "protocol": "AEP/1.0",
   "message_id": "msg-20240115-003",
   "timestamp": "2024-01-15T10:48:00Z",
-  
+
   "type": "REVIEW_RESPONSE",
   "from": "cc-glm",
   "to": "macao",
-  
+
   "payload": {
     "project": "macao-demo",
     "checkpoint_ref": "a1b2c3d",
-    
+
     "review_file": {
       "path": ".macao/.reviews/cc-glm.review.yml",
       "content_base64": "..."
     },
-    
+
     "vote_summary": {
       "status": "CHANGES_REQUESTED",
       "issues_count": 3,
@@ -597,16 +597,16 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
   "protocol": "AEP/1.0",
   "message_id": "msg-20240115-004",
   "timestamp": "2024-01-15T10:56:00Z",
-  
+
   "type": "REWORK_REQUEST",
   "from": "macao",
   "to": "cc-ds4",
-  
+
   "payload": {
     "project": "macao-demo",
     "checkpoint_ref": "a1b2c3d",
     "round": 2,
-    
+
     "issues_to_fix": [
       {
         "reviewer": "cc-glm",
@@ -616,7 +616,7 @@ AEP v1.0 共定义 **7 种消息类型**（与 v1.0 `SRSv1.md` §7 的对应关�
         "suggestion": "Wrap in try-except with proper logging"
       }
     ],
-    
+
     "next_checkpoint_deadline": "2024-01-15T12:56:00Z"
   }
 }
@@ -776,15 +776,19 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
                                    expect_review_round=rnd)
         if result.valid:
             archive_round_artifacts(ref, rnd)              # 本轮产物归档（§3.4）
-            # 显式两分支：decision 枚举仅 APPROVED | REWORK_REQUIRED（Schema 强制），
-            # 不存在"非 A 即 B"的静默 else；Deadlock 轮先人工裁定、后写终局 decision
+            # 显式四分支：终局 decision 枚举包含 APPROVED | REWORK_REQUIRED | RETRY_REVIEW | CANCELLED（Schema 强制）
             if result.decision == 'APPROVED':
                 return AgentState.MERGING                  # E4：进入合并流水线（E4a/E4b 命令驱动）
-            # E5 守卫：round 已收起 max_rework_rounds 时不得自动返回 REWORK，
-            # 改由 Orchestrator 发 HUMAN_OVERRIDE_REQUEST（Type G）→ E7 人工裁定（§15.2）
-            if rnd < max_rework_rounds:
-                return AgentState.REWORK                   # E5
-            return request_human_override(agent_id='orchestrator', reason='max_rework_rounds_failed')
+            elif result.decision == 'REWORK_REQUIRED':
+                # E5 守卫：round 已达到 max_rework_rounds 时不得自动返回 REWORK，
+                # 改由 Orchestrator 发 HUMAN_OVERRIDE_REQUEST（Type G）→ E7 人工裁定（§15.2）
+                if rnd < max_rework_rounds:
+                    return AgentState.REWORK               # E5
+                return request_human_override(agent_id='orchestrator', reason='max_rework_rounds_failed')
+            elif result.decision == 'RETRY_REVIEW':
+                return AgentState.WAITING_REVIEW           # E9：作废重试当前评审轮次
+            elif result.decision == 'CANCELLED':
+                return AgentState.CANCELLED                # E10：任务终止取消终态
 
     # ===== Layer 2: 行为推断 —— 只记录与预警，永不改变业务状态 =====
     signals = collect_behavior_signals(agent_id)          # git / tests / pty_idle
@@ -991,7 +995,7 @@ review_context:
     description: "Refactored database connection pooling"
     business_impact: "Improves connection pool efficiency by 30%"
     timeline_info: "This is the second iteration after cc-glm feedback"
-    
+
   # 2. 代码变更（传 refs，Reviewer 在本地工作区自行取 diff）
   code_changes:
     summary:
@@ -1011,7 +1015,7 @@ review_context:
         status: "modified"
         added_lines: 35
         deleted_lines: 12
-    
+
   # 3. 质量指标（来自 .dev.yml）
   quality_snapshot:
     tests:
@@ -1025,7 +1029,7 @@ review_context:
     performance:
       avg_query_time_ms: 45
       p99_query_time_ms: 120
-    
+
   # 4. Executor 的自评与重点
   executor_self_assessment:
     what_was_done: |
@@ -1033,21 +1037,21 @@ review_context:
       - Added configurable timeout parameters
       - Added comprehensive test suite
       - Updated documentation
-    
+
     review_focus:
       - "Thread safety in connection pool"
       - "Timeout configuration correctness"
       - "Backward compatibility with existing code"
-    
+
     known_limitations:
       - "Connection retry logic not implemented yet"
       - "Performance benchmarks pending"
-    
+
   # 5. 历史上下文（重复评审时有用）
   history:
     previous_reviews: 0  # 这是第一次评审
     previous_feedback: []  # 无前序反馈
-    
+
   # 6. 参考资源
   references:
     architecture_doc: "docs/db_design.md"

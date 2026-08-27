@@ -21,7 +21,7 @@ class ConsensusEngine:
     ) -> Tuple[Decision, Dict[str, int], float]:
         """
         Evaluates votes against the 2/3 consensus rules.
-        
+
         Returns:
             (Decision, vote_breakdown, confidence)
         """

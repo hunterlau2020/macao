@@ -6,7 +6,7 @@ import yaml
 import hashlib
 import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 
 from macao.core.types import Decision, Resolution
 from macao.consensus.engine import ConsensusEngine
@@ -19,37 +19,50 @@ class VoteAggregator:
     def __init__(self, project_root: str = "."):
         self.root = Path(project_root)
 
-    def collect_reviews(self, checkpoint_ref: str, review_round: int) -> List[Dict[str, Any]]:
-        """Scans .macao/.reviews/ for valid .review.yml files matching ref and round."""
+    def collect_reviews(
+        self,
+        checkpoint_ref: str,
+        review_round: int,
+        allowed_reviewer_ids: Optional[Set[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """Scans .macao/.reviews/ for valid .review.yml files matching ref and round, deduplicated by reviewer_id."""
         reviews_dir = self.root / ".macao" / ".reviews"
         if not reviews_dir.exists():
             return []
 
-        collected = []
-        for file_path in reviews_dir.glob("*.review.yml"):
+        collected_by_reviewer: Dict[str, Dict[str, Any]] = {}
+        for file_path in sorted(reviews_dir.glob("*.review.yml")):
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = yaml.safe_load(f)
-                
+
                 is_valid, _ = validate_review_manifest(content)
                 if not is_valid:
                     continue
 
-                if (content.get("checkpoint_ref") == checkpoint_ref and 
+                if (content.get("checkpoint_ref") == checkpoint_ref and
                     content.get("review_round") == review_round):
-                    
+
+                    reviewer_id = content.get("reviewer", {}).get("id")
+                    if not reviewer_id:
+                        continue
+                    if allowed_reviewer_ids is not None and reviewer_id not in allowed_reviewer_ids:
+                        continue
+
                     with open(file_path, "rb") as f_bin:
                         sha256 = hashlib.sha256(f_bin.read()).hexdigest()
 
-                    collected.append({
+                    # Deduplicate by reviewer_id (keep valid review)
+                    collected_by_reviewer[reviewer_id] = {
                         "file_path": str(file_path.relative_to(self.root)),
                         "data": content,
-                        "sha256": sha256
-                    })
+                        "sha256": sha256,
+                        "reviewer_id": reviewer_id
+                    }
             except Exception:
                 continue
 
-        return collected
+        return list(collected_by_reviewer.values())
 
     def generate_vote_result(
         self,
@@ -58,21 +71,25 @@ class VoteAggregator:
         review_round: int,
         configured_reviewers: int,
         reviews: List[Dict[str, Any]],
-        human_resolution: Optional[str] = None
+        human_resolution: Optional[str] = None,
+        write_to_disk: bool = True
     ) -> Dict[str, Any]:
-        """Synthesizes vote_result.json payload."""
+        """Synthesizes vote_result.json payload.
+
+        PRD §3.3 E3 Rule: If decision is DEADLOCK, HOLD and DO NOT write vote_result.json to disk.
+        Only finalized decisions (APPROVED, REWORK_REQUIRED, or human_override) are written.
+        """
         votes_list = []
         input_artifacts = []
         issues_to_fix = []
 
-        for r in reviews:
+        for idx_r, r in enumerate(reviews, 1):
             data = r["data"]
-            reviewer_id = data.get("reviewer", {}).get("id", "unknown")
+            reviewer_id = data.get("reviewer", {}).get("id", f"reviewer-{idx_r}")
             vote_val = data.get("vote")
             confidence = data.get("opinion", {}).get("confidence", 0.9)
             feedback = data.get("opinion", {}).get("feedback", {})
 
-            # Count issues if structured
             categories = feedback.get("categories", [])
             issues_count = len(categories)
 
@@ -83,11 +100,17 @@ class VoteAggregator:
                 "issues_count": issues_count
             })
 
+            # Format valid AEP message ID conforming to ^msg-[0-9]{8}-[0-9]{3,}$
+            msg_id = data.get("message_id")
+            if not msg_id or not msg_id.startswith("msg-"):
+                today_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
+                msg_id = f"msg-{today_str}-{idx_r:04d}"
+
             input_artifacts.append({
-                "kind": "review",
+                "kind": "review_manifest",
                 "path": r["file_path"],
                 "sha256": r["sha256"],
-                "message_id": f"msg-local-{reviewer_id}"
+                "message_id": msg_id
             })
 
             # Extract issues
@@ -100,15 +123,28 @@ class VoteAggregator:
                 })
 
         decision, breakdown, confidence = ConsensusEngine.evaluate(votes_list, configured_reviewers)
-        
-        # Override decision if specified by human
+
         resolution_type = Resolution.AUTOMATIC.value
         if human_resolution:
             resolution_type = Resolution.HUMAN_OVERRIDE.value
             if human_resolution == "APPROVED":
                 decision = Decision.APPROVED
-            elif human_resolution == "REWORK":
+            elif human_resolution in ("REWORK", "REWORK_REQUIRED"):
                 decision = Decision.REWORK_REQUIRED
+            elif human_resolution in ("RETRY", "RETRY_REVIEW"):
+                decision = Decision.RETRY_REVIEW
+            elif human_resolution in ("CANCEL", "CANCELLED"):
+                decision = Decision.CANCELLED
+            else:
+                decision = Decision.APPROVED
+
+        next_action_map = {
+            Decision.APPROVED: "MERGE",
+            Decision.REWORK_REQUIRED: "REWORK",
+            Decision.RETRY_REVIEW: "RETRY_REVIEW",
+            Decision.CANCELLED: "CANCEL"
+        }
+        next_action = next_action_map.get(decision, "HOLD")
 
         result: Dict[str, Any] = {
             "version": "1.0",
@@ -122,25 +158,33 @@ class VoteAggregator:
             "input_artifacts": input_artifacts,
             "consensus_rule": "2/3_majority",
             "vote_breakdown": breakdown,
-            "decision": decision.value if decision != Decision.DEADLOCK else "REWORK_REQUIRED",
+            "decision": decision.value,
             "decision_confidence": confidence,
             "resolution": resolution_type,
             "summary": {
                 "critical_issues": sum(1 for i in issues_to_fix if i.get("severity") == "critical"),
                 "major_issues": sum(1 for i in issues_to_fix if i.get("severity") == "major"),
                 "minor_issues": sum(1 for i in issues_to_fix if i.get("severity") == "minor"),
-                "action": "Proceed to merge" if decision == Decision.APPROVED else "Send REWORK_REQUEST to executor"
+                "action": f"Action: {next_action}"
             },
             "next_step": {
-                "action": "MERGE" if decision == Decision.APPROVED else "REWORK",
+                "action": next_action,
                 "issues_to_fix": issues_to_fix
             }
         }
 
-        # Write to disk
-        out_file = self.root / ".macao" / "vote_result.json"
-        out_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(out_file, "w", encoding="utf-8") as f:
-            json.dump(result, f, indent=2, ensure_ascii=False)
+        # PRD §3.3 E3 Rule: If decision is DEADLOCK, DO NOT write to disk
+        if decision == Decision.DEADLOCK:
+            return result
+
+        if write_to_disk:
+            is_valid, err = validate_vote_result(result)
+            if not is_valid:
+                raise ValueError(f"Generated vote_result is invalid: {err}")
+
+            out_file = self.root / ".macao" / "vote_result.json"
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
 
         return result

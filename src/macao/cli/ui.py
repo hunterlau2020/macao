@@ -19,23 +19,38 @@ def print_banner() -> None:
 
 def render_preflight_report(results: List[Any]) -> None:
     table = Table(title="MACAO Preflight Environment Report", border_style="blue")
-    table.add_column("CLI", style="cyan", no_wrap=True)
+    table.add_column("CLI / Component", style="cyan", no_wrap=True)
     table.add_column("Installed", style="bold")
     table.add_column("Version", style="green")
-    table.add_column("Matrix", style="magenta")
-    table.add_column("Status / Remediation", style="white")
+    table.add_column("Mode", style="magenta")
+    table.add_column("Status", style="white")
 
     for r in results:
-        status_text = "[green]OK[/green]" if r.installed and r.in_matrix else f"[red]FAIL[/red] ({r.remediation or r.details})"
+        if isinstance(r, dict):
+            name = r.get("agent") or r.get("cli_name", "")
+            inst = r.get("installed", False)
+            ver = r.get("version", "N/A")
+            mode = r.get("mode", "sandboxed")
+            st = "[green]OK[/green]" if r.get("status", True) else "[red]FAIL[/red]"
+        else:
+            name = getattr(r, "cli_name", getattr(r, "agent_id", ""))
+            inst = getattr(r, "installed", False)
+            ver = getattr(r, "version", "N/A") or "N/A"
+            mode = getattr(r, "execution_mode", "sandboxed")
+            st = "[green]OK[/green]" if getattr(r, "is_ok", True) else "[red]FAIL[/red]"
+
         table.add_row(
-            r.cli_name,
-            "[green]YES[/green]" if r.installed else "[red]NO[/red]",
-            r.version or "N/A",
-            "[green]IN MATRIX[/green]" if r.in_matrix else "[yellow]UNKNOWN[/yellow]",
-            status_text
+            str(name),
+            "[green]YES[/green]" if inst else "[red]NO[/red]",
+            str(ver),
+            str(mode),
+            st
         )
 
     console.print(table)
+
+
+render_preflight_table = render_preflight_report
 
 
 def render_task_status(task: Dict[str, Any], artifacts: List[Dict[str, Any]]) -> None:
@@ -58,14 +73,13 @@ def render_task_status(task: Dict[str, Any], artifacts: List[Dict[str, Any]]) ->
         art_table.add_column("Path", style="white")
         art_table.add_column("Round", style="yellow")
         art_table.add_column("Consumed", style="green")
-        art_table.add_column("SHA256 (tail)", style="dim")
 
         for a in artifacts:
+            consumed_str = "[green]YES[/green]" if a.get("consumed") else "[yellow]NO[/yellow]"
             art_table.add_row(
-                a["kind"],
-                a["path"],
-                str(a["review_round"]),
-                "[green]YES[/green]" if a["consumed"] else "[yellow]NO[/yellow]",
-                (a.get("sha256") or "")[:8]
+                a.get("kind", ""),
+                a.get("path", ""),
+                str(a.get("review_round", "")),
+                consumed_str
             )
         console.print(art_table)

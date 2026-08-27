@@ -19,7 +19,7 @@ class WorkflowFSM:
         self.engine = StateRecognitionEngine(project_root)
 
     def transition(self, task_id: str, to_state: AgentState, trigger_id: str, detail: Optional[Dict[str, Any]] = None) -> StateChange:
-        """Executes a validated state transition and archives artifacts if applicable."""
+        """Executes a validated state transition enforcing TransitionTable rules."""
         task = self.store.get_task(task_id)
         if not task:
             raise ValueError(f"Task {task_id} not found")
@@ -27,6 +27,18 @@ class WorkflowFSM:
         from_state = AgentState(task["state"])
         ref = task.get("checkpoint_ref")
         rnd = task.get("review_round", 1)
+
+        # Enforce unified transition table whitelist
+        if not TransitionTable.can_transition(from_state, to_state, trigger_id):
+            self.store.log_audit_event(task_id, "TRANSITION_REJECTED", {
+                "from_state": from_state.value,
+                "to_state": to_state.value,
+                "trigger_id": trigger_id,
+                "detail": detail
+            })
+            raise ValueError(
+                f"Illegal state transition from {from_state.value} to {to_state.value} via trigger {trigger_id}"
+            )
 
         # Update State Store
         new_ref = detail.get("latest_commit", ref) if detail else ref
@@ -37,14 +49,16 @@ class WorkflowFSM:
             new_rnd = rnd + 1
 
         self.store.update_task_state(task_id, to_state, checkpoint_ref=new_ref, review_round=new_rnd)
-        
+
         # Log event
         change = StateChange(
+            task_id=task_id,
             from_state=from_state,
             to_state=to_state,
-            source=trigger_id,
-            transition_id=trigger_id,
-            detail=detail
+            trigger=trigger_id,
+            review_round=new_rnd,
+            checkpoint_ref=new_ref,
+            note=detail.get("note") if detail else None
         )
         self.store.log_audit_event(task_id, f"STATE_TRANSITION_{trigger_id}", {
             "from_state": from_state.value,
@@ -57,6 +71,9 @@ class WorkflowFSM:
         # Archive logic (PRD §3.4)
         if trigger_id == "E2" and ref:
             self._archive_file(".macao/.dev.yml", ref, rnd, task_id, "dev_manifest")
+        elif trigger_id in ("E4", "E5", "E7") and ref:
+            self._archive_file(".macao/vote_result.json", ref, rnd, task_id, "vote_result")
+            self._archive_reviews(ref, rnd, task_id)
         elif trigger_id in ("E4a", "E4b") and ref:
             self._archive_file(".macao/vote_result.json", ref, rnd, task_id, "vote_result")
 
@@ -77,27 +94,19 @@ class WorkflowFSM:
                 archived_path=str(dst.relative_to(self.root))
             )
 
-    def step(self, task_id: str, configured_reviewers: int = 2) -> Optional[StateChange]:
-        """Observes disk artifacts and executes step transition if explicit signal is ready."""
-        task = self.store.get_task(task_id)
-        if not task:
-            return None
-
-        current_st = AgentState(task["state"])
-        ref = task.get("checkpoint_ref")
-        rnd = task.get("review_round", 1)
-
-        target_st, src, meta = self.engine.recognize_state(current_st, ref, rnd, configured_reviewers)
-        if target_st:
-            # Map recognition to transition trigger ID
-            trigger_map = {
-                (AgentState.CODING, AgentState.READY_FOR_REVIEW): "E1_PRODUCED",
-                (AgentState.REWORK, AgentState.READY_FOR_REVIEW): "E6",
-                (AgentState.WAITING_REVIEW, AgentState.CONSENSUS_CHECK): "E3",
-                (AgentState.CONSENSUS_CHECK, AgentState.MERGING): "E4",
-                (AgentState.CONSENSUS_CHECK, AgentState.REWORK): "E5",
-            }
-            tr_id = trigger_map.get((current_st, target_st), "EXPLICIT_STEP")
-            return self.transition(task_id, target_st, tr_id, meta)
-
-        return None
+    def _archive_reviews(self, checkpoint_ref: str, review_round: int, task_id: str) -> None:
+        reviews_dir = self.root / ".macao" / ".reviews"
+        if reviews_dir.exists():
+            archive_dir = self.root / ".macao" / "archive" / checkpoint_ref / f"r{review_round}"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            for rev_file in reviews_dir.glob("*.review.yml"):
+                dst = archive_dir / rev_file.name
+                shutil.copy2(rev_file, dst)
+                self.store.mark_artifact_consumed(
+                    task_id=task_id,
+                    kind="review_manifest",
+                    checkpoint_ref=checkpoint_ref,
+                    review_round=review_round,
+                    archived_path=str(dst.relative_to(self.root)),
+                    reviewer_id=rev_file.stem
+                )

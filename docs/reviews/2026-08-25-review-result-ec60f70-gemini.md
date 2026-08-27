@@ -1,8 +1,8 @@
 # MACAO 文档对齐评审报告
 
-> **评审日期**：2026-08-25  
-> **评审人**：Gemini (Antigravity AI)  
-> **评审对象**：`docs/` 下四份核心文档的跨文档对齐情况  
+> **评审日期**：2026-08-25
+> **评审人**：Gemini (Antigravity AI)
+> **评审对象**：`docs/` 下四份核心文档的跨文档对齐情况
 > **评审 ID**：mid（Multi-document Inter-Document）
 
 ---
@@ -66,7 +66,7 @@
 
 #### 发现 B：v2.0 架构中 v1.0 的 Project Manager 模块去向未说明 ⚠️
 
-`EXECUTIVE_SUMMARY.md` 的架构速写包含：`Agent Registry`、`State Engine`、`Workflow Controller`  
+`EXECUTIVE_SUMMARY.md` 的架构速写包含：`Agent Registry`、`State Engine`、`Workflow Controller`
 `SRSv1.md` v1.0 架构中有 `Project Manager`（负责项目、团队定义、角色绑定），v2.0 文档均未再提及该模块去向。
 
 **建议**：PRD v2.0 应补充说明 v1.0 的 `Project Manager` 模块在 v2.0 中的归宿（合并入 Workflow Controller，或更名，或移除），避免读者困惑。
@@ -77,7 +77,7 @@
 
 #### 发现 C：`EXECUTIVE_SUMMARY.md` 示例字段不完整 ⚠️
 
-`EXECUTIVE_SUMMARY.md` 中的 `.dev.yml` 示例（§三个关键 .yml 文件详解）包含字段：  
+`EXECUTIVE_SUMMARY.md` 中的 `.dev.yml` 示例（§三个关键 .yml 文件详解）包含字段：
 `version`, `status`, `signal`, `executor`, `development.description`, `development.artifacts`, `development.quality_metrics`, `development.git`, `development.review_focus`
 
 `MACAO_PRD_v2.md` §2.1 中的完整 `.dev.yml` 规范额外包含：
@@ -168,7 +168,7 @@
 
 #### 发现 J：Reviewer 从 Qwen → Kimi 的替换未在改进说明中明确 ⚠️
 
-`SRSv1.md` 的 v1.0 原始设计中 Reviewer 列表包含 `cc-glm`（Codex）和 `qwen`（通义/Qwen）。  
+`SRSv1.md` 的 v1.0 原始设计中 Reviewer 列表包含 `cc-glm`（Codex）和 `qwen`（通义/Qwen）。
 `IMPROVEMENT_SUMMARY.md` 全文均使用 "Codex/Kimi" 而非 v1.0 的 "Codex/Qwen"，但未明确说明 Qwen → Kimi 的替换。
 
 **建议**：在 `IMPROVEMENT_SUMMARY.md` §六或改进总表中，明确说明 v1.0 中的 "qwen" Reviewer 在 v2.0 中由 Kimi 替换（或说明 qwen 与 cc-glm 是同一角色的不同示例标识）。
@@ -282,16 +282,16 @@
 
 ### 🔴 中等严重度（建议下次文档迭代优先处理）
 
-1. **[C] `.dev.yml` 示例字段不完整**（`EXECUTIVE_SUMMARY.md`）  
+1. **[C] `.dev.yml` 示例字段不完整**（`EXECUTIVE_SUMMARY.md`）
    → 添加注释 `# 完整字段见 PRD §2.1` 或补全 `timestamp` / `checklist` 字段
 
-2. **[D] `.review.yml` 存储路径缺少 `.macao/` 前缀**（`IMPROVEMENT_SUMMARY.md`）  
+2. **[D] `.review.yml` 存储路径缺少 `.macao/` 前缀**（`IMPROVEMENT_SUMMARY.md`）
    → 将 `.reviews/<id>.review.yml` 改为 `.macao/.reviews/<id>.review.yml`
 
-3. **[A] 摘要工作流缺少 CHECKPOINT 阶段**（`EXECUTIVE_SUMMARY.md`）  
+3. **[A] 摘要工作流缺少 CHECKPOINT 阶段**（`EXECUTIVE_SUMMARY.md`）
    → 在工作流步骤 3 与 4 之间补充 CHECKPOINT 说明，或添加脚注引用 PRD §1.2
 
-4. **[O] 摘要风险表缺少"Git Conflict"风险**（`EXECUTIVE_SUMMARY.md`）  
+4. **[O] 摘要风险表缺少"Git Conflict"风险**（`EXECUTIVE_SUMMARY.md`）
    → 补充第 5 条风险："Git Conflict 导致卡死 | 低概率高影响 | 自动检测 + 预警"
 
 ### 🟡 低严重度（可在后续版本统一处理）

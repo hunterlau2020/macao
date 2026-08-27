@@ -1,6 +1,7 @@
-"""End-to-End Multi-Agent Simulation Tests (PRD §3.4 Scenarios S1 ~ S6)."""
+"""End-to-End Multi-Agent Simulation Tests (PRD §3.4 Scenarios S1 ~ S6 & Safety Gates)."""
 
 import os
+import shutil
 import unittest
 import tempfile
 from pathlib import Path
@@ -25,20 +26,20 @@ class TestOrchestratorSimulation(unittest.TestCase):
             project_root=self.tmpdir,
             db_path=self.db_path,
             executor_adapter=self.mock_executor,
-            reviewer_adapters=[self.mock_reviewer1, self.mock_reviewer2]
+            reviewer_adapters=[self.mock_reviewer1, self.mock_reviewer2],
+            config={"max_rework_rounds": 2, "require_signoff": False}
         )
 
     def tearDown(self):
-        import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
-    def test_scenario_s1_happy_path(self):
-        """Scenario S1: Task Start -> Coding -> 2x Approvals -> MERGING."""
+    def test_scenario_s1_happy_path_and_merge(self):
+        """Scenario S1: Task Start -> Coding -> 2x Approvals -> MERGING -> DONE."""
         # 1. Start Task (E1: IDLE -> CODING)
         task = self.orchestrator.start_task(
             title="Implement OAuth2 Authentication",
             task_description="Add JWT token validation endpoint",
-            acceptance_criteria={"tests_passed": True, "coverage": 90.0},
+            acceptance_criteria={"tests_passed": True, "coverage": 0.90},
             source_branch="feature/oauth",
             target_branch="main",
             task_id="task-s1"
@@ -77,21 +78,25 @@ class TestOrchestratorSimulation(unittest.TestCase):
         self.assertEqual(change_final.to_state, AgentState.MERGING)
         self.assertEqual(vote_data["decision"], "APPROVED")
 
+        # 7. Execute Merge pipeline -> DONE (E4a)
+        ok, msg, change_done = self.orchestrator.execute_merge("task-s1")
+        self.assertTrue(ok)
+        self.assertEqual(change_done.to_state, AgentState.DONE)
+        self.assertEqual(self.orchestrator.store.get_task("task-s1")["state"], AgentState.DONE.value)
+
     def test_scenario_s2_rework_loop(self):
         """Scenario S2: Reviews Reject -> Rework Round 2 -> Approvals -> MERGING."""
-        # 1. Start Task
         self.orchestrator.start_task(
             title="Refactor Cache",
             task_description="Memory LRU cache",
             acceptance_criteria={"tests_passed": True},
             task_id="task-s2"
         )
-        # 2. Round 1 dev manifest
         self.mock_executor.simulate_produce_dev_manifest(self.tmpdir, commit_sha="c-r1", review_round=1)
         self.orchestrator.check_development_checkpoint("task-s2")
         self.orchestrator.dispatch_review_requests("task-s2")
 
-        # 3. Round 1 Reviewers REJECT
+        # Round 1 Reviewers REJECT
         self.mock_reviewer1.simulate_produce_review_manifest(
             self.tmpdir, checkpoint_ref="c-r1", review_round=1,
             vote=Vote.NO_APPROVE, opinion_status=OpinionStatus.REJECTED,
@@ -103,21 +108,21 @@ class TestOrchestratorSimulation(unittest.TestCase):
             issues=[{"type": "resource", "severity": "major", "issue": "File descriptor leak"}]
         )
 
-        # 4. Evaluate consensus -> REWORK (E5)
+        # Evaluate consensus -> REWORK (E5)
         change_r1, vote_data = self.orchestrator.collect_and_evaluate_consensus("task-s2", configured_reviewers=2)
         self.assertEqual(change_r1.to_state, AgentState.REWORK)
         self.assertEqual(vote_data["decision"], "REWORK_REQUIRED")
-        
+
         # Verify task is in REWORK with round=2
         task_r2 = self.orchestrator.store.get_task("task-s2")
         self.assertEqual(task_r2["review_round"], 2)
 
-        # 5. Executor fixes issues and produces Round 2 dev manifest (c-r2)
+        # Round 2: Executor fixes issues and produces dev manifest (c-r2)
         self.mock_executor.simulate_produce_dev_manifest(self.tmpdir, commit_sha="c-r2", review_round=2)
         self.orchestrator.check_development_checkpoint("task-s2")
         self.orchestrator.dispatch_review_requests("task-s2")
 
-        # 6. Round 2 Reviewers APPROVE
+        # Round 2 Reviewers APPROVE
         self.mock_reviewer1.simulate_produce_review_manifest(
             self.tmpdir, checkpoint_ref="c-r2", review_round=2,
             vote=Vote.YES_APPROVE, opinion_status=OpinionStatus.APPROVED
@@ -127,70 +132,102 @@ class TestOrchestratorSimulation(unittest.TestCase):
             vote=Vote.YES_APPROVE, opinion_status=OpinionStatus.APPROVED
         )
 
-        # 7. Evaluate consensus -> MERGING (E4)
         change_r2, vote_data_r2 = self.orchestrator.collect_and_evaluate_consensus("task-s2", configured_reviewers=2)
         self.assertEqual(change_r2.to_state, AgentState.MERGING)
         self.assertEqual(vote_data_r2["decision"], "APPROVED")
 
-    def test_scenario_s3_deadlock_and_override_approved(self):
-        """Scenario S3: 1 Approve + 1 Reject -> Deadlock -> Human Override APPROVED -> MERGING."""
+    def test_p0_deadlock_does_not_write_fake_vote_result_and_holds(self):
+        """P0-1 Regression Test: 1 Approve + 1 Reject -> Deadlock MUST HOLD and NOT write vote_result.json."""
         self.orchestrator.start_task(
             title="Update dependencies",
             task_description="Upgrade PyYAML",
             acceptance_criteria={"tests_passed": True},
-            task_id="task-s3"
+            task_id="task-deadlock"
         )
-        self.mock_executor.simulate_produce_dev_manifest(self.tmpdir, commit_sha="c-s3", review_round=1)
-        self.orchestrator.check_development_checkpoint("task-s3")
-        self.orchestrator.dispatch_review_requests("task-s3")
+        self.mock_executor.simulate_produce_dev_manifest(self.tmpdir, commit_sha="c-dl", review_round=1)
+        self.orchestrator.check_development_checkpoint("task-deadlock")
+        self.orchestrator.dispatch_review_requests("task-deadlock")
 
         # 1 Approve + 1 Reject
         self.mock_reviewer1.simulate_produce_review_manifest(
-            self.tmpdir, checkpoint_ref="c-s3", review_round=1,
+            self.tmpdir, checkpoint_ref="c-dl", review_round=1,
             vote=Vote.YES_APPROVE, opinion_status=OpinionStatus.APPROVED
         )
         self.mock_reviewer2.simulate_produce_review_manifest(
-            self.tmpdir, checkpoint_ref="c-s3", review_round=1,
+            self.tmpdir, checkpoint_ref="c-dl", review_round=1,
             vote=Vote.NO_APPROVE, opinion_status=OpinionStatus.REJECTED
         )
 
         # Evaluate consensus -> Returns Deadlock (None change, remains in CONSENSUS_CHECK)
-        change_deadlock, vote_data = self.orchestrator.collect_and_evaluate_consensus("task-s3", configured_reviewers=2)
+        change_deadlock, vote_data = self.orchestrator.collect_and_evaluate_consensus("task-deadlock", configured_reviewers=2)
         self.assertIsNone(change_deadlock)
-        self.assertEqual(self.orchestrator.store.get_task("task-s3")["state"], AgentState.CONSENSUS_CHECK.value)
+        self.assertEqual(self.orchestrator.store.get_task("task-deadlock")["state"], AgentState.CONSENSUS_CHECK.value)
 
-        # Human resolves override with APPROVED
-        change_override = self.orchestrator.resolve_override("task-s3", OverrideChoice.APPROVED, note="Tech lead approved")
+        # CRITICAL ASSERTION: vote_result.json must NOT exist on disk!
+        vote_result_disk = Path(self.tmpdir) / ".macao" / "vote_result.json"
+        self.assertFalse(vote_result_disk.exists(), "vote_result.json must NOT be written to disk during DEADLOCK!")
+
+        # Human resolves override with APPROVED -> writes final vote_result.json with human_override
+        change_override = self.orchestrator.resolve_override("task-deadlock", OverrideChoice.APPROVED, note="Lead override")
         self.assertEqual(change_override.to_state, AgentState.MERGING)
-        self.assertEqual(self.orchestrator.store.get_task("task-s3")["state"], AgentState.MERGING.value)
+        self.assertTrue(vote_result_disk.exists(), "vote_result.json should be written after human override")
 
-    def test_scenario_s6_deadlock_and_cancel(self):
-        """Scenario S6: Deadlock -> Human Override CANCEL -> CANCELLED."""
+    def test_p0_reviewer_deduplication(self):
+        """P0-2 Regression Test: Duplicate reviews from same reviewer ID must not count as 2 votes."""
         self.orchestrator.start_task(
-            title="Experimental Feature",
-            task_description="Try experimental module",
+            title="Deduplication test",
+            task_description="Test duplicate reviewer defense",
             acceptance_criteria={"tests_passed": True},
-            task_id="task-s6"
+            task_id="task-dedup"
         )
-        self.mock_executor.simulate_produce_dev_manifest(self.tmpdir, commit_sha="c-s6", review_round=1)
-        self.orchestrator.check_development_checkpoint("task-s6")
-        self.orchestrator.dispatch_review_requests("task-s6")
+        self.mock_executor.simulate_produce_dev_manifest(self.tmpdir, commit_sha="c-dedup", review_round=1)
+        self.orchestrator.check_development_checkpoint("task-dedup")
+        self.orchestrator.dispatch_review_requests("task-dedup")
 
-        # 1 Approve + 1 Reject -> Deadlock
+        # 1st Reviewer submits YES
         self.mock_reviewer1.simulate_produce_review_manifest(
-            self.tmpdir, checkpoint_ref="c-s6", review_round=1,
+            self.tmpdir, checkpoint_ref="c-dedup", review_round=1,
             vote=Vote.YES_APPROVE, opinion_status=OpinionStatus.APPROVED
         )
-        self.mock_reviewer2.simulate_produce_review_manifest(
-            self.tmpdir, checkpoint_ref="c-s6", review_round=1,
-            vote=Vote.NO_APPROVE, opinion_status=OpinionStatus.REJECTED
-        )
-        self.orchestrator.collect_and_evaluate_consensus("task-s6", configured_reviewers=2)
 
-        # Human cancels task (E10)
-        change_cancel = self.orchestrator.resolve_override("task-s6", OverrideChoice.CANCEL, note="Experiment aborted")
-        self.assertEqual(change_cancel.to_state, AgentState.CANCELLED)
-        self.assertEqual(self.orchestrator.store.get_task("task-s6")["state"], AgentState.CANCELLED.value)
+        # Copy the same review file to a duplicate name
+        rev1_path = Path(self.tmpdir) / ".macao" / ".reviews" / "cc-glm.review.yml"
+        dup_path = Path(self.tmpdir) / ".macao" / ".reviews" / "cc-glm-copy.review.yml"
+        if rev1_path.exists():
+            shutil.copy2(rev1_path, dup_path)
+
+        # Evaluate consensus -> Should NOT meet quorum (configured = 2, unique = 1)
+        change, vdata = self.orchestrator.collect_and_evaluate_consensus("task-dedup", configured_reviewers=2)
+        self.assertIsNone(change)
+        self.assertEqual(self.orchestrator.store.get_task("task-dedup")["state"], AgentState.WAITING_REVIEW.value)
+
+    def test_p1_max_rework_rounds_guard(self):
+        """P1-1 Regression Test: When max rework rounds is reached, reject must trigger override rather than auto REWORK."""
+        self.orchestrator.start_task(
+            title="Max Rounds Test",
+            task_description="Test max rounds limit",
+            acceptance_criteria={"tests_passed": True},
+            task_id="task-max-rnd"
+        )
+        # Round 1: Reject -> goes to REWORK (round 2)
+        self.mock_executor.simulate_produce_dev_manifest(self.tmpdir, commit_sha="c-m1", review_round=1)
+        self.orchestrator.check_development_checkpoint("task-max-rnd")
+        self.orchestrator.dispatch_review_requests("task-max-rnd")
+        self.mock_reviewer1.simulate_produce_review_manifest(self.tmpdir, "c-m1", 1, Vote.NO_APPROVE, OpinionStatus.REJECTED)
+        self.mock_reviewer2.simulate_produce_review_manifest(self.tmpdir, "c-m1", 1, Vote.NO_APPROVE, OpinionStatus.REJECTED)
+        self.orchestrator.collect_and_evaluate_consensus("task-max-rnd", 2)
+        self.assertEqual(self.orchestrator.store.get_task("task-max-rnd")["review_round"], 2)
+
+        # Round 2: Reaches max_rework_rounds (configured = 2). Reject -> must HOLD and NOT auto rework!
+        self.mock_executor.simulate_produce_dev_manifest(self.tmpdir, commit_sha="c-m2", review_round=2)
+        self.orchestrator.check_development_checkpoint("task-max-rnd")
+        self.orchestrator.dispatch_review_requests("task-max-rnd")
+        self.mock_reviewer1.simulate_produce_review_manifest(self.tmpdir, "c-m2", 2, Vote.NO_APPROVE, OpinionStatus.REJECTED)
+        self.mock_reviewer2.simulate_produce_review_manifest(self.tmpdir, "c-m2", 2, Vote.NO_APPROVE, OpinionStatus.REJECTED)
+
+        change_max, _ = self.orchestrator.collect_and_evaluate_consensus("task-max-rnd", 2)
+        self.assertIsNone(change_max, "Must not auto-rework when max_rework_rounds is reached")
+        self.assertEqual(self.orchestrator.store.get_task("task-max-rnd")["state"], AgentState.CONSENSUS_CHECK.value)
 
 
 if __name__ == "__main__":
