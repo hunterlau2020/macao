@@ -11,7 +11,7 @@
 
 ---
 
-## 评审申请记录全量对账表 (Review Registry - 21 份评审结果全量对账)
+## 评审申请记录全量对账表 (Review Registry - 22 份评审结果全量对账)
 
 | 申请日期 | 申请文件 / 历史轮次 | 待审对象 / Commit | 目标等级 | 评审专家与文件清单 | 结论与状态 |
 |---|---|---|---|---|---|
@@ -22,6 +22,7 @@
 | 2026-08-26 | `2026-08-26-review-request-PRD-v2.3.md` | `cc77a94` (PRD v2.3) | L1 | `2026-08-26-review-result-cc77a94-claude.md`<br>`2026-08-26-review-result-cc77a94-codex.md`<br>`2026-08-26-review-result-cc77a94-gemini.md`<br>`2026-08-26-review-result-cc77a94-kimi.md`<br>`2026-08-26-review-result-PRD-v2.3-opencode.md` (5 份) | 未通过（提出 2 P0 + 3 P1 修订项） |
 | 2026-08-26 | `2026-08-26-review-request-PRD-v2.3.1.md` | `403ddc7` (PRD v2.3.1) | L1 / PG-0 | `2026-08-26-review-result-403ddc7-claude.md`<br>`2026-08-27-review-result-403ddc7-codex.md`<br>`2026-08-27-review-result-403ddc7-zcode.md` (3 份) | 上轮 2 P0 + 3 P1 全部 VERIFIED；新增 P1（§3.2 Layer 1c 四值分支）已在本次整改中单点闭环修复 |
 | 2026-08-27 | `2026-08-27-review-request-Phase0-Phase1-Code.md` | `d137a05` .. `435eeea` | L2 / PG-1 | `2026-08-27-review-result-435eeea-claude.md`<br>`2026-08-27-review-result-435eeea-codex.md`<br>`2026-08-27-review-result-435eeea-zcode.md` (3 份) | 复审提出 P0 ×2 + P1 ×7 整改项；已在本次整改中**全部闭环修复并通过 24 项回归测试** |
+| 2026-08-27 | 技术框架附加评审（非定级轮） | `435eeea` 代码快照（架构级） | — | `2026-08-27-review-result-435eeea-tech-framework-zcode.md` (1 份) | 技术选型/代码组织/实现质量/工程化四轴横向评审：缺陷级发现已随 `23dfad5` 闭环（附录逐项 VERIFIED）；**结构性建议仍开放**——驱动层/事件循环缺失、无 CI、依赖无锁定、PRD LangGraph 措辞漂移、status 读命令副作用，建议纳入后续计划 |
 
 ---
 
