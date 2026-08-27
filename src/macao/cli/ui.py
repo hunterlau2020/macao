@@ -116,3 +116,22 @@ def render_cli_integ_report(results: List[Dict[str, Any]]) -> None:
         )
 
     console.print(table)
+
+
+def render_e2e_report(result: Dict[str, Any]) -> None:
+    """Renders the Phase 2 End-to-End Micro-Task Collaboration Report."""
+    table = Table(title=f"MACAO Phase 2 E2E Micro-Task Report ({result.get('task_id')})", border_style="cyan")
+    table.add_column("Phase / Step", style="bold yellow")
+    table.add_column("Details", style="white")
+    table.add_column("Status / Result", style="bold green")
+
+    for s in result.get("steps", []):
+        step_name = s.get("step", "")
+        details = ", ".join(f"{k}={v}" for k, v in s.items() if k != "step")
+        table.add_row(step_name, details, "[green]OK[/green]")
+
+    table.add_row("5. Merge Equality", f"Target HEAD ({result.get('main_head', '')[:8]}) == Checkpoint ({result.get('checkpoint_ref', '')[:8]})", "[bold green]100% MATCH[/bold green]" if result.get("merge_exact_match") else "[red]MISMATCH[/red]")
+    table.add_row("6. Physical Archive", f"Archived {len(result.get('archived_files', []))} files: {', '.join(result.get('archived_files', []))}", "[green]PERSISTED[/green]")
+    table.add_row("7. Final FSM State", f"Final task state: {result.get('final_state')}", f"[bold cyan]{result.get('final_state')}[/bold cyan]")
+
+    console.print(table)

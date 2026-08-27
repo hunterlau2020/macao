@@ -31,9 +31,14 @@ class Orchestrator:
         config: Optional[Dict[str, Any]] = None
     ):
         self.root = Path(project_root).resolve()
-        self.db_path = db_path
-        self.store = StateStore(db_path)
-        self.msg_bus = MessageBus(db_path)
+        if not Path(db_path).is_absolute():
+            self.actual_db_path = str(self.root / db_path)
+        else:
+            self.actual_db_path = db_path
+
+        self.db_path = self.actual_db_path
+        self.store = StateStore(self.actual_db_path)
+        self.msg_bus = MessageBus(self.actual_db_path)
         self.git = GitManager(str(self.root))
         self.fsm = WorkflowFSM(self.store, str(self.root))
         self.vote_aggregator = VoteAggregator(str(self.root))

@@ -338,5 +338,26 @@ def test_clis(target_cli: str):
         console.print("[bold yellow]! Some CLI tests did not pass or were skipped.[/bold yellow]\n")
 
 
+@cli.command("e2e-run")
+def e2e_run():
+    """Run the complete Phase 2 end-to-end micro-task collaboration cycle."""
+    from macao.workflow.e2e_runner import ControlledE2ERunner
+    from macao.cli.ui import render_e2e_report
+
+    print_banner()
+    console.print("[bold cyan]Starting MACAO Phase 2 End-to-End Micro-Task Collaboration Cycle...[/bold cyan]\n")
+
+    runner = ControlledE2ERunner()
+    try:
+        res = runner.run_e2e_cycle()
+        render_e2e_report(res)
+        if res.get("status") == "PASS":
+            console.print("[bold green]✓ Phase 2 End-to-End collaboration cycle completed with 100% success (Task State: DONE).[/bold green]\n")
+        else:
+            console.print("[bold red]✗ Phase 2 End-to-End collaboration cycle failed.[/bold red]\n")
+    finally:
+        runner.cleanup()
+
+
 if __name__ == "__main__":
     cli()
