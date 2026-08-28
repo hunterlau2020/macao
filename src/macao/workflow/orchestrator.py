@@ -1,22 +1,29 @@
-"""Central Orchestrator Event Loop and Multi-Agent Workflow Coordinator (PRD §3.4 / §15)."""
+"""MACAO Central Orchestration Engine (PRD §3, §14)."""
 
 import os
 import yaml
-import json
-import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple, Set
+from typing import Dict, Any, List, Optional, Tuple
 
-from macao.core.types import AgentState, AEPType, Decision, OverrideChoice, StateChange
+from macao.core.types import (
+    AgentState,
+    StateChange,
+    AEPType,
+    Decision,
+    Vote,
+    OpinionStatus,
+    OverrideChoice
+)
+from macao.core.config import ConfigManager
 from macao.storage.store import StateStore
 from macao.msg.bus import MessageBus
-from macao.adapter.base import AgentAdapter
-from macao.consensus.vote import VoteAggregator
-from macao.consensus.engine import ConsensusEngine
-from macao.workflow.fsm import WorkflowFSM
 from macao.utils.git_utils import GitManager
 from macao.utils.context_builder import ReviewContextBuilder
+from macao.consensus.engine import ConsensusEngine
+from macao.consensus.vote import VoteAggregator
 from macao.merge.controller import MergeController
+from macao.adapter.base import AgentAdapter
+from macao.workflow.fsm import WorkflowFSM
 
 
 class Orchestrator:
@@ -46,11 +53,41 @@ class Orchestrator:
 
         self.executor = executor_adapter
         self.reviewers = reviewer_adapters or []
-        self.config = config or {
-            "max_rework_rounds": 3,
-            "min_effective_votes": 2,
-            "ci_gate_command": None,
-            "require_signoff": False
+
+        # Normalized configuration extraction (Single Truth)
+        raw_config = config or {}
+        policy = raw_config.get("policy", {})
+        merge_policy = raw_config.get("merge", {})
+        team = raw_config.get("team", {})
+        repo = raw_config.get("project", {}).get("repository", {})
+
+        reviewers_list = raw_config.get("reviewers") or team.get("reviewers") or [
+            {"id": "codex", "cli": "codex", "adapter": "pty-wrapper"},
+            {"id": "opencode", "cli": "opencode", "adapter": "pty-wrapper"},
+            {"id": "antigravity", "cli": "agy", "adapter": "pty-wrapper"}
+        ]
+
+        if reviewer_adapters:
+            active_rev_ids = [r.agent_id for r in reviewer_adapters]
+        elif reviewers_list:
+            active_rev_ids = [r["id"] for r in reviewers_list]
+        else:
+            active_rev_ids = ["codex", "opencode", "antigravity"]
+
+        reviewer_ids = raw_config.get("reviewer_ids", active_rev_ids)
+
+        self.config: Dict[str, Any] = {
+            "max_rework_rounds": raw_config.get("max_rework_rounds", policy.get("max_rework_rounds", 3)),
+            "min_effective_votes": raw_config.get("min_effective_votes", policy.get("min_effective_votes", len(reviewer_ids))),
+            "require_signoff": raw_config.get("require_signoff", merge_policy.get("require_human_signoff", True)),
+            "ci_gate_command": raw_config.get("ci_gate_command", merge_policy.get("ci_gate_command")),
+            "strategy": raw_config.get("strategy", merge_policy.get("strategy", "ff_only")),
+            "rebase_before_merge": raw_config.get("rebase_before_merge", merge_policy.get("rebase_before_merge", False)),
+            "remote_name": raw_config.get("remote_name", repo.get("remote_name", "origin")),
+            "target_branch": raw_config.get("target_branch", repo.get("default_branch", "main")),
+            "executor_id": raw_config.get("executor_id", team.get("executor", {}).get("id", "claude-code")),
+            "reviewers": reviewers_list,
+            "reviewer_ids": reviewer_ids
         }
 
     # --- High-Level Workflow Actions ---
@@ -75,7 +112,7 @@ class Orchestrator:
         })
 
         # Publish AEP Message
-        exec_id = self.executor.agent_id if self.executor else "cc-ds4"
+        exec_id = self.executor.agent_id if self.executor else self.config.get("executor_id", "claude-code")
         self.msg_bus.publish(
             msg_type=AEPType.DEVELOPMENT_STARTED,
             from_agent="macao",
@@ -152,7 +189,7 @@ class Orchestrator:
         change = self.fsm.transition(task_id, AgentState.WAITING_REVIEW, "E2")
 
         # 4. For each reviewer, create isolated worktree (FAIL-CLOSED: PRD §16.3 / P0-2 / P0-3)
-        rev_ids = [r.agent_id for r in self.reviewers] if self.reviewers else ["cc-glm", "kimi"]
+        rev_ids = [r.agent_id for r in self.reviewers] if self.reviewers else self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"])
         for rev_id in rev_ids:
             try:
                 worktree_path = self.git.create_isolated_worktree(rev_id, task_id, rnd, checkpoint_ref)
@@ -200,7 +237,7 @@ class Orchestrator:
 
         return change
 
-    def collect_and_evaluate_consensus(self, task_id: str, configured_reviewers: int = 2) -> Tuple[Optional[StateChange], Optional[Dict[str, Any]]]:
+    def collect_and_evaluate_consensus(self, task_id: str, configured_reviewers: Optional[int] = None) -> Tuple[Optional[StateChange], Optional[Dict[str, Any]]]:
         """
         Consensus Engine Evaluation:
         1. Checks quorum in WAITING_REVIEW -> moves to CONSENSUS_CHECK (E3).
@@ -216,33 +253,33 @@ class Orchestrator:
         current_st = AgentState(task["state"])
         ref = task.get("checkpoint_ref")
         rnd = task.get("review_round", 1)
-        exec_id = task.get("executor_id", "cc-ds4")
+        exec_id = task.get("executor_id") or self.config.get("executor_id", "claude-code")
         max_rework_rounds = self.config.get("max_rework_rounds", 3)
 
-        if not ref:
-            return None, None
+        num_configured = configured_reviewers or len(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"]))
 
-        allowed_rev_ids: Optional[Set[str]] = {r.agent_id for r in self.reviewers} if self.reviewers else None
-
-        # Step 1: In WAITING_REVIEW, check quorum
+        # Check if we should transition from WAITING_REVIEW -> CONSENSUS_CHECK
         if current_st == AgentState.WAITING_REVIEW:
-            collected_reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_rev_ids)
-            quorum = ConsensusEngine.calculate_minimum_quorum(configured_reviewers)
-            if len(collected_reviews) >= quorum:
-                self.fsm.transition(task_id, AgentState.CONSENSUS_CHECK, "E3", {
-                    "valid_reviews": len(collected_reviews),
-                    "quorum": quorum
-                })
+            target_st, src, meta = self.fsm.engine.recognize_state(
+                current_st, ref, rnd, configured_reviewers=num_configured, max_rework_rounds=max_rework_rounds
+            )
+            if target_st == AgentState.CONSENSUS_CHECK:
+                self.fsm.transition(task_id, AgentState.CONSENSUS_CHECK, "E3", meta)
                 current_st = AgentState.CONSENSUS_CHECK
 
-        # Step 2: In CONSENSUS_CHECK, compute decision
-        if current_st == AgentState.CONSENSUS_CHECK:
-            collected_reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_rev_ids)
-            votes_list = [
-                {"reviewer": r["data"]["reviewer"]["id"], "vote": r["data"]["vote"]}
-                for r in collected_reviews
-            ]
-            raw_decision, breakdown, conf = ConsensusEngine.evaluate(votes_list, configured_reviewers)
+        if current_st == AgentState.CONSENSUS_CHECK and ref:
+            allowed_revs = set(self.config.get("reviewer_ids", []))
+            collected_reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=allowed_revs)
+            votes_list = []
+            for r in collected_reviews:
+                v_data = r["data"]
+                votes_list.append({
+                    "reviewer": r["reviewer_id"],
+                    "vote": v_data.get("vote", "ABSTAIN"),
+                    "confidence": v_data.get("opinion", {}).get("confidence", 0.9)
+                })
+
+            raw_decision, breakdown, conf = ConsensusEngine.evaluate(votes_list, num_configured)
 
             # Branch based on decision
             if raw_decision == Decision.APPROVED:
@@ -250,7 +287,7 @@ class Orchestrator:
                     checkpoint_ref=ref,
                     executor_id=exec_id,
                     review_round=rnd,
-                    configured_reviewers=configured_reviewers,
+                    configured_reviewers=num_configured,
                     reviews=collected_reviews,
                     write_to_disk=True
                 )
@@ -263,7 +300,7 @@ class Orchestrator:
                         checkpoint_ref=ref,
                         executor_id=exec_id,
                         review_round=rnd,
-                        configured_reviewers=configured_reviewers,
+                        configured_reviewers=num_configured,
                         reviews=collected_reviews,
                         write_to_disk=True
                     )
@@ -326,7 +363,7 @@ class Orchestrator:
                     checkpoint_ref=ref,
                     executor_id=exec_id,
                     review_round=rnd,
-                    configured_reviewers=configured_reviewers,
+                    configured_reviewers=num_configured,
                     reviews=collected_reviews,
                     write_to_disk=False
                 )
@@ -340,15 +377,17 @@ class Orchestrator:
         if not task or AgentState(task["state"]) != AgentState.MERGING:
             return False, "Task is not in MERGING state", None
 
-        target_branch = task.get("target_branch", "main")
+        target_branch = task.get("target_branch") or self.config.get("target_branch", "main")
         ci_cmd = self.config.get("ci_gate_command")
-        req_signoff = self.config.get("require_signoff", False)
+        req_signoff = self.config.get("require_signoff", True)
+        remote_name = self.config.get("remote_name")
 
         success, msg, commit = self.merge_controller.execute_merge_pipeline(
             task_id=task_id,
             target_branch=target_branch,
             ci_gate_command=ci_cmd,
-            require_signoff=req_signoff
+            require_signoff=req_signoff,
+            remote_name=remote_name
         )
 
         if success:
@@ -373,29 +412,54 @@ class Orchestrator:
 
         ref = task.get("checkpoint_ref", "")
         rnd = task.get("review_round", 1)
+        exec_id = task.get("executor_id") or self.config.get("executor_id", "claude-code")
 
-        self.store.record_override(task_id, "HUMAN_OVERRIDE", choice.value, note)
-
-        # Synthesize final vote_result.json with human_override resolution
-        allowed_rev_ids = {r.agent_id for r in self.reviewers} if self.reviewers else None
-        collected = self.vote_aggregator.collect_reviews(ref, rnd, allowed_rev_ids)
-        self.vote_aggregator.generate_vote_result(
+        # 1. Write human override audit event
+        self.store.log_override_event(
+            task_id=task_id,
             checkpoint_ref=ref,
-            executor_id=task.get("executor_id", "cc-ds4"),
             review_round=rnd,
-            configured_reviewers=len(self.reviewers) or 2,
-            reviews=collected,
-            human_resolution=choice.value,
+            actor="human_admin",
+            action=choice.value,
+            reason=note
+        )
+
+        # 2. Map choice to target state and trigger ID
+        choice_map = {
+            OverrideChoice.FORCE_MERGE: (AgentState.MERGING, "E7", "APPROVED"),
+            OverrideChoice.FORCE_REWORK: (AgentState.REWORK, "E7", "REWORK"),
+            OverrideChoice.RETRY_REVIEW: (AgentState.WAITING_REVIEW, "E9", "RETRY_REVIEW"),
+            OverrideChoice.CANCEL: (AgentState.CANCELLED, "E10", "CANCEL")
+        }
+        target_state, trigger_id, resolution_choice = choice_map[choice]
+
+        # 3. Generate and write authoritative vote_result.json with human resolution
+        allowed_revs = set(self.config.get("reviewer_ids", []))
+        collected_reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=allowed_revs)
+        vdata = self.vote_aggregator.generate_vote_result(
+            checkpoint_ref=ref,
+            executor_id=exec_id,
+            review_round=rnd,
+            configured_reviewers=len(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"])),
+            reviews=collected_reviews,
+            human_resolution=resolution_choice,
             write_to_disk=True
         )
 
-        if choice == OverrideChoice.APPROVED:
-            return self.fsm.transition(task_id, AgentState.MERGING, "E7", {"choice": "APPROVED", "note": note})
-        elif choice == OverrideChoice.REWORK:
-            return self.fsm.transition(task_id, AgentState.REWORK, "E7", {"choice": "REWORK", "note": note})
-        elif choice == OverrideChoice.RETRY_REVIEW:
-            return self.fsm.transition(task_id, AgentState.WAITING_REVIEW, "E9", {"choice": "RETRY_REVIEW", "note": note})
-        elif choice == OverrideChoice.CANCEL:
-            return self.fsm.transition(task_id, AgentState.CANCELLED, "E10", {"choice": "CANCEL", "note": note})
-        else:
-            raise ValueError(f"Unknown override choice: {choice}")
+        # 4. Perform FSM transition
+        change = self.fsm.transition(task_id, target_state, trigger_id, vdata)
+
+        # 5. Broadcast notification
+        self.msg_bus.publish(
+            msg_type=AEPType.OVERRIDE_RESOLVED,
+            from_agent="human_admin",
+            to_agent="all",
+            payload={
+                "task_id": task_id,
+                "choice": choice.value,
+                "new_state": target_state.value,
+                "note": note
+            }
+        )
+
+        return change

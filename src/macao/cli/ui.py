@@ -101,9 +101,14 @@ def render_cli_integ_report(results: List[Dict[str, Any]]) -> None:
     for r in results:
         status = r.get("status", "UNKNOWN")
         verdict = f"[bold green]PASS[/bold green]" if status == "PASS" else f"[bold red]{status}[/bold red]"
-        spawn_str = "[green]✓ YES[/green]" if r.get("pty_spawn_ok") else "[red]✗ NO[/red]"
-        ansi_str = "[green]✓ YES[/green]" if r.get("ansi_stripped_ok") else "[yellow]—[/yellow]"
-        kill_str = "[green]✓ DEAD (0 Zombie)[/green]" if r.get("clean_kill_ok") else "[red]✗ ALIVE[/red]"
+        spawn_ok = r.get("pty_spawn", r.get("pty_spawn_ok", False))
+        ansi_ok = r.get("ansi_stripped", r.get("ansi_stripped_ok", False))
+        kill_ok = r.get("clean_kill", r.get("clean_kill_ok", False))
+
+        spawn_str = "[green]✓ YES[/green]" if spawn_ok else "[red]✗ NO[/red]"
+        ansi_str = "[green]✓ YES[/green]" if ansi_ok else "[yellow]—[/yellow]"
+        kill_str = "[green]✓ DEAD (0 Zombie)[/green]" if kill_ok else "[red]✗ ALIVE[/red]"
+        dur_str = str(r.get("duration", f"{r.get('duration_sec', 0.0)}s"))
 
         table.add_row(
             r.get("cli", ""),
@@ -111,7 +116,7 @@ def render_cli_integ_report(results: List[Dict[str, Any]]) -> None:
             spawn_str,
             ansi_str,
             kill_str,
-            f"{r.get('duration_sec', 0.0)}s",
+            dur_str,
             verdict
         )
 
@@ -130,8 +135,9 @@ def render_e2e_report(result: Dict[str, Any]) -> None:
         details = ", ".join(f"{k}={v}" for k, v in s.items() if k != "step")
         table.add_row(step_name, details, "[green]OK[/green]")
 
-    table.add_row("5. Merge Equality", f"Target HEAD ({result.get('main_head', '')[:8]}) == Checkpoint ({result.get('checkpoint_ref', '')[:8]})", "[bold green]100% MATCH[/bold green]" if result.get("merge_exact_match") else "[red]MISMATCH[/red]")
-    table.add_row("6. Physical Archive", f"Archived {len(result.get('archived_files', []))} files: {', '.join(result.get('archived_files', []))}", "[green]PERSISTED[/green]")
+    archived_count = len(result.get('archived_files', []))
+    archive_status = "[green]PERSISTED[/green]" if archived_count > 0 else "[red]EMPTY[/red]"
+    table.add_row("6. Physical Archive", f"Archived {archived_count} files: {', '.join(result.get('archived_files', []))}", archive_status)
     table.add_row("7. Final FSM State", f"Final task state: {result.get('final_state')}", f"[bold cyan]{result.get('final_state')}[/bold cyan]")
 
     console.print(table)

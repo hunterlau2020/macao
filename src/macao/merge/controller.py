@@ -1,17 +1,17 @@
-"""Merge Controller and MERGING Pipeline (PRD §14.5)."""
+"""Fast-forward Merge Controller with CI gates and Signoff verification (PRD §14.5)."""
 
+import os
 import shlex
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional
+from typing import Optional, Tuple, List, Dict, Any
 
-from macao.core.types import AgentState
 from macao.storage.store import StateStore
 from macao.utils.git_utils import GitManager
 
 
 class MergeController:
-    """Executes the merge pipeline from CONSENSUS_CHECK APPROVED to DONE (E4a/E4b)."""
+    """Controls the MERGING pipeline: signoff gate -> target branch checkout -> fast-forward -> CI gate -> push."""
 
     def __init__(self, store: StateStore, project_root: str = "."):
         self.store = store
@@ -23,19 +23,18 @@ class MergeController:
         task_id: str,
         target_branch: str = "main",
         ci_gate_command: Optional[str] = None,
-        require_signoff: bool = False,
+        require_signoff: bool = True,
         remote_name: Optional[str] = None
     ) -> Tuple[bool, str, Optional[str]]:
         """
-        Executes merge pipeline steps (PRD §14.5):
-        1. Target checkout & rebase check
-        2. Fast-forward merge
-        3. CI gate command (if configured)
-        4. Signoff check (if configured)
-        5. Push & Hard Verification: push target == checkpoint_ref (PRD P0-1)
-
-        Returns:
-            (success, message, merge_commit_sha)
+        Executes merge pipeline (PRD §14.5):
+        1. Verifies human signoff if require_signoff is True
+        2. Checks inside git work tree
+        3. Checkouts target branch
+        4. Performs git merge --ff-only <checkpoint_ref>
+        5. Runs optional ci_gate_command
+        6. Verifies exact SHA match: HEAD == checkpoint_ref
+        7. Pushes to remote if remote_name is configured
         """
         task = self.store.get_task(task_id)
         if not task:
@@ -45,18 +44,17 @@ class MergeController:
         if not checkpoint_ref:
             return False, "No checkpoint_ref attached to task", None
 
-        # Check signoff requirement
+        # Check signoff requirement (Fail-closed)
         if require_signoff:
             audits = self.store.list_audit_events(task_id, limit=50)
             signoffs = [a for a in audits if a.get("type") in ("HUMAN_MERGE_APPROVED", "MERGE_SIGNOFF_APPROVED")]
             if not signoffs:
                 return False, "Human signoff required before merge (macao merge approve)", None
 
-        # Check if in a git repository
+        # Check if in a valid git repository (Fail-closed)
         code, _, _ = self.git._run("rev-parse", "--is-inside-work-tree")
         if code != 0:
-            # Simulated environment: mock merge pipeline success
-            return True, "Simulated merge pipeline completed successfully", checkpoint_ref
+            return False, "Directory is not a valid git repository (Fail-closed)", None
 
         # 1. Checkout target branch
         code, out, err = self.git._run("checkout", target_branch)
@@ -84,15 +82,18 @@ class MergeController:
             except Exception as e:
                 return False, f"CI gate execution error: {e}", None
 
-        # 4. Hard verification: head commit == checkpoint_ref (PRD §14.5 P0-1)
+        # 4. Hard verification: head commit == full checkpoint_ref (PRD §14.5 P0-1)
         head_commit = self.git.get_head_commit()
-        if head_commit != checkpoint_ref and not head_commit.startswith(checkpoint_ref):
-            return False, f"Merge commit mismatch: HEAD ({head_commit}) != checkpoint ({checkpoint_ref})", None
+        full_checkpoint_ref = self.git.resolve_ref(checkpoint_ref) or checkpoint_ref
+        if head_commit != full_checkpoint_ref:
+            return False, f"Merge commit mismatch: HEAD ({head_commit}) != checkpoint ({full_checkpoint_ref})", None
 
         # 5. Optional remote push
         if remote_name:
-            code, out, err = self.git._run("push", remote_name, target_branch)
-            if code != 0:
-                return False, f"Git push to {remote_name}/{target_branch} failed: {err or out}", None
+            code_rem, out_rem, _ = self.git._run("remote")
+            if code_rem == 0 and remote_name in out_rem.split():
+                code, out, err = self.git._run("push", remote_name, target_branch)
+                if code != 0:
+                    return False, f"Git push to {remote_name}/{target_branch} failed: {err or out}", None
 
         return True, "Merge pipeline completed successfully", head_commit

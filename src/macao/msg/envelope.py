@@ -4,7 +4,7 @@ import uuid
 import datetime
 from typing import Dict, Any, List, Union, Tuple, Optional
 
-from macao.core.types import MessageType
+from macao.core.types import AEPType
 from macao.core.schema import validate_aep_envelope
 
 
@@ -22,18 +22,20 @@ class AEPEnvelope:
     @classmethod
     def create(
         cls,
-        msg_type: Union[MessageType, str],
+        msg_type: Union[AEPType, str],
         from_agent: str,
         to_agent: Union[str, List[str]],
         payload: Dict[str, Any],
         message_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Constructs a compliant AEP message dictionary."""
-        type_val = msg_type.value if isinstance(msg_type, MessageType) else str(msg_type)
+        """Creates a schema-compliant AEP/1.0 envelope."""
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        m_id = message_id or cls.generate_message_id()
+        type_val = msg_type.value if isinstance(msg_type, AEPType) else str(msg_type)
         msg = {
             "protocol": cls.PROTOCOL,
-            "message_id": message_id or cls.generate_message_id(),
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "message_id": m_id,
+            "timestamp": now_iso,
             "type": type_val,
             "from": from_agent,
             "to": to_agent,

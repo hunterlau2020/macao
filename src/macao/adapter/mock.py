@@ -45,57 +45,47 @@ class MockAgentAdapter(AgentAdapter):
 
     def preflight(self) -> PreflightCheckResult:
         return PreflightCheckResult(
+            agent_id=self.agent_id,
             cli_name=self.cli_name,
             installed=True,
             version="1.0.0-mock",
-            execution_mode=self.capabilities().execution_mode,
+            execution_mode=ExecutionMode.FULL if self.role == "executor" else ExecutionMode.SANDBOXED,
             auth_valid=True,
             in_matrix=True,
-            details=f"Mock {self.cli_name} adapter ready"
+            details="Mock Adapter initialized for testing"
         )
 
     def start(self) -> bool:
         self.is_running = True
-        self.logs.append(f"[Mock] {self.agent_id} started session.")
         return True
 
     def stop(self, reason: str = "normal") -> bool:
         self.is_running = False
-        self.logs.append(f"[Mock] {self.agent_id} stopped: {reason}")
         return True
 
     def inject_task(self, task_payload: Dict[str, Any]) -> bool:
         self.injected_tasks.append(task_payload)
-        self.logs.append(f"[Mock] {self.agent_id} received task: {task_payload.get('task_description', '')}")
-
         if self.behavior_fn:
             self.behavior_fn(self, task_payload)
         return True
 
     def ack(self, message_id: str) -> bool:
-        self.logs.append(f"[Mock] {self.agent_id} acked message: {message_id}")
+        """AEP message acknowledgment."""
         return True
 
-    def cancel(self, reason: str = "user_cancel") -> bool:
-        return self.stop(reason)
-
-    def get_logs(self, tail_lines: int = 300) -> str:
-        return "\n".join(self.logs[-tail_lines:])
-
-    # --- Simulation Helpers ---
     def simulate_produce_dev_manifest(
         self,
         project_root: str,
         commit_sha: str,
         review_round: int = 1,
-        description: str = "Simulated development changes"
+        tests_passed: bool = True
     ) -> Path:
         """Simulates Executor generating .macao/.dev.yml."""
         out_dir = Path(project_root) / ".macao"
         out_dir.mkdir(parents=True, exist_ok=True)
         dev_file = out_dir / ".dev.yml"
 
-        data = {
+        data: Dict[str, Any] = {
             "version": "1.0",
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "executor": {
@@ -104,12 +94,10 @@ class MockAgentAdapter(AgentAdapter):
                 "cli": self.cli_name
             },
             "development": {
-                "description": description,
-                "artifacts": [{"path": "src/module.py"}],
+                "description": "Simulated development output",
+                "artifacts": [{"path": "src/main.py"}],
                 "quality_metrics": {
-                    "tests_passed": True,
-                    "tests_exempt": False,
-                    "coverage_delta": "+2.5%"
+                    "tests_passed": tests_passed
                 },
                 "git": {
                     "latest_commit": commit_sha
@@ -135,12 +123,14 @@ class MockAgentAdapter(AgentAdapter):
         review_round: int = 1,
         vote: Vote = Vote.YES_APPROVE,
         opinion_status: OpinionStatus = OpinionStatus.APPROVED,
-        issues: Optional[List[Dict[str, Any]]] = None
+        issues: Optional[List[Dict[str, Any]]] = None,
+        filename: Optional[str] = None
     ) -> Path:
         """Simulates Reviewer generating .macao/.reviews/<id>.review.yml."""
         out_dir = Path(project_root) / ".macao" / ".reviews"
         out_dir.mkdir(parents=True, exist_ok=True)
-        rev_file = out_dir / f"{self.agent_id}.review.yml"
+        file_name = filename or f"{self.agent_id}.review.yml"
+        rev_file = out_dir / file_name
 
         data: Dict[str, Any] = {
             "version": "1.0",

@@ -48,7 +48,48 @@ class ConfigManager:
 
         self.data = content
         self.is_loaded = True
-        return self.data
+        return self.to_runtime_config()
+
+    def to_runtime_config(self) -> Dict[str, Any]:
+        """
+        Produces a normalized, fail-safe runtime configuration dictionary
+        supporting both nested schema access and normalized runtime keys.
+        """
+        policy = self.data.get("policy", {})
+        merge_policy = self.data.get("merge", {})
+        team = self.data.get("team", {})
+        repo = self.data.get("project", {}).get("repository", {})
+
+        reviewers = team.get("reviewers", [
+            {"id": "codex", "cli": "codex", "adapter": "pty-wrapper"},
+            {"id": "opencode", "cli": "opencode", "adapter": "pty-wrapper"},
+            {"id": "antigravity", "cli": "agy", "adapter": "pty-wrapper"}
+        ])
+        reviewer_ids = [r["id"] for r in reviewers] if reviewers else ["codex", "opencode", "antigravity"]
+
+        return {
+            # Raw schema hierarchy
+            "project": self.data.get("project", {}),
+            "team": team,
+            "policy": policy,
+            "merge": merge_policy,
+            "timeouts": self.data.get("timeouts", {}),
+            "security": self.data.get("security", {}),
+
+            # Normalized runtime keys for orchestrator & merge controller
+            "max_rework_rounds": policy.get("max_rework_rounds", 3),
+            "min_effective_votes": policy.get("min_effective_votes", len(reviewer_ids)),
+            "require_signoff": merge_policy.get("require_human_signoff", True),
+            "ci_gate_command": merge_policy.get("ci_gate_command"),
+            "strategy": merge_policy.get("strategy", "ff_only"),
+            "rebase_before_merge": merge_policy.get("rebase_before_merge", False),
+            "remote_name": repo.get("remote_name", "origin"),
+            "target_branch": repo.get("default_branch", "main"),
+            "executor_id": team.get("executor", {}).get("id", "claude-code"),
+            "executor_config": team.get("executor", {"id": "claude-code", "cli": "claude-code", "adapter": "claude-hook"}),
+            "reviewers": reviewers,
+            "reviewer_ids": reviewer_ids
+        }
 
     @classmethod
     def load_config(cls, config_path: str = DEFAULT_CONFIG_FILENAME) -> Dict[str, Any]:
@@ -73,13 +114,14 @@ class ConfigManager:
 
     @property
     def executor_config(self) -> Dict[str, Any]:
-        return self.data.get("team", {}).get("executor", {"id": "cc-ds4", "cli": "claude-code", "adapter": "claude-hook"})
+        return self.data.get("team", {}).get("executor", {"id": "claude-code", "cli": "claude-code", "adapter": "claude-hook"})
 
     @property
     def reviewers_config(self) -> List[Dict[str, Any]]:
         return self.data.get("team", {}).get("reviewers", [
-            {"id": "cc-glm", "cli": "codex", "adapter": "pty-wrapper"},
-            {"id": "kimi", "cli": "kimi", "adapter": "pty-wrapper"}
+            {"id": "codex", "cli": "codex", "adapter": "pty-wrapper"},
+            {"id": "opencode", "cli": "opencode", "adapter": "pty-wrapper"},
+            {"id": "antigravity", "cli": "agy", "adapter": "pty-wrapper"}
         ])
 
     @property

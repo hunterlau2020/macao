@@ -10,17 +10,19 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from macao.core.config import ConfigManager
-from macao.core.types import AgentState, Decision, Vote, OpinionStatus
+from macao.core.types import AgentState, Decision, Vote, OpinionStatus, ExecutionMode
 from macao.storage.store import StateStore
 from macao.workflow.orchestrator import Orchestrator
+from macao.adapter.mock import MockAgentAdapter
 from macao.utils.git_utils import GitManager
 
 
 class ControlledE2ERunner:
-    """Executes a full end-to-end micro-task collaboration workflow."""
+    """Executes a full end-to-end micro-task collaboration simulation workflow."""
 
     def __init__(self, base_dir: Optional[str] = None):
         self.temp_dir: Optional[str] = None
+        self.remote_dir: Optional[Path] = None
         if base_dir:
             self.repo_dir = Path(base_dir).resolve()
         else:
@@ -31,7 +33,7 @@ class ControlledE2ERunner:
         self.config: Dict[str, Any] = {}
 
     def setup_repo(self) -> None:
-        """Initializes a clean Git repository with target branch 'main'."""
+        """Initializes a clean Git repository with target branch 'main' and bare remote 'origin'."""
         self.repo_dir.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init", "-b", "main"], cwd=str(self.repo_dir), check=True, capture_output=True)
         subprocess.run(["git", "config", "user.name", "MACAO Bot"], cwd=str(self.repo_dir), check=True)
@@ -84,6 +86,13 @@ merge:
         subprocess.run(["git", "add", "README.md", ".gitignore", "macao.yaml"], cwd=str(self.repo_dir), check=True)
         subprocess.run(["git", "commit", "-m", "chore: initial repository structure and configuration"], cwd=str(self.repo_dir), check=True)
 
+        # Setup local bare remote 'origin' for testing push verification
+        remote_tmp = tempfile.mkdtemp(prefix="macao_remote_origin_")
+        self.remote_dir = Path(remote_tmp).resolve()
+        subprocess.run(["git", "init", "--bare", "-b", "main"], cwd=str(self.remote_dir), check=True, capture_output=True)
+        subprocess.run(["git", "remote", "add", "origin", str(self.remote_dir)], cwd=str(self.repo_dir), check=True)
+        subprocess.run(["git", "push", "-u", "origin", "main"], cwd=str(self.repo_dir), check=True, capture_output=True)
+
         self.config = ConfigManager.load_config(str(self.repo_dir / "macao.yaml"))
 
     def run_e2e_cycle(self) -> Dict[str, Any]:
@@ -92,7 +101,25 @@ merge:
             self.setup_repo()
 
         steps_log: List[Dict[str, Any]] = []
-        orchestrator = Orchestrator(project_root=str(self.repo_dir), config=self.config)
+
+        # Instantiate real/mock adapters injected from configuration
+        executor_adapter = MockAgentAdapter(
+            agent_id="claude-code",
+            cli_name="claude-code",
+            role="executor"
+        )
+        reviewer_adapters = [
+            MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer"),
+            MockAgentAdapter(agent_id="opencode", cli_name="opencode", role="reviewer"),
+            MockAgentAdapter(agent_id="antigravity", cli_name="agy", role="reviewer")
+        ]
+
+        orchestrator = Orchestrator(
+            project_root=str(self.repo_dir),
+            config=self.config,
+            executor_adapter=executor_adapter,
+            reviewer_adapters=reviewer_adapters
+        )
 
         # 1. Start Task
         task_data = orchestrator.start_task(
@@ -178,12 +205,12 @@ merge:
             "checkpoint_ref": checkpoint_ref[:8]
         })
 
-        # 4. Dispatch Review Requests (creates 3 isolated worktrees)
+        # 4. Dispatch Review Requests (creates 3 isolated worktrees for configured reviewers)
         change_dispatch = orchestrator.dispatch_review_requests(task_id)
         if change_dispatch is None:
             raise RuntimeError("dispatch_review_requests failed to transition to WAITING_REVIEW")
 
-        reviewers = ["codex", "opencode", "antigravity"]
+        reviewers = [r.agent_id for r in reviewer_adapters]
         steps_log.append({
             "step": "3. Worktree Dispatch",
             "state": change_dispatch.to_state.value,
@@ -191,7 +218,7 @@ merge:
             "reviewers": reviewers
         })
 
-        # 5. Reviewers generate reviews in isolated worktrees
+        # 5. Reviewers generate reviews in their isolated worktrees
         reviews_dir = macao_dir / ".reviews"
         reviews_dir.mkdir(parents=True, exist_ok=True)
 
@@ -213,17 +240,20 @@ merge:
                 yaml.safe_dump(rev_manifest, f)
 
         # 6. Collect Consensus
-        change2, vdata = orchestrator.collect_and_evaluate_consensus(task_id, configured_reviewers=3)
+        change2, vdata = orchestrator.collect_and_evaluate_consensus(task_id, configured_reviewers=len(reviewers))
         if change2 is None or vdata is None:
             raise RuntimeError("collect_and_evaluate_consensus failed to reach consensus")
 
         breakdown = vdata.get("vote_breakdown", {})
+        approve_count = breakdown.get("approve", breakdown.get("yes_approve", 0))
+        effective_count = breakdown.get("effective_votes", approve_count)
+
         steps_log.append({
             "step": "4. Consensus Evaluation",
             "decision": vdata.get("decision"),
             "state": change2.to_state.value,
-            "votes_yes": breakdown.get("yes_approve", 0),
-            "effective_votes": breakdown.get("effective_votes", 0),
+            "votes_yes": approve_count,
+            "effective_votes": effective_count,
             "confidence": vdata.get("decision_confidence", 1.0)
         })
 
@@ -245,8 +275,8 @@ merge:
         main_head = res_main.stdout.strip()
         merge_exact_match = (main_head == checkpoint_ref)
 
-        # Check physical archive
-        archive_dir = macao_dir / "archive" / task_id / "r1"
+        # Check physical archive in .macao/archive/<checkpoint_ref>/r1/
+        archive_dir = macao_dir / "archive" / checkpoint_ref / "r1"
         archived_files = [f.name for f in archive_dir.glob("*")] if archive_dir.exists() else []
 
         return {
@@ -258,9 +288,12 @@ merge:
             "decision": vdata.get("decision"),
             "steps": steps_log,
             "archived_files": archived_files,
-            "status": "PASS" if (change_merge.to_state == AgentState.DONE and merge_exact_match) else "FAIL"
+            "archived_count": len(archived_files),
+            "status": "PASS" if (change_merge.to_state == AgentState.DONE and merge_exact_match and len(archived_files) > 0) else "FAIL"
         }
 
     def cleanup(self) -> None:
         if self.temp_dir and Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir, ignore_errors=True)
+        if self.remote_dir and Path(self.remote_dir).exists():
+            shutil.rmtree(self.remote_dir, ignore_errors=True)

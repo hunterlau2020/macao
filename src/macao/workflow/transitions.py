@@ -14,7 +14,7 @@ class TransitionTable:
         active_states = {
             AgentState.IDLE, AgentState.CODING, AgentState.READY_FOR_REVIEW,
             AgentState.WAITING_REVIEW, AgentState.CONSENSUS_CHECK,
-            AgentState.MERGING, AgentState.REWORK, AgentState.UNKNOWN
+            AgentState.MERGING, AgentState.REWORK, AgentState.HUMAN_OVERRIDE
         }
 
         valid_transitions = {
@@ -28,7 +28,7 @@ class TransitionTable:
             "E5": (AgentState.CONSENSUS_CHECK, AgentState.REWORK),
             "E6": (AgentState.REWORK, AgentState.READY_FOR_REVIEW),
             "E7": (AgentState.CONSENSUS_CHECK, None), # Overrides can route to MERGING, REWORK, WAITING_REVIEW, CANCELLED
-            "E8": (None, AgentState.UNKNOWN),         # From any active non-terminal state to UNKNOWN
+            "E8": (None, AgentState.HUMAN_OVERRIDE),  # From any active non-terminal state to HUMAN_OVERRIDE
             "E9": (AgentState.CONSENSUS_CHECK, AgentState.WAITING_REVIEW), # Retry review round
             "E10": (None, AgentState.CANCELLED),      # From any active non-terminal state to CANCELLED
         }

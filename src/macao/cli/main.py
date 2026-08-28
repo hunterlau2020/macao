@@ -84,14 +84,11 @@ audit:
 
 
 def get_orchestrator(project_root: str = ".") -> Orchestrator:
-    """Composition Root: Load configuration from macao.yaml and inject into Orchestrator."""
+    """Composition Root: Load configuration from macao.yaml and inject into Orchestrator (Fail-closed)."""
     config_dict = None
     cfg_file = Path(project_root) / "macao.yaml"
     if cfg_file.exists():
-        try:
-            config_dict = ConfigManager.load_config(str(cfg_file))
-        except Exception:
-            pass
+        config_dict = ConfigManager.load_config(str(cfg_file))
 
     return Orchestrator(
         project_root=project_root,
@@ -319,7 +316,7 @@ def merge_approve(note: str):
 @click.option("--cli", "target_cli", default="all", help="Target CLI to test (claude, codex, opencode, agy, all)")
 def test_clis(target_cli: str):
     """Run controlled real CLI PTY spawn, ANSI strip, and process termination tests."""
-    from macao.adapter.integ_harness import verify_all_clis, verify_single_cli_pty
+    from macao.adapter.integ_harness import verify_all_configured_clis as verify_all_clis, verify_single_cli_pty
     from macao.cli.ui import render_cli_integ_report
 
     print_banner()

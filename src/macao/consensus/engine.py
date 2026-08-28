@@ -1,29 +1,29 @@
-"""Consensus Engine: 2/3 Majority + Minimum Quorum Decision Logic (PRD §2.3)."""
+"""MACAO Consensus Engine: 2/3 Majority Voting Rule (PRD §2.3)."""
 
 import math
 from typing import List, Dict, Any, Tuple
-from macao.core.types import Vote, Decision, Resolution
+from macao.core.types import Decision, Vote
 
 
 class ConsensusEngine:
-    """Calculates consensus decisions based on collected Reviewer votes."""
+    """Calculates quorum and applies 2/3 majority arbitration logic."""
 
-    @staticmethod
-    def calculate_minimum_quorum(configured_reviewers: int) -> int:
-        """minimum_quorum = ceil(2 * configured_reviewers / 3)."""
-        return math.ceil(2 * configured_reviewers / 3)
+    @classmethod
+    def calculate_minimum_quorum(cls, total_reviewers: int) -> int:
+        """PRD §2.3 / §11.2: Minimum quorum = ceil(2 * N / 3), at least 2."""
+        if total_reviewers <= 0:
+            return 2
+        return max(2, math.ceil(2 * total_reviewers / 3))
 
     @classmethod
     def evaluate(
         cls,
         votes: List[Dict[str, Any]],
         configured_reviewers: int = 2
-    ) -> Tuple[Decision, Dict[str, int], float]:
+    ) -> Tuple[Decision, Dict[str, Any], float]:
         """
-        Evaluates votes against the 2/3 consensus rules.
-
-        Returns:
-            (Decision, vote_breakdown, confidence)
+        Evaluates list of votes and returns:
+            (Decision, vote_breakdown_dict, confidence_score)
         """
         approve_count = 0
         reject_count = 0
@@ -43,7 +43,11 @@ class ConsensusEngine:
         breakdown = {
             "approve": approve_count,
             "reject": reject_count,
-            "abstain": abstain_count
+            "abstain": abstain_count,
+            "effective_votes": effective_votes,
+            "effective_rate": round(effective_votes / configured_reviewers, 2) if configured_reviewers > 0 else 1.0,
+            "yes_approve": approve_count,
+            "no_approve": reject_count
         }
 
         # Rule 1: Effective votes must be >= minimum quorum
