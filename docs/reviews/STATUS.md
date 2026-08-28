@@ -3,7 +3,7 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-08-29（claude 完成对 `e7ba2d2` 整改复审申请的独立复审，STATUS 同步登记 1/4 份；zcode/codex/qwen 待补）
+- **最新更新时间**：2026-08-29（zcode 补齐对 `e7ba2d2` 的独立复核：未通过但方向积极——新 P0 双重复现坐实；3/4 份已提交，codex 待补）
 - **当前申请对象**：自 `2026-08-28-review-request-Phase1-Phase2-Integration.md` 后的配置穿透修复、Adapter 真实注入、Fail-closed 合并与 Worktree 门禁、归档物理路径修正与 38 项全量自动化测试
 - **当前定级状态**：**L2 SPEC-CODE-ALIGNED / PG-1，但 PG-1 状态本身待重新确认**——claude 独立复审确认申请文档所列 11 项 P0/P1/P2（`906b17e` 轮）**全部真实闭环**，但同时独立发现 **1 项新 P0**（`message_id` 生成碰撞导致 `message_queue` 主键冲突，详见下方"本轮新发现"），使当前 commit 未必满足 PG-1 "P0/P1 为零"门槛（`MACAO_REVIEW_GUIDELINES.md` §71）。L3/PG-2 **未获 claude 批准**；zcode/codex/qwen 复审结论待补齐后方可形成委员会最终结论。
 - **历史文档定级**：PRD **v2.3.1**（§3.2 Layer 1c 四值终局分支已单点闭环修复，达到 L1 DOC-ALIGNED / PG-0）
@@ -24,7 +24,7 @@
 | 2026-08-27 | `2026-08-27-review-request-Phase0-Phase1-Code.md` | `d137a05` .. `435eeea` | L2 / PG-1 | `2026-08-27-review-result-435eeea-claude.md`<br>`2026-08-27-review-result-435eeea-codex.md`<br>`2026-08-27-review-result-435eeea-zcode.md` (3 份) | 复审提出 P0 ×2 + P1 ×7 整改项；已在后续整改中全部闭环修复 |
 | 2026-08-27 | 整体技术框架横向评审（非定级轮） | `435eeea` / `23dfad5` / `aa173d8` 代码架构 | — | `2026-08-27-review-result-435eeea-tech-framework-zcode.md`<br>`2026-08-27-review-result-23dfad5-tech-framework-claude.md`<br>`2026-08-27-review-result-23dfad5-codex-framework.md`<br>`2026-08-27-review-result-aa173d8-tech-framework-qwen.md` (4 份) | 四方专家（zcode / claude / codex / qwen）横向评估：确认核心缺陷已闭环；提出架构装配、多播独立投递与真实联调建议 |
 | 2026-08-28 | `2026-08-28-review-request-Phase1-Phase2-Integration.md` | `aa173d8` .. `906b17e` | L3 / PG-2 | `2026-08-28-review-result-906b17e-zcode.md`<br>`2026-08-28-review-result-906b17e-claude.md`<br>`2026-08-28-review-result-906b17e-codex.md`<br>`2026-08-28-review-result-906b17e-integration-qwen.md` (4 份) | **四方专家一致判定：未达 L3 SCENARIO-VERIFIED / PG-2，维持 L2/PG-1**；提出 P0×3 + P1×6 整改项；**已在本次整改中全部闭环修复并通过 38 项回归测试**。 |
-| **2026-08-29** | **`2026-08-29-review-request-Phase1-Phase2-Rectification.md`** | **`906b17e` .. `e7ba2d2`** | **L3 / PG-2** | `2026-08-29-review-result-e7ba2d2-claude.md`（1/4，已提交）<br>zcode / codex / qwen（待提交） | **claude：未通过**——申请所列 11 项 P0/P1/P2 全部确认闭环，但独立新发现 1 项 P0（`message_id` 碰撞，见下方"本轮新发现"）；**委员会结论待 zcode/codex/qwen 补齐后形成** |
+| **2026-08-29** | **`2026-08-29-review-request-Phase1-Phase2-Rectification.md`** | **`906b17e` .. `e7ba2d2`** | **L3 / PG-2** | `2026-08-29-review-result-e7ba2d2-claude.md`<br>`2026-08-29-review-result-e7ba2d2-rectification-qwen.md`<br>`2026-08-29-review-result-e7ba2d2-zcode.md`（3/4，已提交）<br>codex（待提交） | **claude：未通过（新 P0 message_id 碰撞）；qwen：支持授予；zcode：未通过但方向积极**——申请 11 项整改经三方独立复验全部属实关闭；zcode 独立双重复现 claude 新 P0（20 万样本仿真两两碰撞 2.64e-4 + 真实 `MessageBus.publish` 第 129 条触发主键 IntegrityError），单独阻断 PG-2/PG-1；**修复该单点并补齐超时场景后 zcode 支持授予 L3**；委员会终局结论待 codex 补齐后形成 |
 
 ---
 
