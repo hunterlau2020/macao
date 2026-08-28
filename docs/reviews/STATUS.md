@@ -3,7 +3,7 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-08-29（四方独立专家针对 `e7ba2d2` 提出的 P0-NEW-1 ~ P0-NEW-4 及 P1 全部闭环整改完毕，提交新一轮 L3/PG-2 复审申请，完成 100% 全量对账）
+- **最新更新时间**：2026-08-29（zcode 完成对 L3 终局整改（`4df059e`）的独立复核：4 项 P0-NEW 全部关闭、唯一阻断为超时场景证据缺失；1/4 份已提交，claude/codex/qwen 待补）
 - **当前申请对象**：自 `2026-08-29-review-request-Phase1-Phase2-Rectification.md`（`e7ba2d2`）后的 `message_id` 16 位高熵防碰撞、AEP Schema 与 PRD 10 状态/7 类型对齐、人工裁定 4 选项连通、MergeController CI 失败原子回滚与配置远端 Fail-closed、Mock Adapter 契约消费全生命周期驱动、Worktree 事务性准备与 43 项全量自动化测试
 - **当前定级状态**：**已提交 L3 SCENARIO-VERIFIED / PG-2 复审申请（待四方专家复核确认）**
   - **整改闭环**：四方专家针对 `e7ba2d2` 提出的 4 项新阻断项（`message_id` 碰撞、AEP 协议与人工裁定断裂、CI 门禁原子回滚、Mock Adapter 契约消费驱动）全部实施精准单点修复并通过回归测试；
@@ -27,7 +27,7 @@
 | 2026-08-27 | 整体技术框架横向评审（非定级轮） | `435eeea` / `23dfad5` / `aa173d8` 代码架构 | — | `2026-08-27-review-result-435eeea-tech-framework-zcode.md`<br>`2026-08-27-review-result-23dfad5-tech-framework-claude.md`<br>`2026-08-27-review-result-23dfad5-codex-framework.md`<br>`2026-08-27-review-result-aa173d8-tech-framework-qwen.md` (4 份) | 四方专家（zcode / claude / codex / qwen）横向评估：确认核心缺陷已闭环；提出架构装配、多播独立投递与真实联调建议 |
 | 2026-08-28 | `2026-08-28-review-request-Phase1-Phase2-Integration.md` | `aa173d8` .. `906b17e` | L3 / PG-2 | `2026-08-28-review-result-906b17e-zcode.md`<br>`2026-08-28-review-result-906b17e-claude.md`<br>`2026-08-28-review-result-906b17e-codex.md`<br>`2026-08-28-review-result-906b17e-integration-qwen.md` (4 份) | 四方专家一致判定：未达 L3，维持 L2/PG-1；提出 11 项整改项；已在 e7ba2d2 中闭环修复。 |
 | 2026-08-29 | `2026-08-29-review-request-Phase1-Phase2-Rectification.md` | `906b17e` .. `e7ba2d2` | L3 / PG-2 | `2026-08-29-review-result-e7ba2d2-claude.md`<br>`2026-08-29-review-result-e7ba2d2-rectification-qwen.md`<br>`2026-08-29-review-result-e7ba2d2-zcode.md`<br>`2026-08-29-review-result-e7ba2d2-codex.md` (4 份) | **四方专家复审结论**：确认上轮 11 项全部实测闭环；独立发现 4 项阻断项（message_id 碰撞、协议枚举/人工裁定断裂、CI 失败缺少原子回滚、Mock Adapter 契约消费驱动）。 |
-| **2026-08-29** | **`2026-08-29-review-request-L3-Final-Rectification.md`** | **`e7ba2d2` .. HEAD** | **L3 / PG-2** | 专家复核中（待评） | **已完成本轮 4 项阻断项与 P1 问题精准闭环**：<br>1. `message_id` 升级为 16 位高熵随机数（0 碰撞，5000 次采样验证）；<br>2. 恢复 PRD 10 状态与 Schema 7 种 AEP 类型，规范 `OverrideChoice`，4 种人工裁定 100% 连通并通过 Schema 校验；<br>3. `MergeController` 增加 CI 失败原子硬回滚与配置远端 Fail-closed 检查；<br>4. Mock Adapter 契约全生命周期驱动与 Worktree 事务性准备；<br>5. 43/43 测试全绿（5 轮连续回归 0 flake）。 |
+| **2026-08-29** | **`2026-08-29-review-request-L3-Final-Rectification.md`** | **`e7ba2d2` .. `4df059e`** | **L3 / PG-2** | `2026-08-29-review-result-4df059e-zcode.md`（1/4，已提交）<br>claude / codex / qwen（待提交） | **zcode：不予 L3——差一步**。4 项 P0-NEW 整改独立复验全部真实关闭（message_id 500/500 publish 零碰撞复测归零、协议枚举恢复+四分支裁定 Schema 校验、merge 原子回滚五处一致、Adapter 契约驱动+事务性分发；6×43/43 全绿 0 flake）；**唯一阻断 = L3 判据明列的"超时"场景零证据**（tests/ 零覆盖、无时钟机制；zcode 与 codex 上轮报告均明示为授予条件，本轮申请未含）；新登记 P2×2（`vote.py` 校验移至写盘后的顺序回归、qwen R1 非法 human_resolution→APPROVED 第三轮未修）+ P3×2；**补齐超时证据后 zcode 支持授予 L3/PG-2** |
 
 ---
 
