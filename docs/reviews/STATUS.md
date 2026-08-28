@@ -3,15 +3,15 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-08-28（完成 4 位专家评审意见全面整改，38/38 测试全绿）
+- **最新更新时间**：2026-08-29（正式提交 `e7ba2d2` 专家整改复审申请，申请 L3 / PG-2 门禁准入）
 - **当前申请对象**：自 `2026-08-28-review-request-Phase1-Phase2-Integration.md` 后的配置穿透修复、Adapter 真实注入、Fail-closed 合并与 Worktree 门禁、归档物理路径修正与 38 项全量自动化测试
-- **当前定级状态**：**L2 SPEC-CODE-ALIGNED / PG-1（已闭环全部 906b17e 专家整改项，38/38 PASS）**
+- **当前定级状态**：**L2 SPEC-CODE-ALIGNED / PG-1（已闭环全部 906b17e 专家整改项，38/38 PASS，提请复审 L3/PG-2）**
 - **历史文档定级**：PRD **v2.3.1**（§3.2 Layer 1c 四值终局分支已单点闭环修复，达到 L1 DOC-ALIGNED / PG-0）
 - **当前代码机验**：`PYTHONPATH=src python3 -m unittest discover tests -v` **38 ran / 38 PASS (100%)**；`e2e-run` / `test-clis` / `doctor` / `preflight` / `git diff --check` **全部 clean PASS**。
 
 ---
 
-## 评审申请记录全量对账表 (Review Registry - 31 份历史与当前评审报告 + 4 份申请全量对账)
+## 评审申请记录全量对账表 (Review Registry - 31 份历史与当前评审报告 + 5 份申请全量对账)
 
 | 申请日期 | 申请文件 / 历史轮次 | 待审对象 / Commit | 目标等级 | 评审专家与文件清单 | 结论与状态 |
 |---|---|---|---|---|---|
@@ -23,7 +23,8 @@
 | 2026-08-26 | `2026-08-26-review-request-PRD-v2.3.1.md` | `403ddc7` (PRD v2.3.1) | L1 / PG-0 | `2026-08-26-review-result-403ddc7-claude.md`<br>`2026-08-27-review-result-403ddc7-codex.md`<br>`2026-08-27-review-result-403ddc7-zcode.md` (3 份) | 上轮 2 P0 + 3 P1 全部 VERIFIED；新增 P1（§3.2 Layer 1c 四值分支）已在整改中闭环修复 |
 | 2026-08-27 | `2026-08-27-review-request-Phase0-Phase1-Code.md` | `d137a05` .. `435eeea` | L2 / PG-1 | `2026-08-27-review-result-435eeea-claude.md`<br>`2026-08-27-review-result-435eeea-codex.md`<br>`2026-08-27-review-result-435eeea-zcode.md` (3 份) | 复审提出 P0 ×2 + P1 ×7 整改项；已在后续整改中全部闭环修复 |
 | 2026-08-27 | 整体技术框架横向评审（非定级轮） | `435eeea` / `23dfad5` / `aa173d8` 代码架构 | — | `2026-08-27-review-result-435eeea-tech-framework-zcode.md`<br>`2026-08-27-review-result-23dfad5-tech-framework-claude.md`<br>`2026-08-27-review-result-23dfad5-codex-framework.md`<br>`2026-08-27-review-result-aa173d8-tech-framework-qwen.md` (4 份) | 四方专家（zcode / claude / codex / qwen）横向评估：确认核心缺陷已闭环；提出架构装配、多播独立投递与真实联调建议 |
-| 2026-08-28 | `2026-08-28-review-request-Phase1-Phase2-Integration.md` | `aa173d8` .. `906b17e` | **L3 / PG-2** | `2026-08-28-review-result-906b17e-zcode.md`<br>`2026-08-28-review-result-906b17e-claude.md`<br>`2026-08-28-review-result-906b17e-codex.md`<br>`2026-08-28-review-result-906b17e-integration-qwen.md` (4 份) | **四方专家一致判定：未达 L3 SCENARIO-VERIFIED / PG-2，维持 L2/PG-1**；提出 P0×3 + P1×6 整改项；**已在本次整改中全部闭环修复并通过 38 项回归测试**。 |
+| 2026-08-28 | `2026-08-28-review-request-Phase1-Phase2-Integration.md` | `aa173d8` .. `906b17e` | L3 / PG-2 | `2026-08-28-review-result-906b17e-zcode.md`<br>`2026-08-28-review-result-906b17e-claude.md`<br>`2026-08-28-review-result-906b17e-codex.md`<br>`2026-08-28-review-result-906b17e-integration-qwen.md` (4 份) | **四方专家一致判定：未达 L3 SCENARIO-VERIFIED / PG-2，维持 L2/PG-1**；提出 P0×3 + P1×6 整改项；**已在本次整改中全部闭环修复并通过 38 项回归测试**。 |
+| **2026-08-29** | **`2026-08-29-review-request-Phase1-Phase2-Rectification.md`** | **`906b17e` .. `e7ba2d2`** | **L3 / PG-2** | **提请 zcode / claude / codex / qwen 四方独立专家复审** | **待复审 (Pending Review on e7ba2d2)** |
 
 ---
 
@@ -46,5 +47,5 @@
 
 ## 下一步行动
 
-1. 提交全部整改代码与新增回归测试套件；
-2. 保持 L2 / PG-1 严谨门禁标准，推送到远程仓库。
+1. 组织 zcode、claude、codex、qwen 四方独立专家针对 `e7ba2d2` 开展 L3 / PG-2 复审；
+2. 依据专家反馈继续推进 Phase 3 真实业务任务驱动与生产级 TUI 建设。
