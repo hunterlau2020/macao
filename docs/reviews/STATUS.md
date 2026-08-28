@@ -3,15 +3,15 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-08-28（提请第一/二阶段受控联调与架构装配 L3/PG-2 独立评审，34/34 测试全绿）
+- **最新更新时间**：2026-08-28（四方独立专家针对 906b17e 集成申请出具评审报告，全量对账完成）
 - **当前申请对象**：自 `2026-08-27-review-request-Phase0-Phase1-Code.md` 与技术框架横向评审（`aa173d8`）以来的架构装配、4 款真实 AI CLI 适配器矩阵、第一阶段 PTY 联调 Harness、第二阶段端到端协同闭环与全套自动化测试
-- **当前目标等级**：**L3 INTEGRATED / PG-2 门禁准入**（在 L2 SPEC-CODE-ALIGNED / PG-1 基础上，完成真实 CLI PTY 生命周期与微任务端到端协同流转闭环）
+- **当前定级状态**：**维持 L2 SPEC-CODE-ALIGNED / PG-1（未达 L3 SCENARIO-VERIFIED / PG-2）**；四方专家一致指出：配置注入键路径断裂致 signoff 绕过、E2E Runner 伪造产物未注入真实 Adapter、展示字段与底层断裂、Worktree 降级与沙箱边界需系统性整改
 - **历史文档定级**：PRD **v2.3.1**（§3.2 Layer 1c 四值终局分支已单点闭环修复，达到 L1 DOC-ALIGNED / PG-0）
-- **当前代码机验**：`PYTHONPATH=src python3 -m unittest discover tests -v` **34 ran / 34 PASS (100%)**；`e2e-run` / `test-clis` / `doctor` / `preflight` / `git diff --check` **全部 clean PASS**。
+- **当前代码机验**：`PYTHONPATH=src python3 -m unittest discover tests -v` **34 ran / 34 PASS (100%)**；`test-clis` / `doctor` / `preflight` / `git diff --check` **全部 clean PASS**。
 
 ---
 
-## 评审申请记录全量对账表 (Review Registry - 27 份历史评审报告 + 4 份申请全量对账)
+## 评审申请记录全量对账表 (Review Registry - 31 份历史与当前评审报告 + 4 份申请全量对账)
 
 | 申请日期 | 申请文件 / 历史轮次 | 待审对象 / Commit | 目标等级 | 评审专家与文件清单 | 结论与状态 |
 |---|---|---|---|---|---|
@@ -23,25 +23,23 @@
 | 2026-08-26 | `2026-08-26-review-request-PRD-v2.3.1.md` | `403ddc7` (PRD v2.3.1) | L1 / PG-0 | `2026-08-26-review-result-403ddc7-claude.md`<br>`2026-08-27-review-result-403ddc7-codex.md`<br>`2026-08-27-review-result-403ddc7-zcode.md` (3 份) | 上轮 2 P0 + 3 P1 全部 VERIFIED；新增 P1（§3.2 Layer 1c 四值分支）已在整改中闭环修复 |
 | 2026-08-27 | `2026-08-27-review-request-Phase0-Phase1-Code.md` | `d137a05` .. `435eeea` | L2 / PG-1 | `2026-08-27-review-result-435eeea-claude.md`<br>`2026-08-27-review-result-435eeea-codex.md`<br>`2026-08-27-review-result-435eeea-zcode.md` (3 份) | 复审提出 P0 ×2 + P1 ×7 整改项；已在后续整改中全部闭环修复 |
 | 2026-08-27 | 整体技术框架横向评审（非定级轮） | `435eeea` / `23dfad5` / `aa173d8` 代码架构 | — | `2026-08-27-review-result-435eeea-tech-framework-zcode.md`<br>`2026-08-27-review-result-23dfad5-tech-framework-claude.md`<br>`2026-08-27-review-result-23dfad5-codex-framework.md`<br>`2026-08-27-review-result-aa173d8-tech-framework-qwen.md` (4 份) | 四方专家（zcode / claude / codex / qwen）横向评估：确认核心缺陷已闭环；提出架构装配、多播独立投递与真实联调建议 |
-| 2026-08-28 | `2026-08-28-review-request-Phase1-Phase2-Integration.md` | `aa173d8` .. `906b17e` | **L3 / PG-2** | `2026-08-28-review-result-906b17e-zcode.md`（1/4 份；claude/codex/qwen 待出） | **zcode 独立复审：未达 L3/PG-2，维持 L2/PG-1**——P0 ×2（配置注入键路径断裂致 `require_human_signoff` 静默失效；申请粘贴的 e2e 报告数值/列表与代码实测不符：votes_yes 实为 0、归档实为 0 文件、worktree 实际建给 cc-glm/kimi 回退名单）+ P1 ×6（e2e 伪造 Executor/Reviewer 产物、merge 模拟成功逃生舱、worktree 非 git 降级 fail-open、硬编码回退实际生效、PTY harness 无平台检查 34 ran/3 FAIL@win32、git 工具伪造兜底）；增量成绩获确认（管线 E2E 真实闭环、message_deliveries 独立投递、CLI 只读化）；真实 CLI 协同为 CLAIM_ONLY，待其余三位专家复核 |
+| 2026-08-28 | `2026-08-28-review-request-Phase1-Phase2-Integration.md` | `aa173d8` .. `906b17e` | **L3 / PG-2** | `2026-08-28-review-result-906b17e-zcode.md`<br>`2026-08-28-review-result-906b17e-claude.md`<br>`2026-08-28-review-result-906b17e-codex.md`<br>`2026-08-28-review-result-906b17e-integration-qwen.md` (4 份) | **四方专家一致评审：未达 L3 SCENARIO-VERIFIED / PG-2，维持 L2/PG-1**<br>核心问题：<br>1. P0-1: E2E Runner 伪造产物未注入真实/Mock Adapter，展示字段与底层断裂（votes_yes=0）；<br>2. P0-2: 配置注入键路径断裂（`require_human_signoff` 静默失效，从未推送 remote）；<br>3. P0-3: 所谓 sandboxed 仅为临时 cwd，未达成 OS 级沙箱隔离承诺；<br>4. 归档目录假阳性与 Windows 跨平台测试失败（3 FAIL）。待全面整改。 |
 
 ---
 
-## 本轮架构装配与受控联调闭环清单
+## 本轮待整改核心问题清单 (From 4 Experts on 906b17e)
 
-| 编号 | 模块与整改项 | 修复落点与代码提交 | 验证测试证据 |
+| 编号 | 严重度 | 问题描述与整改要求 | 涉及专家 |
 |---|---|---|---|
-| **Arch-1** | `macao init` 模板与 `macao_config.schema.json` 100% 对齐，`ConfigManager` 属性按 Schema 路径读取 | `src/macao/core/config.py`<br>`src/macao/cli/main.py` | `test_default_config_template_validates_against_schema` PASS |
-| **Arch-2** | 统一收敛 DTO 类型（`PreflightCheckResult`, `CapabilityManifest`），删除重复类定义 | `src/macao/core/types.py`<br>`src/macao/adapter/base.py` | `test_adapter_preflight_probes_no_type_error` PASS |
-| **Arch-3** | 消息总线引入 `message_deliveries`，实现多 Reviewer 广播独立 ACK 与状态隔离 | `src/macao/storage/db.py`<br>`src/macao/msg/bus.py` | `test_message_bus_fanout_independent_ack` PASS |
-| **Arch-4** | CLI 观测命令（`status`, `doctor`）去副作用，保持严格只读幂等，新增显式 `task recover` | `src/macao/cli/main.py` | CLI 命令实测 PASS |
-| **Adp-1** | 替换 Kimi 为 `OpenCodeAdapter`（`opencode` v1.18.23），新增 `AntigravityAdapter`（`agy` v1.1.22） | `src/macao/adapter/opencode.py`<br>`src/macao/adapter/antigravity.py` | `test_adapter_preflight_probes_no_type_error` PASS |
-| **Integ-1** | 第一阶段受控实机联调 Harness 与专用 CLI 命令（4 款真实 CLI PTY 启停与 0 孤儿强杀回收） | `src/macao/adapter/integ_harness.py`<br>`docs/CONTROLLED_INTEGRATION_PLAN.md` | `macao test-clis` PASS (4/4 PASS, <1s) |
-| **Integ-2** | 第二阶段受控端到端微任务协同流转（开发提交 -> 3 Worktrees -> 2/3 仲裁 -> FF 合并 -> HEAD SHA 100% 匹配） | `src/macao/workflow/e2e_runner.py`<br>`docs/CONTROLLED_E2E_INTEGRATION_PHASE2.md` | `macao e2e-run` PASS (100% Match, DONE) |
+| **P0-1** | 阻断 | **E2E 真实/仿真隔离与 Adapter 注入**：Runner 必须通过 Adapter 驱动产物生成，杜绝直接写 YAML 伪造；修复 `vote_breakdown` 键不匹配与归档目录检查（`<checkpoint_ref>` 而非 `<task_id>`）。 | zcode, claude, codex, qwen |
+| **P0-2** | 阻断 | **配置解析与合并安全硬校验**：修复 `Orchestrator` 与 `MergeController` 对 `require_human_signoff`、`remote_name` 的直接读取，禁止异常时回退到危险缺省值；打通真实/仿真 Git Remote push 校验。 | zcode, claude, codex, qwen |
+| **P0-3** | 阻断 | **沙箱边界定性与安全分级**：在代码与文档中严格区分 `CWD/Worktree 隔离` 与 `OS 容器级沙箱`，在未实装 Bubblewrap/Docker 时明确标注，禁止虚假安全承诺。 | codex, zcode, qwen |
+| **P1-1** | 严重 | **PTY 跨平台与真实子进程生命周期测试**：在 Windows 上优雅降级或跳过 PTY 测试；在 Linux 上补充长进程/信号强杀真实测试。 | zcode, claude, codex |
+| **P1-2** | 严重 | **归档物理目录路径修正**：对齐 PRD 规范，归档路径统一为 `.macao/archive/<checkpoint_ref>/r<round>/`，严禁 0 归档假阳性。 | zcode, claude, codex, qwen |
 
 ---
 
 ## 下一步行动
 
-1. 提交全部申请文件并推送到远程仓库；
-2. 等待独立评审专家完成评审并出具独立评审报告。
+1. 提交全部评审报告与 STATUS 全量对账；
+2. 开展针对上述 P0/P1 的系统性代码与测试整改。
