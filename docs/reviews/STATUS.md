@@ -3,15 +3,17 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-08-29（zcode 补齐对 `e7ba2d2` 的独立复核：未通过但方向积极——新 P0 双重复现坐实；3/4 份已提交，codex 待补）
-- **当前申请对象**：自 `2026-08-28-review-request-Phase1-Phase2-Integration.md` 后的配置穿透修复、Adapter 真实注入、Fail-closed 合并与 Worktree 门禁、归档物理路径修正与 38 项全量自动化测试
-- **当前定级状态**：**L2 SPEC-CODE-ALIGNED / PG-1，但 PG-1 状态本身待重新确认**——claude 独立复审确认申请文档所列 11 项 P0/P1/P2（`906b17e` 轮）**全部真实闭环**，但同时独立发现 **1 项新 P0**（`message_id` 生成碰撞导致 `message_queue` 主键冲突，详见下方"本轮新发现"），使当前 commit 未必满足 PG-1 "P0/P1 为零"门槛（`MACAO_REVIEW_GUIDELINES.md` §71）。L3/PG-2 **未获 claude 批准**；zcode/codex/qwen 复审结论待补齐后方可形成委员会最终结论。
+- **最新更新时间**：2026-08-29（四方独立专家 claude / qwen / zcode / codex 针对 `e7ba2d2` 评审报告全部同步就位，完成 100% 全量对账）
+- **当前申请对象**：自 `2026-08-28-review-request-Phase1-Phase2-Integration.md` 后的配置穿透修复、Adapter 真实注入、Fail-closed 合并与 Worktree 门禁、归档物理路径修正与全量自动化测试
+- **当前定级状态**：**维持 L2 SPEC-CODE-ALIGNED / PG-1（未获 L3 / PG-2 准入）**
+  - **正面进展**：四方专家一致确认上一轮（`906b17e`）的 11 项 P0/P1/P2 整改**全部真实闭环**（配置展平穿透、Fail-closed 守卫、归档 5 份合法产物、4 款 CLI PTY 探针）；
+  - **阻断问题**：多位专家独立发现本轮新增/残留阻断问题（`message_id` 随机碰撞致 SQLite 主键冲突、AEP 类型与 Schema/PRD 偏移致人工裁定断裂、MergeController 缺少 CI 失败前置原子性、Mock Adapter 消息消费闭环）。
 - **历史文档定级**：PRD **v2.3.1**（§3.2 Layer 1c 四值终局分支已单点闭环修复，达到 L1 DOC-ALIGNED / PG-0）
-- **当前代码机验**：`PYTHONPATH=src python3 -m unittest discover tests -v` 声明 **38 ran / 38 PASS (100%)**，但 claude 独立复现 4 次连续全量运行中出现 **1 次 `sqlite3.IntegrityError` 崩溃**（约 20~25% 概率，非确定性绿色，见下方"本轮新发现"）；`e2e-run` / `test-clis` / `git diff --check`（限 `docs/*.md` 尾随空白，`src/`/`tests/` 已干净）经 claude 独立复现，其余机验声明属实。
+- **当前代码机验**：`PYTHONPATH=src python3 -m unittest discover tests -v`（38 测试在 `message_id` 碰撞修复前存在约 20%~25% 偶发主键冲突失败率）；`test-clis` / `e2e-run` 路径属实。
 
 ---
 
-## 评审申请记录全量对账表 (Review Registry - 31 份历史与当前评审报告 + 5 份申请全量对账)
+## 评审申请记录全量对账表 (Review Registry - 35 份历史与当前评审报告 + 5 份申请全量对账)
 
 | 申请日期 | 申请文件 / 历史轮次 | 待审对象 / Commit | 目标等级 | 评审专家与文件清单 | 结论与状态 |
 |---|---|---|---|---|---|
@@ -23,43 +25,23 @@
 | 2026-08-26 | `2026-08-26-review-request-PRD-v2.3.1.md` | `403ddc7` (PRD v2.3.1) | L1 / PG-0 | `2026-08-26-review-result-403ddc7-claude.md`<br>`2026-08-27-review-result-403ddc7-codex.md`<br>`2026-08-27-review-result-403ddc7-zcode.md` (3 份) | 上轮 2 P0 + 3 P1 全部 VERIFIED；新增 P1（§3.2 Layer 1c 四值分支）已在整改中闭环修复 |
 | 2026-08-27 | `2026-08-27-review-request-Phase0-Phase1-Code.md` | `d137a05` .. `435eeea` | L2 / PG-1 | `2026-08-27-review-result-435eeea-claude.md`<br>`2026-08-27-review-result-435eeea-codex.md`<br>`2026-08-27-review-result-435eeea-zcode.md` (3 份) | 复审提出 P0 ×2 + P1 ×7 整改项；已在后续整改中全部闭环修复 |
 | 2026-08-27 | 整体技术框架横向评审（非定级轮） | `435eeea` / `23dfad5` / `aa173d8` 代码架构 | — | `2026-08-27-review-result-435eeea-tech-framework-zcode.md`<br>`2026-08-27-review-result-23dfad5-tech-framework-claude.md`<br>`2026-08-27-review-result-23dfad5-codex-framework.md`<br>`2026-08-27-review-result-aa173d8-tech-framework-qwen.md` (4 份) | 四方专家（zcode / claude / codex / qwen）横向评估：确认核心缺陷已闭环；提出架构装配、多播独立投递与真实联调建议 |
-| 2026-08-28 | `2026-08-28-review-request-Phase1-Phase2-Integration.md` | `aa173d8` .. `906b17e` | L3 / PG-2 | `2026-08-28-review-result-906b17e-zcode.md`<br>`2026-08-28-review-result-906b17e-claude.md`<br>`2026-08-28-review-result-906b17e-codex.md`<br>`2026-08-28-review-result-906b17e-integration-qwen.md` (4 份) | **四方专家一致判定：未达 L3 SCENARIO-VERIFIED / PG-2，维持 L2/PG-1**；提出 P0×3 + P1×6 整改项；**已在本次整改中全部闭环修复并通过 38 项回归测试**。 |
-| **2026-08-29** | **`2026-08-29-review-request-Phase1-Phase2-Rectification.md`** | **`906b17e` .. `e7ba2d2`** | **L3 / PG-2** | `2026-08-29-review-result-e7ba2d2-claude.md`<br>`2026-08-29-review-result-e7ba2d2-rectification-qwen.md`<br>`2026-08-29-review-result-e7ba2d2-zcode.md`（3/4，已提交）<br>codex（待提交） | **claude：未通过（新 P0 message_id 碰撞）；qwen：支持授予；zcode：未通过但方向积极**——申请 11 项整改经三方独立复验全部属实关闭；zcode 独立双重复现 claude 新 P0（20 万样本仿真两两碰撞 2.64e-4 + 真实 `MessageBus.publish` 第 129 条触发主键 IntegrityError），单独阻断 PG-2/PG-1；**修复该单点并补齐超时场景后 zcode 支持授予 L3**；委员会终局结论待 codex 补齐后形成 |
+| 2026-08-28 | `2026-08-28-review-request-Phase1-Phase2-Integration.md` | `aa173d8` .. `906b17e` | L3 / PG-2 | `2026-08-28-review-result-906b17e-zcode.md`<br>`2026-08-28-review-result-906b17e-claude.md`<br>`2026-08-28-review-result-906b17e-codex.md`<br>`2026-08-28-review-result-906b17e-integration-qwen.md` (4 份) | **四方专家一致判定：未达 L3 SCENARIO-VERIFIED / PG-2，维持 L2/PG-1**；提出 P0×3 + P1×6 整改项；已在 e7ba2d2 中闭环修复。 |
+| **2026-08-29** | **`2026-08-29-review-request-Phase1-Phase2-Rectification.md`** | **`906b17e` .. `e7ba2d2`** | **L3 / PG-2** | `2026-08-29-review-result-e7ba2d2-claude.md`<br>`2026-08-29-review-result-e7ba2d2-rectification-qwen.md`<br>`2026-08-29-review-result-e7ba2d2-zcode.md`<br>`2026-08-29-review-result-e7ba2d2-codex.md` (4 份全部提交) | **四方专家复审结论：维持 L2 SPEC-CODE-ALIGNED / PG-1，未批准 L3/PG-2**<br>1. 上轮 11 项整改全部实测闭环；<br>2. 新增阻断项：`message_id` 短 uuid 碰撞崩溃、AEP 类型/枚举与 PRD/Schema 错配致人工裁定断裂、MergeController CI 失败缺少前置隔离与配置远端检查、Mock Adapter 契约消费闭环。待新一轮单点闭环整改。 |
 
 ---
 
-## 本轮（906b17e 四方专家评审意见）P0 / P1 闭环整改清单
+## 本轮（e7ba2d2 四方专家复审）新增待整改问题汇总清单
 
-| 编号 | 问题与整改要求 | 修复落点与代码实现 | 验证测试证据 | claude 独立复核（e7ba2d2，2026-08-29） |
-|---|---|---|---|---|
-| **P0-1** | **配置注入键路径断裂**：`ConfigManager` 提取并标准化运行时策略，确保 `require_human_signoff`、`ci_gate_command`、`remote_name` 等 100% 贯穿至 `Orchestrator` 与 `MergeController`，杜绝未签字合并 | `src/macao/core/config.py`<br>`src/macao/workflow/orchestrator.py`<br>`src/macao/merge/controller.py` | `test_config_keys_penetration_and_require_signoff_fail_closed` PASS | ✅ VERIFIED |
-| **P0-2** | **E2E 证据真实度与 Adapter 注入**：E2E Runner 显式注入配置对应的 `MockAgentAdapter`（3 位评审人：`codex`, `opencode`, `antigravity`）；修正 `vote_breakdown` 键名（`approve`/`yes_approve` 均兼容）；修正归档路径为 `.macao/archive/<checkpoint_ref>/r1/` 并校验非空 | `src/macao/workflow/e2e_runner.py`<br>`src/macao/consensus/engine.py`<br>`src/macao/cli/ui.py` | `test_e2e_runner_truthful_evidence_and_archive`<br>`macao e2e-run` 实测 PASS（5 份归档产物，100% HEAD 匹配） | ✅ VERIFIED（附带观察：产物内容仍由 runner 手工 `yaml.safe_dump`，未经 `MockAgentAdapter.simulate_produce_*` 接口生成，见评审报告第四节 C，非阻断） |
-| **P0-3** | **沙箱边界定性**：在 `ExecutionMode.SANDBOXED`、`CapabilityManifest` 及文档中如实定性为“Git Worktree 与工作目录路径隔离”，明确标注容器级命名空间隔离为后续规划，消除虚假承诺 | `src/macao/core/types.py`<br>`docs/POC_VERIFICATION_REPORT.md` | `test_mock_capabilities` PASS | ✅ VERIFIED |
-| **P1-2** | **MergeController 消除非 git 假成功逃生舱**：非 git 仓库直接返回 False 拒绝合并，严格 Fail-closed | `src/macao/merge/controller.py` | `test_merge_controller_non_git_fail_closed` PASS | ✅ VERIFIED |
-| **P1-3** | **Worktree 创建消除非 git 静默 mkdir 假成功**：非 git 目录直接抛出 `RuntimeError` 拒绝创建，严格 Fail-closed | `src/macao/utils/git_utils.py` | `test_git_utils_fail_closed_and_no_dummy_data` PASS | ✅ VERIFIED |
-| **P1-4** | **消除硬编码回退值**：`Orchestrator` 动态根据注入的 `reviewer_adapters` 与 `macao.yaml` 提取 reviewer IDs 与 executor ID，消除硬编码 `cc-glm`/`kimi`/`cc-ds4` 回退 | `src/macao/workflow/orchestrator.py` | `test_orchestrator_config_injection` PASS | ✅ VERIFIED |
-| **P1-5** | **PTY Harness 跨平台探测与 Windows 优雅跳过**：在 `integ_harness.py` 中探测 `pty` 模块，非 POSIX 平台返回 `SKIPPED` 并标注说明，消除跨平台报错 | `src/macao/adapter/integ_harness.py`<br>`tests/test_integ_harness.py` | `test_verify_all_clis` PASS | ✅ VERIFIED（代码路径合理；本机 Linux 环境无法实机验证 Windows 分支） |
-| **P1-6** | **消除 `get_changed_files` 伪造兜底**：git 命令失败或为空时返回空列表 `[]`，严禁伪造 `src/main.py` 假数据流入权威 Review Context | `src/macao/utils/git_utils.py` | `test_git_utils_fail_closed_and_no_dummy_data` PASS | ✅ VERIFIED |
-| **P2-5** | **消除 DTO 重复定义**：移除 `types.py` 中的重复 `AEPEnvelope`，统一使用 `msg/envelope.py`，规范 `OpinionStatus` 枚举为 `APPROVED / CHANGES_REQUESTED / REJECTED` | `src/macao/core/types.py`<br>`src/macao/msg/envelope.py` | `test_aep_envelope_schema` PASS | ✅ VERIFIED |
-| **P2-6** | **合并 commit SHA 精确全量校验**：`MergeController` 解析完整 40 位 SHA 进行 `head == checkpoint_ref` 硬校验，杜绝前缀模糊匹配 | `src/macao/merge/controller.py` | `test_scenario_s1_happy_path_and_merge` PASS | ✅ VERIFIED |
-
----
-
-## 本轮新发现（claude 独立复审，`e7ba2d2`，2026-08-29）—— 1 项新 P0
-
-以上 11 项 `906b17e` 轮整改经 claude 独立复核**全部属实**。但复核过程中独立发现 1 项此前四方专家均未提出的**新 P0**，详见 [`2026-08-29-review-result-e7ba2d2-claude.md`](2026-08-29-review-result-e7ba2d2-claude.md) 第三节：
-
-| 编号 | 问题 | 复现证据 | 影响 |
+| 编号 | 严重度 | 问题描述与整改要求 | 涉及专家 |
 |---|---|---|---|
-| **P0-NEW-1**（claude） | `AEPEnvelope.generate_message_id()`（`src/macao/msg/envelope.py:17-20`）仅用 UUID4 整数前 4 位十进制数字作为同日消息 ID 后缀（同日仅 ~10,000 种取值），而 `message_queue.message_id` 为 `PRIMARY KEY`（`src/macao/storage/db.py:64`），碰撞即崩溃 | 4 次连续 `python3 -m unittest discover tests` 全量运行中，1 次实测触发 `sqlite3.IntegrityError: UNIQUE constraint failed: message_queue.message_id`（`test_orchestrator_sim.py::test_scenario_s2_rework_loop`，经由 `orchestrator.dispatch_review_requests` → `msg_bus.publish`） | 直接证伪申请文档所称"38/38 100% PASS"（实测约 75%~80% 概率通过，非确定性绿色）；且 `MessageBus.publish()` 是 Orchestrator 全部状态流转的核心路径，生产环境同样会随消息量增长随机崩溃，非测试专属问题 |
-
-**建议修复**：`generate_message_id()` 改用完整 `uuid.uuid4().hex`（或等效更大熵值方案），并补充高频连续 `publish()` 无冲突的回归测试。
+| **P0-NEW-1** | 阻断 | **`AEPEnvelope.generate_message_id()` 短 UUID 高频碰撞**：仅取 4 位十进制后缀导致同日仅 ~10,000 空间，连续生成极易触发 SQLite 主键冲突崩溃。要求使用完整 UUID4 或高熵十六进制字符串，并增加高频发布无碰撞测试。 | claude, zcode, codex |
+| **P0-NEW-2** | 阻断 | **协议枚举/Schema/PRD 错配与人工裁定不可用**：`types.py` 状态机与 AEP 类型未对齐 PRD/Schema；`OverrideChoice` 枚举值变更导致 CLI `resolve_override()` 抛出 `ValueError`。要求以 PRD/Schema 为权威单一真理源对齐，并增加 4 种人工裁定端到端测试。 | codex |
+| **P0-NEW-3** | 阻断 | **MergeController CI 门禁失败未隔离与远端检查**：`MergeController` 先合并目标分支再运行 CI，CI 失败时目标分支已污染前移；配置了 `remote_name` 但远端不存在时静默跳过。要求 CI 前置于隔离环境运行、配置 remote 必严格校验、失败时原子恢复。 | codex |
+| **P0-NEW-4** | 阻断 | **Mock Adapter 契约消费驱动与超时场景**：Phase 2 协同需通过 Adapter 的 `start/inject/produce/ack/stop` 契约方法驱动，补齐超时检测。 | codex, zcode |
 
 ---
 
 ## 下一步行动
 
-1. 研发团队针对 `P0-NEW-1`（`message_id` 碰撞）提交修复与回归测试；
-2. 待修复提交后，组织 zcode、codex、qwen 补齐针对 `e7ba2d2`（或修复后的新 commit）的独立复审，形成四方委员会最终结论；
-3. 委员会结论达成前，`L3 / PG-2` 维持未获批准状态；
-4. 依据专家反馈继续推进 Phase 3 真实业务任务驱动与生产级 TUI 建设。
+1. 完成 `docs/reviews/STATUS.md` 与 35 份评审报告 + 5 份申请的全量对账提交；
+2. 针对 `P0-NEW-1` ~ `P0-NEW-4` 开展精准单点整改与自动化测试验证。
