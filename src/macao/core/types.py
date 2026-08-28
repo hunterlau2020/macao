@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 
 
 class AgentState(str, Enum):
-    """10-State Finite State Machine (PRD §3.1)."""
+    """10-State Finite State Machine (PRD §3.1, §3.3)."""
     IDLE = "IDLE"
     CODING = "CODING"
     READY_FOR_REVIEW = "READY_FOR_REVIEW"
@@ -15,21 +15,19 @@ class AgentState(str, Enum):
     REWORK = "REWORK"
     MERGING = "MERGING"
     DONE = "DONE"
-    HUMAN_OVERRIDE = "HUMAN_OVERRIDE"
+    UNKNOWN = "UNKNOWN"
     CANCELLED = "CANCELLED"
 
 
 class AEPType(str, Enum):
-    """AEP/1.0 Standard Message Types (PRD §2.4)."""
+    """AEP/1.0 Standard Message Types (PRD §2.4, Schema Draft-07)."""
     DEVELOPMENT_STARTED = "DEVELOPMENT_STARTED"
     REVIEW_REQUEST = "REVIEW_REQUEST"
-    REVIEW_SUBMITTED = "REVIEW_SUBMITTED"
-    CONSENSUS_REACHED = "CONSENSUS_REACHED"
+    REVIEW_RESPONSE = "REVIEW_RESPONSE"
     REWORK_REQUEST = "REWORK_REQUEST"
-    HUMAN_OVERRIDE_REQUEST = "HUMAN_OVERRIDE_REQUEST"
-    OVERRIDE_RESOLVED = "OVERRIDE_RESOLVED"
     MERGE_COMPLETED = "MERGE_COMPLETED"
-    TASK_CANCELLED = "TASK_CANCELLED"
+    STATE_CHANGED = "STATE_CHANGED"
+    HUMAN_OVERRIDE_REQUEST = "HUMAN_OVERRIDE_REQUEST"
 
 
 class Vote(str, Enum):
@@ -62,9 +60,9 @@ class Resolution(str, Enum):
 
 
 class OverrideChoice(str, Enum):
-    """Valid choices for human override (PRD §15.2)."""
-    FORCE_MERGE = "FORCE_MERGE"
-    FORCE_REWORK = "FORCE_REWORK"
+    """Valid choices for human override (PRD §3.3 E7, §15.2)."""
+    APPROVED = "APPROVED"
+    REWORK = "REWORK"
     RETRY_REVIEW = "RETRY_REVIEW"
     CANCEL = "CANCEL"
 

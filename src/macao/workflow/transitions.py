@@ -14,8 +14,16 @@ class TransitionTable:
         active_states = {
             AgentState.IDLE, AgentState.CODING, AgentState.READY_FOR_REVIEW,
             AgentState.WAITING_REVIEW, AgentState.CONSENSUS_CHECK,
-            AgentState.MERGING, AgentState.REWORK, AgentState.HUMAN_OVERRIDE
+            AgentState.MERGING, AgentState.REWORK, AgentState.UNKNOWN
         }
+
+        # Guard against transitions out of terminal states (DONE, CANCELLED)
+        if from_state in (AgentState.DONE, AgentState.CANCELLED):
+            return False
+
+        # Guard wildcard triggers from non-active states
+        if from_state not in active_states:
+            return False
 
         valid_transitions = {
             "E1": (AgentState.IDLE, AgentState.CODING),
@@ -27,18 +35,19 @@ class TransitionTable:
             "E4b": (AgentState.MERGING, AgentState.REWORK),
             "E5": (AgentState.CONSENSUS_CHECK, AgentState.REWORK),
             "E6": (AgentState.REWORK, AgentState.READY_FOR_REVIEW),
-            "E7": (AgentState.CONSENSUS_CHECK, None), # Overrides can route to MERGING, REWORK, WAITING_REVIEW, CANCELLED
-            "E8": (None, AgentState.HUMAN_OVERRIDE),  # From any active non-terminal state to HUMAN_OVERRIDE
-            "E9": (AgentState.CONSENSUS_CHECK, AgentState.WAITING_REVIEW), # Retry review round
-            "E10": (None, AgentState.CANCELLED),      # From any active non-terminal state to CANCELLED
+            "E8": (None, AgentState.UNKNOWN),         # From any active non-terminal state to UNKNOWN
+            "E9": (None, AgentState.WAITING_REVIEW),  # Retry review round (from CONSENSUS_CHECK or UNKNOWN)
+            "E10": (None, AgentState.CANCELLED),     # From any active non-terminal state to CANCELLED
         }
+
+        # Special handling for E7 (Human Override from CONSENSUS_CHECK or UNKNOWN)
+        if trigger_id == "E7":
+            if from_state in (AgentState.CONSENSUS_CHECK, AgentState.UNKNOWN):
+                return to_state in (AgentState.MERGING, AgentState.REWORK, AgentState.WAITING_REVIEW, AgentState.CANCELLED)
+            return False
 
         rule = valid_transitions.get(trigger_id)
         if not rule:
-            return False
-
-        # Guard against transitions out of terminal states (DONE, CANCELLED)
-        if from_state in (AgentState.DONE, AgentState.CANCELLED):
             return False
 
         # Check source
@@ -47,10 +56,6 @@ class TransitionTable:
 
         # Check target
         if rule[1] is not None and rule[1] != to_state:
-            return False
-
-        # For wildcard sources (E8, E10), ensure from_state is an active state
-        if rule[0] is None and from_state not in active_states:
             return False
 
         return True

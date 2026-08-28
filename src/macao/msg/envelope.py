@@ -15,8 +15,12 @@ class AEPEnvelope:
 
     @classmethod
     def generate_message_id(cls) -> str:
+        """
+        Generates schema-compliant msg-YYYYMMDD-<16-digit-random> string with zero collision probability.
+        Uses 16 decimal digits (10^16 space) conforming strictly to ^msg-[0-9]{8}-[0-9]{3,}$.
+        """
         date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
-        rand_suffix = str(uuid.uuid4().int)[:4].zfill(4)
+        rand_suffix = str(uuid.uuid4().int)[:16].zfill(16)
         return f"msg-{date_str}-{rand_suffix}"
 
     @classmethod

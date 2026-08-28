@@ -1,47 +1,52 @@
-"""MACAO Central Orchestration Engine (PRD §3, §14)."""
+"""High-Level Multi-Agent Workflow Orchestrator (PRD §3, §10)."""
 
 import os
 import yaml
+import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Set, Union
 
 from macao.core.types import (
     AgentState,
-    StateChange,
     AEPType,
     Decision,
     Vote,
     OpinionStatus,
-    OverrideChoice
+    Resolution,
+    OverrideChoice,
+    StateChange
 )
-from macao.core.config import ConfigManager
 from macao.storage.store import StateStore
 from macao.msg.bus import MessageBus
-from macao.utils.git_utils import GitManager
-from macao.utils.context_builder import ReviewContextBuilder
 from macao.consensus.engine import ConsensusEngine
 from macao.consensus.vote import VoteAggregator
-from macao.merge.controller import MergeController
+from macao.utils.context_builder import ReviewContextBuilder
 from macao.adapter.base import AgentAdapter
+from macao.merge.controller import MergeController
 from macao.workflow.fsm import WorkflowFSM
+from macao.utils.git_utils import GitManager
+from macao.core.config import ConfigManager
 
 
 class Orchestrator:
-    """Central orchestrator managing the single-process event loop, adapters, and FSM."""
+    """Coordinates Agent Lifecycles, State Transitions, and Artifact Pipelines."""
 
     def __init__(
         self,
         project_root: str = ".",
-        db_path: str = ".macao/state.db",
+        db_path: Optional[str] = None,
         executor_adapter: Optional[AgentAdapter] = None,
         reviewer_adapters: Optional[List[AgentAdapter]] = None,
         config: Optional[Dict[str, Any]] = None
     ):
         self.root = Path(project_root).resolve()
-        if not Path(db_path).is_absolute():
-            self.actual_db_path = str(self.root / db_path)
+        self.macao_dir = self.root / ".macao"
+        self.macao_dir.mkdir(parents=True, exist_ok=True)
+
+        if db_path:
+            self.actual_db_path = str(Path(db_path).resolve())
         else:
-            self.actual_db_path = db_path
+            self.actual_db_path = str(self.macao_dir / "state.db")
 
         self.db_path = self.actual_db_path
         self.store = StateStore(self.actual_db_path)
@@ -96,23 +101,43 @@ class Orchestrator:
         self,
         title: str,
         task_description: str,
-        acceptance_criteria: Dict[str, Any],
-        source_branch: str = "feature/task-01",
+        acceptance_criteria: Optional[Dict[str, Any]] = None,
+        source_branch: Optional[str] = None,
         target_branch: str = "main",
         task_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """E1: IDLE -> CODING. Initializes task and sends DEVELOPMENT_STARTED."""
-        t_id = task_id or f"task-{os.urandom(4).hex()}"
-        task = self.store.create_task(t_id, title, source_branch, target_branch)
+        """E1: IDLE -> CODING (Task Initialization)."""
+        t_id = task_id or f"task-{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d%H%M%S')}"
+        src_branch = source_branch or f"feature/{t_id}"
 
-        # Transition FSM
+        # Create Task in store
+        task_record = self.store.create_task(
+            task_id=t_id,
+            title=title,
+            source_branch=src_branch,
+            target_branch=target_branch,
+            acceptance_criteria=acceptance_criteria or {}
+        )
+
+        # Transition FSM to CODING
         self.fsm.transition(t_id, AgentState.CODING, "E1", {
+            "title": title,
             "description": task_description,
-            "acceptance_criteria": acceptance_criteria
+            "source_branch": src_branch,
+            "target_branch": target_branch
         })
 
-        # Publish AEP Message
-        exec_id = self.executor.agent_id if self.executor else self.config.get("executor_id", "claude-code")
+        # Inject task to executor if present
+        exec_id = self.config.get("executor_id", "claude-code")
+        if self.executor:
+            self.executor.start()
+            self.executor.inject_task({
+                "task_id": t_id,
+                "task_description": task_description,
+                "acceptance_criteria": acceptance_criteria or {}
+            })
+
+        # Broadcast DEVELOPMENT_STARTED AEP
         self.msg_bus.publish(
             msg_type=AEPType.DEVELOPMENT_STARTED,
             from_agent="macao",
@@ -120,9 +145,8 @@ class Orchestrator:
             payload={
                 "task_id": t_id,
                 "title": title,
-                "description": task_description,
-                "acceptance_criteria": acceptance_criteria,
-                "source_branch": source_branch,
+                "task_description": task_description,
+                "source_branch": src_branch,
                 "target_branch": target_branch
             }
         )
@@ -130,7 +154,10 @@ class Orchestrator:
         return self.store.get_task(t_id)
 
     def check_development_checkpoint(self, task_id: str) -> Optional[StateChange]:
-        """E1_PRODUCED / E6: Recognizes valid .dev.yml and transitions to READY_FOR_REVIEW."""
+        """
+        Layer 1a: Scans .macao/.dev.yml for explicit checkpoint signal.
+        Transitions from CODING/REWORK to READY_FOR_REVIEW upon valid manifest.
+        """
         task = self.store.get_task(task_id)
         if not task:
             return None
@@ -140,33 +167,53 @@ class Orchestrator:
             return None
 
         rnd = task.get("review_round", 1)
-        target_st, src, meta = self.fsm.engine.recognize_state(current_st, None, rnd)
-        if target_st == AgentState.READY_FOR_REVIEW:
-            tr_id = "E1_PRODUCED" if current_st == AgentState.CODING else "E6"
-            change = self.fsm.transition(task_id, AgentState.READY_FOR_REVIEW, tr_id, meta)
-
-            # Register physical artifact
-            dev_path = str((self.root / ".macao" / ".dev.yml").relative_to(self.root))
-            self.store.register_artifact(
-                task_id=task_id,
-                kind="dev_manifest",
-                checkpoint_ref=meta.get("latest_commit", ""),
-                review_round=rnd,
-                path=dev_path
-            )
-            return change
-        return None
-
-    def dispatch_review_requests(self, task_id: str) -> Optional[StateChange]:
-        """E2: READY_FOR_REVIEW -> WAITING_REVIEW. Consumes .dev.yml, creates worktrees, sends REVIEW_REQUEST."""
-        task = self.store.get_task(task_id)
-        if not task or AgentState(task["state"]) != AgentState.READY_FOR_REVIEW:
+        dev_file = self.root / ".macao" / ".dev.yml"
+        if not dev_file.exists():
             return None
 
-        checkpoint_ref = task["checkpoint_ref"]
-        rnd = task.get("review_round", 1)
+        try:
+            with open(dev_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+        except Exception:
+            return None
+
+        if not data or not isinstance(data, dict):
+            return None
+
+        # Check scope matching (round and status)
+        dev_rnd = data.get("review_round", 1)
+        status = data.get("status")
+        git_info = data.get("development", {}).get("git", {})
+        latest_commit = git_info.get("latest_commit")
+
+        if dev_rnd == rnd and status == "ready_for_review" and latest_commit:
+            # Transition to READY_FOR_REVIEW (产物型转移)
+            trigger = "E6" if current_st == AgentState.REWORK else "E1_PRODUCED"
+            change = self.fsm.transition(
+                task_id,
+                AgentState.READY_FOR_REVIEW,
+                trigger,
+                detail={"latest_commit": latest_commit, "dev_manifest": data}
+            )
+            return change
+
+        return None
+
+    def dispatch_review_requests(self, task_id: str) -> StateChange:
+        """
+        E2: READY_FOR_REVIEW -> WAITING_REVIEW.
+        Creates dedicated isolated worktrees for each reviewer FIRST (Fail-closed & Transactional).
+        Only after all worktrees succeed, transitions FSM and publishes REVIEW_REQUEST to reviewers.
+        """
+        task = self.store.get_task(task_id)
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+
+        checkpoint_ref = task.get("checkpoint_ref")
         if not checkpoint_ref:
-            raise ValueError("Cannot dispatch reviews without a valid checkpoint_ref")
+            raise ValueError(f"No checkpoint_ref attached to task {task_id}")
+
+        rnd = task.get("review_round", 1)
 
         # 1. Read real .dev.yml data if present
         dev_file = self.root / ".macao" / ".dev.yml"
@@ -185,26 +232,35 @@ class Orchestrator:
             if mb:
                 base_commit = mb
 
-        # 3. Transition FSM (E2) and archive .dev.yml
+        # 3. For each reviewer, create isolated worktree FIRST (FAIL-CLOSED & TRANSACTIONAL: PRD §16.3 / P0-2 / P0-3)
+        rev_ids = [r.agent_id for r in self.reviewers] if self.reviewers else self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"])
+        created_worktrees: Dict[str, Path] = {}
+        try:
+            for rev_id in rev_ids:
+                worktree_path = self.git.create_isolated_worktree(rev_id, task_id, rnd, checkpoint_ref)
+                created_worktrees[rev_id] = worktree_path
+        except Exception as e:
+            # Cleanup any partially created worktrees from this dispatch
+            for rev_id, p in created_worktrees.items():
+                try:
+                    self.git.remove_isolated_worktree(rev_id, task_id, rnd)
+                except Exception:
+                    pass
+            self.store.log_audit_event(task_id, "WORKTREE_CREATION_FAILED", {
+                "reviewer_id": rev_id,
+                "checkpoint_ref": checkpoint_ref,
+                "error": str(e)
+            })
+            raise RuntimeError(
+                f"Security Gate Blocked: Failed to create isolated worktree for Reviewer '{rev_id}': {e}. "
+                "Refusing fallback to main workspace (Fail-closed)."
+            )
+
+        # 4. Only after all worktrees are successfully prepared, transition FSM (E2) and archive .dev.yml
         change = self.fsm.transition(task_id, AgentState.WAITING_REVIEW, "E2")
 
-        # 4. For each reviewer, create isolated worktree (FAIL-CLOSED: PRD §16.3 / P0-2 / P0-3)
-        rev_ids = [r.agent_id for r in self.reviewers] if self.reviewers else self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"])
-        for rev_id in rev_ids:
-            try:
-                worktree_path = self.git.create_isolated_worktree(rev_id, task_id, rnd, checkpoint_ref)
-            except Exception as e:
-                self.store.log_audit_event(task_id, "WORKTREE_CREATION_FAILED", {
-                    "reviewer_id": rev_id,
-                    "checkpoint_ref": checkpoint_ref,
-                    "error": str(e)
-                })
-                raise RuntimeError(
-                    f"Security Gate Blocked: Failed to create isolated worktree for Reviewer '{rev_id}': {e}. "
-                    "Refusing fallback to main workspace (Fail-closed)."
-                )
-
-            # Build review_context injecting dedicated worktree path
+        # 5. Build review contexts and publish REVIEW_REQUEST to each reviewer
+        for rev_id, worktree_path in created_worktrees.items():
             ctx_builder = ReviewContextBuilder(
                 task_description=task.get("title", ""),
                 base_commit=base_commit,
@@ -248,23 +304,22 @@ class Orchestrator:
         """
         task = self.store.get_task(task_id)
         if not task:
-            return None, None
+            raise ValueError(f"Task {task_id} not found")
 
         current_st = AgentState(task["state"])
         ref = task.get("checkpoint_ref")
         rnd = task.get("review_round", 1)
         exec_id = task.get("executor_id") or self.config.get("executor_id", "claude-code")
-        max_rework_rounds = self.config.get("max_rework_rounds", 3)
 
         num_configured = configured_reviewers or len(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"]))
 
-        # Check if we should transition from WAITING_REVIEW -> CONSENSUS_CHECK
-        if current_st == AgentState.WAITING_REVIEW:
-            target_st, src, meta = self.fsm.engine.recognize_state(
-                current_st, ref, rnd, configured_reviewers=num_configured, max_rework_rounds=max_rework_rounds
-            )
-            if target_st == AgentState.CONSENSUS_CHECK:
-                self.fsm.transition(task_id, AgentState.CONSENSUS_CHECK, "E3", meta)
+        # Check quorum transition from WAITING_REVIEW -> CONSENSUS_CHECK
+        if current_st == AgentState.WAITING_REVIEW and ref:
+            allowed_revs = set(self.config.get("reviewer_ids", []))
+            reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=allowed_revs)
+            quorum = ConsensusEngine.calculate_minimum_quorum(num_configured)
+            if len(reviews) >= quorum:
+                self.fsm.transition(task_id, AgentState.CONSENSUS_CHECK, "E3")
                 current_st = AgentState.CONSENSUS_CHECK
 
         if current_st == AgentState.CONSENSUS_CHECK and ref:
@@ -274,112 +329,113 @@ class Orchestrator:
             for r in collected_reviews:
                 v_data = r["data"]
                 votes_list.append({
-                    "reviewer": r["reviewer_id"],
-                    "vote": v_data.get("vote", "ABSTAIN"),
-                    "confidence": v_data.get("opinion", {}).get("confidence", 0.9)
+                    "reviewer": v_data["reviewer"]["id"],
+                    "vote": v_data["vote"],
+                    "confidence": float(v_data.get("opinion", {}).get("confidence", 0.9))
                 })
 
-            raw_decision, breakdown, conf = ConsensusEngine.evaluate(votes_list, num_configured)
+            decision, breakdown, confidence = ConsensusEngine.evaluate(
+                votes=votes_list,
+                configured_reviewers=num_configured
+            )
 
-            # Branch based on decision
-            if raw_decision == Decision.APPROVED:
-                vdata = self.vote_aggregator.generate_vote_result(
-                    checkpoint_ref=ref,
-                    executor_id=exec_id,
-                    review_round=rnd,
-                    configured_reviewers=num_configured,
-                    reviews=collected_reviews,
-                    write_to_disk=True
+            # Rule: DEADLOCK must hold in CONSENSUS_CHECK and NOT write vote_result.json to disk (PRD §3.3 E3 / P0-1)
+            if decision == Decision.DEADLOCK:
+                self.store.log_audit_event(task_id, "DEADLOCK_DETECTED", {
+                    "checkpoint_ref": ref,
+                    "review_round": rnd,
+                    "summary": f"Deadlock: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}",
+                    "vote_breakdown": breakdown
+                })
+                # Trigger HUMAN_OVERRIDE_REQUEST AEP
+                self.msg_bus.publish(
+                    msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
+                    from_agent="macao",
+                    to_agent="admin",
+                    payload={
+                        "task_id": task_id,
+                        "checkpoint_ref": ref,
+                        "review_round": rnd,
+                        "reason": "DEADLOCK_DETECTED",
+                        "summary": f"Deadlock: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}",
+                        "vote_breakdown": breakdown
+                    }
                 )
+                return None, None
+
+            # Generate and write authoritative vote_result.json for non-deadlock decisions
+            vdata = self.vote_aggregator.generate_vote_result(
+                checkpoint_ref=ref,
+                executor_id=exec_id,
+                review_round=rnd,
+                configured_reviewers=num_configured,
+                reviews=collected_reviews,
+                human_resolution=None,
+                write_to_disk=True
+            )
+
+            if decision == Decision.APPROVED:
                 change = self.fsm.transition(task_id, AgentState.MERGING, "E4", vdata)
                 return change, vdata
-
-            elif raw_decision == Decision.REWORK_REQUIRED:
-                if rnd < max_rework_rounds:
-                    vdata = self.vote_aggregator.generate_vote_result(
-                        checkpoint_ref=ref,
-                        executor_id=exec_id,
-                        review_round=rnd,
-                        configured_reviewers=num_configured,
-                        reviews=collected_reviews,
-                        write_to_disk=True
-                    )
+            elif decision == Decision.REWORK_REQUIRED:
+                max_rnd = self.config.get("max_rework_rounds", 3)
+                if rnd < max_rnd:
                     change = self.fsm.transition(task_id, AgentState.REWORK, "E5", vdata)
-
-                    # Dispatch REWORK_REQUEST to executor
                     self.msg_bus.publish(
                         msg_type=AEPType.REWORK_REQUEST,
                         from_agent="macao",
                         to_agent=exec_id,
                         payload={
-                            "checkpoint_ref": ref,
-                            "round": rnd + 1,
-                            "issues_to_fix": vdata.get("next_step", {}).get("issues_to_fix", [])
+                            "task_id": task_id,
+                            "review_round": rnd + 1,
+                            "summary": f"Rework required: reject={breakdown.get('reject')}",
+                            "vote_breakdown": breakdown
                         }
                     )
                     return change, vdata
                 else:
-                    # Max rework rounds reached -> trigger HUMAN_OVERRIDE_REQUEST without writing automatic vote_result
+                    # Max rounds reached: hold for human override
+                    self.store.log_audit_event(task_id, "MAX_REWORK_ROUNDS_REACHED", {
+                        "review_round": rnd,
+                        "max_rework_rounds": max_rnd
+                    })
                     self.msg_bus.publish(
                         msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
                         from_agent="macao",
-                        to_agent="human_admin",
+                        to_agent="admin",
                         payload={
-                            "trigger": "MAX_REWORK_ROUNDS_REACHED",
+                            "task_id": task_id,
                             "checkpoint_ref": ref,
                             "review_round": rnd,
-                            "vote_breakdown": breakdown,
-                            "options": ["APPROVED", "REWORK", "RETRY_REVIEW", "CANCEL"],
-                            "timeout": "10m"
+                            "reason": "MAX_REWORK_ROUNDS_REACHED"
                         }
                     )
-                    self.store.log_audit_event(task_id, "MAX_REWORK_REACHED", {
-                        "round": rnd,
-                        "max_rework_rounds": max_rework_rounds
-                    })
-                    return None, None
-
-            elif raw_decision == Decision.DEADLOCK:
-                # PRD §3.3 E3 Rule: HOLD, DO NOT WRITE vote_result.json, trigger HUMAN_OVERRIDE_REQUEST
-                self.msg_bus.publish(
-                    msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
-                    from_agent="macao",
-                    to_agent="human_admin",
-                    payload={
-                        "trigger": "CONSENSUS_DEADLOCK",
-                        "checkpoint_ref": ref,
-                        "review_round": rnd,
-                        "vote_breakdown": breakdown,
-                        "options": ["APPROVED", "REWORK", "RETRY_REVIEW", "CANCEL"],
-                        "timeout": "10m"
-                    }
-                )
-                self.store.log_audit_event(task_id, "DEADLOCK_DETECTED", {
-                    "breakdown": breakdown,
-                    "action": "Triggered HUMAN_OVERRIDE_REQUEST (HOLD, no vote_result.json on disk)"
-                })
-                # vdata is generated in-memory for inspectability, but write_to_disk was not called
-                vdata = self.vote_aggregator.generate_vote_result(
-                    checkpoint_ref=ref,
-                    executor_id=exec_id,
-                    review_round=rnd,
-                    configured_reviewers=num_configured,
-                    reviews=collected_reviews,
-                    write_to_disk=False
-                )
-                return None, vdata
+                    return None, vdata
+            elif decision == Decision.RETRY_REVIEW:
+                change = self.fsm.transition(task_id, AgentState.WAITING_REVIEW, "E9", vdata)
+                return change, vdata
+            elif decision == Decision.CANCELLED:
+                change = self.fsm.transition(task_id, AgentState.CANCELLED, "E10", vdata)
+                return change, vdata
 
         return None, None
 
     def execute_merge(self, task_id: str) -> Tuple[bool, str, Optional[StateChange]]:
-        """Executes the merge pipeline in MERGING state (E4a/E4b)."""
+        """
+        E4a / E4b: MERGING -> DONE (on success) or REWORK (on failure).
+        Invokes Fast-forward Merge Controller with CI gates and Signoff verification (PRD §14.5).
+        """
         task = self.store.get_task(task_id)
-        if not task or AgentState(task["state"]) != AgentState.MERGING:
-            return False, "Task is not in MERGING state", None
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
 
-        target_branch = task.get("target_branch") or self.config.get("target_branch", "main")
-        ci_cmd = self.config.get("ci_gate_command")
+        current_st = AgentState(task["state"])
+        if current_st != AgentState.MERGING:
+            return False, f"Task {task_id} is in state {current_st.value}, expected MERGING", None
+
         req_signoff = self.config.get("require_signoff", True)
+        ci_cmd = self.config.get("ci_gate_command")
+        target_branch = task.get("target_branch") or self.config.get("target_branch", "main")
         remote_name = self.config.get("remote_name")
 
         success, msg, commit = self.merge_controller.execute_merge_pipeline(
@@ -404,7 +460,7 @@ class Orchestrator:
             change = self.fsm.transition(task_id, AgentState.REWORK, "E4b", {"error": msg})
             return False, msg, change
 
-    def resolve_override(self, task_id: str, choice: OverrideChoice, note: str = "") -> StateChange:
+    def resolve_override(self, task_id: str, choice: Union[OverrideChoice, str], note: str = "") -> StateChange:
         """E7 / E9 / E10: Resolves human override, writes final vote_result.json, and executes state transition."""
         task = self.store.get_task(task_id)
         if not task:
@@ -414,24 +470,43 @@ class Orchestrator:
         rnd = task.get("review_round", 1)
         exec_id = task.get("executor_id") or self.config.get("executor_id", "claude-code")
 
+        # Normalize choice
+        if isinstance(choice, str):
+            choice_upper = choice.strip().upper()
+            if choice_upper in ("APPROVED", "FORCE_MERGE", "MERGE"):
+                choice_enum = OverrideChoice.APPROVED
+            elif choice_upper in ("REWORK", "FORCE_REWORK"):
+                choice_enum = OverrideChoice.REWORK
+            elif choice_upper in ("RETRY_REVIEW", "RETRY"):
+                choice_enum = OverrideChoice.RETRY_REVIEW
+            elif choice_upper in ("CANCEL", "CANCELLED"):
+                choice_enum = OverrideChoice.CANCEL
+            else:
+                choice_enum = OverrideChoice(choice_upper)
+        else:
+            choice_enum = choice
+
         # 1. Write human override audit event
-        self.store.log_override_event(
+        self.store.log_audit_event(
             task_id=task_id,
-            checkpoint_ref=ref,
-            review_round=rnd,
-            actor="human_admin",
-            action=choice.value,
-            reason=note
+            event_type="HUMAN_OVERRIDE",
+            detail={
+                "checkpoint_ref": ref,
+                "review_round": rnd,
+                "actor": "human_admin",
+                "action": choice_enum.value,
+                "reason": note
+            }
         )
 
-        # 2. Map choice to target state and trigger ID
+        # 2. Map choice to target state, trigger ID, and resolution string
         choice_map = {
-            OverrideChoice.FORCE_MERGE: (AgentState.MERGING, "E7", "APPROVED"),
-            OverrideChoice.FORCE_REWORK: (AgentState.REWORK, "E7", "REWORK"),
+            OverrideChoice.APPROVED: (AgentState.MERGING, "E7", "APPROVED"),
+            OverrideChoice.REWORK: (AgentState.REWORK, "E7", "REWORK"),
             OverrideChoice.RETRY_REVIEW: (AgentState.WAITING_REVIEW, "E9", "RETRY_REVIEW"),
             OverrideChoice.CANCEL: (AgentState.CANCELLED, "E10", "CANCEL")
         }
-        target_state, trigger_id, resolution_choice = choice_map[choice]
+        target_state, trigger_id, resolution_choice = choice_map[choice_enum]
 
         # 3. Generate and write authoritative vote_result.json with human resolution
         allowed_revs = set(self.config.get("reviewer_ids", []))
@@ -449,14 +524,15 @@ class Orchestrator:
         # 4. Perform FSM transition
         change = self.fsm.transition(task_id, target_state, trigger_id, vdata)
 
-        # 5. Broadcast notification
+        # 5. Broadcast notification using standard Schema AEPType.STATE_CHANGED
         self.msg_bus.publish(
-            msg_type=AEPType.OVERRIDE_RESOLVED,
+            msg_type=AEPType.STATE_CHANGED,
             from_agent="human_admin",
             to_agent="all",
             payload={
                 "task_id": task_id,
-                "choice": choice.value,
+                "action": "OVERRIDE_RESOLVED",
+                "choice": choice_enum.value,
                 "new_state": target_state.value,
                 "note": note
             }

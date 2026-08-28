@@ -20,7 +20,14 @@ class StateStore:
         return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     # --- Task Operations ---
-    def create_task(self, task_id: str, title: str, source_branch: str, target_branch: str) -> Dict[str, Any]:
+    def create_task(
+        self,
+        task_id: str,
+        title: str,
+        source_branch: str,
+        target_branch: str = "main",
+        acceptance_criteria: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         now = self._now()
         with self.db.connection() as conn:
             conn.execute(
@@ -68,44 +75,22 @@ class StateStore:
         checkpoint_ref: str,
         review_round: int,
         path: str,
-        reviewer_id: str = "",
-        sha256: Optional[str] = None
-    ) -> None:
-        """Registers an artifact preserving history (non-destructive append or update)."""
+        content: Optional[bytes] = None,
+        reviewer_id: str = ""
+    ) -> int:
         now = self._now()
-        if sha256 is None and Path(path).exists():
-            with open(path, "rb") as f:
-                sha256 = hashlib.sha256(f.read()).hexdigest()
-
+        sha256 = hashlib.sha256(content).hexdigest() if content else ""
         with self.db.connection() as conn:
-            # Check if artifact already registered for this 5-tuple
-            existing = conn.execute(
+            cursor = conn.execute(
                 """
-                SELECT artifact_id, consumed, archived_path FROM artifacts
-                WHERE task_id = ? AND kind = ? AND checkpoint_ref = ? AND review_round = ? AND reviewer_id = ?
+                INSERT INTO artifacts (task_id, kind, checkpoint_ref, review_round, reviewer_id, path, sha256, created_at, consumed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                ON CONFLICT(task_id, kind, checkpoint_ref, review_round, reviewer_id)
+                DO UPDATE SET path = excluded.path, sha256 = excluded.sha256, created_at = excluded.created_at
                 """,
-                (task_id, kind, checkpoint_ref, review_round, reviewer_id)
-            ).fetchone()
-
-            if existing:
-                # Update path & sha256 without resetting consumed / archived_path
-                conn.execute(
-                    """
-                    UPDATE artifacts
-                    SET path = ?, sha256 = ?, created_at = ?
-                    WHERE artifact_id = ?
-                    """,
-                    (path, sha256 or "", now, existing["artifact_id"])
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO artifacts
-                    (task_id, kind, checkpoint_ref, review_round, reviewer_id, path, sha256, consumed, archived_path, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)
-                    """,
-                    (task_id, kind, checkpoint_ref, review_round, reviewer_id, path, sha256 or "", now)
-                )
+                (task_id, kind, checkpoint_ref, review_round, reviewer_id, path, sha256, now)
+            )
+            return cursor.lastrowid
 
     def mark_artifact_consumed(self, task_id: str, kind: str, checkpoint_ref: str, review_round: int, archived_path: str, reviewer_id: str = "") -> None:
         with self.db.connection() as conn:
@@ -153,17 +138,37 @@ class StateStore:
                 ).fetchall()
             return [dict(r) for r in rows]
 
-    # --- Override Operations ---
-    def record_override(self, task_id: str, trigger: str, choice: str, note: Optional[str] = None) -> int:
-        now = self._now()
-        seq_id = self.log_audit_event(task_id, "HUMAN_OVERRIDE_RESOLVED", {
-            "trigger": trigger,
-            "choice": choice,
-            "note": note
-        })
+    # --- Message Queue Queries ---
+    def list_messages(self, task_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         with self.db.connection() as conn:
-            cursor = conn.execute(
-                "INSERT INTO overrides (sequence_id, task_id, trigger, choice, note, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (seq_id, task_id, trigger, choice, note or "", now)
-            )
-            return cursor.lastrowid
+            rows = conn.execute(
+                "SELECT * FROM message_queue ORDER BY created_at DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            results = []
+            for r in rows:
+                m_dict = dict(r)
+                p = m_dict.get("payload")
+                if isinstance(p, str):
+                    try:
+                        p = json.loads(p)
+                    except Exception:
+                        pass
+                to_val = m_dict["to_agent"]
+                if isinstance(to_val, str) and to_val.startswith("["):
+                    try:
+                        to_val = json.loads(to_val)
+                    except Exception:
+                        pass
+
+                env = {
+                    "protocol": "AEP/1.0",
+                    "message_id": m_dict["message_id"],
+                    "timestamp": m_dict["created_at"],
+                    "type": m_dict["type"],
+                    "from": m_dict["from_agent"],
+                    "to": to_val,
+                    "payload": p if isinstance(p, dict) else {}
+                }
+                results.append(env)
+            return results

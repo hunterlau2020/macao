@@ -169,30 +169,16 @@ merge:
         res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.repo_dir), capture_output=True, text=True, check=True)
         checkpoint_ref = res.stdout.strip()
 
-        # Write valid Schema .dev.yml
-        macao_dir = self.repo_dir / ".macao"
-        macao_dir.mkdir(parents=True, exist_ok=True)
-        dev_manifest = {
-            "version": "1.0",
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "executor": {"id": "claude-code", "role": "executor", "cli": "claude-code"},
-            "development": {
-                "description": "Implemented safe add and subtract operations with 100% test coverage",
-                "artifacts": [{"path": "src/calc.py"}, {"path": "tests/test_calc.py"}],
-                "quality_metrics": {"tests_passed": True},
-                "git": {
-                    "base_commit": "main",
-                    "latest_commit": checkpoint_ref,
-                    "branch": "feature/micro-calc",
-                    "changed_files": ["src/calc.py", "tests/test_calc.py"]
-                }
-            },
-            "review_round": 1,
-            "status": "ready_for_review",
-            "signal": "EXPLICIT"
-        }
-        with open(macao_dir / ".dev.yml", "w", encoding="utf-8") as f:
-            yaml.safe_dump(dev_manifest, f)
+        # Executor Adapter contract: generate .dev.yml
+        executor_adapter.start()
+        executor_adapter.inject_task(task_data)
+        executor_adapter.simulate_produce_dev_manifest(
+            project_root=str(self.repo_dir),
+            commit_sha=checkpoint_ref,
+            review_round=1,
+            tests_passed=True
+        )
+        executor_adapter.stop()
 
         # 3. Check Development Checkpoint
         change1 = orchestrator.check_development_checkpoint(task_id)
@@ -218,26 +204,26 @@ merge:
             "reviewers": reviewers
         })
 
-        # 5. Reviewers generate reviews in their isolated worktrees
-        reviews_dir = macao_dir / ".reviews"
-        reviews_dir.mkdir(parents=True, exist_ok=True)
-
-        for r_id in reviewers:
-            rev_manifest = {
-                "version": "1.0",
-                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "reviewer": {"id": r_id, "cli": r_id},
+        # 5. Reviewer Adapters receive task instruction and generate reviews
+        for rev_adapter in reviewer_adapters:
+            r_id = rev_adapter.agent_id
+            worktree_dir = self.repo_dir / ".macao" / "worktrees" / r_id / f"r1_{checkpoint_ref[:8]}"
+            rev_adapter.start()
+            rev_adapter.inject_task({
+                "task_id": task_id,
                 "checkpoint_ref": checkpoint_ref,
                 "review_round": 1,
-                "opinion": {
-                    "status": "APPROVED",
-                    "confidence": 0.95,
-                    "summary": f"Review by {r_id}: Code is clean, well-tested, adheres to standards."
-                },
-                "vote": "YES_APPROVE"
-            }
-            with open(reviews_dir / f"{r_id}.review.yml", "w", encoding="utf-8") as f:
-                yaml.safe_dump(rev_manifest, f)
+                "isolated_worktree": str(worktree_dir)
+            })
+            rev_adapter.simulate_produce_review_manifest(
+                project_root=str(self.repo_dir),
+                checkpoint_ref=checkpoint_ref,
+                review_round=1,
+                vote=Vote.YES_APPROVE,
+                opinion_status=OpinionStatus.APPROVED
+            )
+            rev_adapter.ack(f"msg-ack-{r_id}")
+            rev_adapter.stop()
 
         # 6. Collect Consensus
         change2, vdata = orchestrator.collect_and_evaluate_consensus(task_id, configured_reviewers=len(reviewers))
@@ -276,7 +262,7 @@ merge:
         merge_exact_match = (main_head == checkpoint_ref)
 
         # Check physical archive in .macao/archive/<checkpoint_ref>/r1/
-        archive_dir = macao_dir / "archive" / checkpoint_ref / "r1"
+        archive_dir = self.repo_dir / ".macao" / "archive" / checkpoint_ref / "r1"
         archived_files = [f.name for f in archive_dir.glob("*")] if archive_dir.exists() else []
 
         return {

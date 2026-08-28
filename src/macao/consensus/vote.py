@@ -74,49 +74,38 @@ class VoteAggregator:
         human_resolution: Optional[str] = None,
         write_to_disk: bool = True
     ) -> Dict[str, Any]:
-        """Synthesizes vote_result.json payload.
-
-        PRD §3.3 E3 Rule: If decision is DEADLOCK, HOLD and DO NOT write vote_result.json to disk.
-        Only finalized decisions (APPROVED, REWORK_REQUIRED, or human_override) are written.
+        """
+        Calculates consensus decision and produces schema-valid vote_result.json.
         """
         votes_list = []
         input_artifacts = []
         issues_to_fix = []
 
-        for idx_r, r in enumerate(reviews, 1):
+        for r in reviews:
             data = r["data"]
-            reviewer_id = data.get("reviewer", {}).get("id", f"reviewer-{idx_r}")
-            vote_val = data.get("vote")
-            confidence = data.get("opinion", {}).get("confidence", 0.9)
-            feedback = data.get("opinion", {}).get("feedback", {})
-
-            categories = feedback.get("categories", [])
-            issues_count = len(categories)
+            rev_id = data["reviewer"]["id"]
+            vote_val = data["vote"]
+            op_data = data.get("opinion", {})
+            issues_list = op_data.get("feedback", {}).get("categories", [])
 
             votes_list.append({
-                "reviewer": reviewer_id,
+                "reviewer": rev_id,
                 "vote": vote_val,
-                "confidence": confidence,
-                "issues_count": issues_count
+                "confidence": float(op_data.get("confidence", 0.9)),
+                "issues_count": len(issues_list)
             })
-
-            # Format valid AEP message ID conforming to ^msg-[0-9]{8}-[0-9]{3,}$
-            msg_id = data.get("message_id")
-            if not msg_id or not msg_id.startswith("msg-"):
-                today_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
-                msg_id = f"msg-{today_str}-{idx_r:04d}"
 
             input_artifacts.append({
                 "kind": "review_manifest",
                 "path": r["file_path"],
                 "sha256": r["sha256"],
-                "message_id": msg_id
+                "message_id": f"msg-rev-{rev_id}"
             })
 
-            # Extract issues
-            for idx, cat in enumerate(categories, 1):
+            for idx, cat in enumerate(issues_list):
                 issues_to_fix.append({
-                    "id": f"{reviewer_id}/{idx}",
+                    "id": f"issue-{rev_id}-{idx+1}",
+                    "reviewer": rev_id,
                     "type": cat.get("type", "logic"),
                     "severity": cat.get("severity", "major"),
                     "description": cat.get("issue", "")
@@ -141,10 +130,9 @@ class VoteAggregator:
         next_action_map = {
             Decision.APPROVED: "MERGE",
             Decision.REWORK_REQUIRED: "REWORK",
-            Decision.RETRY_REVIEW: "RETRY_REVIEW",
-            Decision.CANCELLED: "CANCEL"
+            Decision.RETRY_REVIEW: "RETRY_REVIEW"
         }
-        next_action = next_action_map.get(decision, "HOLD")
+        next_action = next_action_map.get(decision)
 
         result: Dict[str, Any] = {
             "version": "1.0",
@@ -165,26 +153,28 @@ class VoteAggregator:
                 "critical_issues": sum(1 for i in issues_to_fix if i.get("severity") == "critical"),
                 "major_issues": sum(1 for i in issues_to_fix if i.get("severity") == "major"),
                 "minor_issues": sum(1 for i in issues_to_fix if i.get("severity") == "minor"),
-                "action": f"Action: {next_action}"
-            },
-            "next_step": {
+                "action": f"Action: {next_action or 'CANCEL'}"
+            }
+        }
+
+        if next_action:
+            result["next_step"] = {
                 "action": next_action,
                 "issues_to_fix": issues_to_fix
             }
-        }
 
         # PRD §3.3 E3 Rule: If decision is DEADLOCK, DO NOT write to disk
         if decision == Decision.DEADLOCK:
             return result
 
         if write_to_disk:
-            is_valid, err = validate_vote_result(result)
-            if not is_valid:
-                raise ValueError(f"Generated vote_result is invalid: {err}")
-
             out_file = self.root / ".macao" / "vote_result.json"
             out_file.parent.mkdir(parents=True, exist_ok=True)
             with open(out_file, "w", encoding="utf-8") as f:
                 json.dump(result, f, indent=2, ensure_ascii=False)
+
+        is_valid, err = validate_vote_result(result)
+        if not is_valid:
+            raise ValueError(f"Generated vote_result is invalid: {err}")
 
         return result
