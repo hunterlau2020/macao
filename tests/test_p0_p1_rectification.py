@@ -1,4 +1,4 @@
-"""Unit tests verifying P0 and P1 rectifications from 4-expert review of 906b17e and e7ba2d2."""
+"""Unit tests verifying all P0 and P1 rectifications across all expert review rounds."""
 
 import os
 import shutil
@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 from macao.core.config import ConfigManager
-from macao.core.types import AgentState, ExecutionMode, OverrideChoice, Vote, OpinionStatus
+from macao.core.types import AgentState, ExecutionMode, OverrideChoice, Vote, OpinionStatus, Decision
 from macao.adapter.mock import MockAgentAdapter
 from macao.workflow.orchestrator import Orchestrator
 from macao.merge.controller import MergeController
@@ -17,6 +17,7 @@ from macao.workflow.e2e_runner import ControlledE2ERunner
 from macao.msg.envelope import AEPEnvelope
 from macao.msg.bus import MessageBus
 from macao.core.schema import validate_aep_envelope
+from macao.consensus.vote import VoteAggregator
 
 
 class TestP0P1Rectification(unittest.TestCase):
@@ -41,6 +42,246 @@ class TestP0P1Rectification(unittest.TestCase):
                     to_agent="all",
                     payload={"index": i}
                 )
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_task_id_concurrency_no_collision_in_100_tasks(self):
+        """P0-1 (Codex): Verify same-second task creation generates unique IDs without collision."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            orch = Orchestrator(project_root=tmpdir)
+            created_ids = []
+            for i in range(100):
+                t = orch.start_task(
+                    title=f"Task {i}",
+                    task_description=f"Description {i}"
+                )
+                created_ids.append(t["task_id"])
+
+            self.assertEqual(len(set(created_ids)), 100)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_reviewer_timeout_degradation_scenario(self):
+        """REQ-TIMEOUT (ZCode / Codex): Verify reviewer timeout marks ABSTAIN, triggers DEADLOCK and E7 override."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # Init git repo
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "README.md").write_text("# Test\n")
+            subprocess.run(["git", "add", "README.md"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            orch = Orchestrator(
+                project_root=tmpdir,
+                config={"reviewer_ids": ["codex", "opencode"]}
+            )
+            task = orch.start_task("Timeout Task", "Test Timeout Handling")
+            t_id = task["task_id"]
+            orch.store.update_task_state(t_id, AgentState.WAITING_REVIEW, checkpoint_ref=head)
+
+            # Reviewer 1 (codex) submits approval
+            rev_adapter = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
+            rev_adapter.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote=Vote.YES_APPROVE,
+                opinion_status=OpinionStatus.APPROVED
+            )
+
+            # Reviewer 2 (opencode) times out -> passes timed_out_reviewers=['opencode']
+            change, vdata = orch.collect_and_evaluate_consensus(
+                task_id=t_id,
+                configured_reviewers=2,
+                timed_out_reviewers=["opencode"]
+            )
+
+            # 1 Approve + 1 Abstain = 1 Effective Vote < Quorum 2 -> DEADLOCK (HOLD in CONSENSUS_CHECK)
+            self.assertIsNone(change)
+            self.assertIsNone(vdata)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            # Assert vote_result.json was NOT written to disk during DEADLOCK
+            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+
+            # Assert HUMAN_OVERRIDE_REQUEST was published
+            msgs = orch.store.list_messages(limit=10)
+            types = [m["type"] for m in msgs]
+            self.assertIn("HUMAN_OVERRIDE_REQUEST", types)
+
+            # Admin resolves override with APPROVED -> transitions to MERGING
+            change_override = orch.resolve_override(t_id, "APPROVED", note="Timeout resolved by admin")
+            self.assertEqual(change_override.to_state, AgentState.MERGING)
+            self.assertTrue((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_max_rework_rounds_reached_holds_without_writing_disk_vote_result(self):
+        """P0-2 (Codex): Verify max rework rounds reached HOLDS without writing automatic vote_result.json."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "README.md").write_text("# Test\n")
+            subprocess.run(["git", "add", "README.md"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            orch = Orchestrator(
+                project_root=tmpdir,
+                config={"reviewer_ids": ["codex", "opencode"], "max_rework_rounds": 2}
+            )
+            task = orch.start_task("Max Round Task", "Test Max Round Guard")
+            t_id = task["task_id"]
+            # Set task at round 2 (equal to max_rework_rounds)
+            orch.store.update_task_state(t_id, AgentState.CONSENSUS_CHECK, checkpoint_ref=head, review_round=2)
+
+            # Both reviewers reject
+            for r_id in ["codex", "opencode"]:
+                rev_adapter = MockAgentAdapter(agent_id=r_id, cli_name=r_id, role="reviewer")
+                rev_adapter.simulate_produce_review_manifest(
+                    project_root=tmpdir,
+                    checkpoint_ref=head,
+                    review_round=2,
+                    vote=Vote.NO_APPROVE,
+                    opinion_status=OpinionStatus.REJECTED
+                )
+
+            change, vdata = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2)
+            self.assertIsNone(change)
+            self.assertIsNone(vdata)
+
+            # Verify task stays in CONSENSUS_CHECK
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            # Verify no automatic vote_result.json exists on disk
+            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+
+            # Verify crash reconciler maintains CONSENSUS_CHECK
+            from macao.storage.reconcile import StateReconciler
+            reconciler = StateReconciler(orch.store, project_root=tmpdir)
+            rec_change = reconciler.reconcile()
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_merge_controller_refuses_dirty_worktree_fail_closed(self):
+        """P0-3 (Codex): Verify MergeController refuses to merge if working tree has uncommitted changes."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+
+            f1 = Path(tmpdir) / "f1.txt"
+            f1.write_text("initial\n", encoding="utf-8")
+            subprocess.run(["git", "add", "f1.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "initial commit"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            # Create uncommitted modification in working directory
+            f1.write_text("USER UNCOMMITTED WORK\n", encoding="utf-8")
+
+            from macao.storage.store import StateStore
+            store = StateStore(os.path.join(tmpdir, "state.db"))
+            store.create_task("task-dirty", "Dirty Task", "feat", "main")
+            store.update_task_state("task-dirty", AgentState.MERGING, checkpoint_ref=head)
+
+            ctrl = MergeController(store, project_root=tmpdir)
+            ok, msg, _ = ctrl.execute_merge_pipeline("task-dirty", require_signoff=False)
+            self.assertFalse(ok)
+            self.assertIn("uncommitted tracked modifications", msg)
+
+            # Assert uncommitted work was NOT destroyed
+            self.assertEqual(f1.read_text(encoding="utf-8"), "USER UNCOMMITTED WORK\n")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_worktree_dispatch_exception_physically_cleans_created_worktrees(self):
+        """P1-1 (Claude): Verify Worktree dispatch exception physically removes previously created worktrees."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+            f1 = Path(tmpdir) / "f1.txt"
+            f1.write_text("initial\n", encoding="utf-8")
+            subprocess.run(["git", "add", "f1.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "initial commit"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            orch = Orchestrator(
+                project_root=tmpdir,
+                config={"reviewer_ids": ["rev1", "rev2"]}
+            )
+            orch.store.create_task("task-tx-clean", "Tx Clean Task", "feat", "main")
+            orch.store.update_task_state("task-tx-clean", AgentState.READY_FOR_REVIEW, checkpoint_ref=head)
+
+            # Mock second worktree to fail
+            orig_fn = orch.git.create_isolated_worktree
+            call_count = [0]
+            def faulty_worktree(reviewer_id, task_id, rnd, commit_sha):
+                call_count[0] += 1
+                if call_count[0] > 1:
+                    raise IOError("Simulated disk error on second worktree")
+                return orig_fn(reviewer_id, task_id, rnd, commit_sha)
+
+            orch.git.create_isolated_worktree = faulty_worktree
+
+            with self.assertRaises(RuntimeError):
+                orch.dispatch_review_requests("task-tx-clean")
+
+            # Assert task state is still READY_FOR_REVIEW
+            self.assertEqual(orch.store.get_task("task-tx-clean")["state"], AgentState.READY_FOR_REVIEW.value)
+
+            # Assert rev1 worktree directory was physically cleaned up from disk
+            rev1_wt_path = Path(tmpdir) / ".macao" / "worktrees" / "rev1" / "task-tx-clean" / "r1"
+            self.assertFalse(rev1_wt_path.exists())
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_artifacts_registered_and_tracked_in_database(self):
+        """P1-2 (Claude): Verify that dev_manifest, review_manifest, and vote_result are registered in database."""
+        runner = ControlledE2ERunner()
+        try:
+            res = runner.run_e2e_cycle()
+            self.assertEqual(res["status"], "PASS")
+
+            # Check database artifacts
+            orch = Orchestrator(project_root=str(runner.repo_dir))
+            artifacts = orch.store.list_artifacts(res["task_id"])
+            self.assertGreaterEqual(len(artifacts), 4)
+
+            kinds = [a["kind"] for a in artifacts]
+            self.assertIn("dev_manifest", kinds)
+            self.assertIn("review_manifest", kinds)
+            self.assertIn("vote_result", kinds)
+        finally:
+            runner.cleanup()
+
+    def test_vote_result_validation_before_write_and_fail_fast_on_invalid_resolution(self):
+        """P2-1 & P2-2 (ZCode / Qwen): Verify vote_result validates before writing and raises ValueError on bad resolution."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            aggregator = VoteAggregator(tmpdir)
+            with self.assertRaises(ValueError) as ctx:
+                aggregator.generate_vote_result(
+                    checkpoint_ref="abc1234",
+                    executor_id="claude-code",
+                    review_round=1,
+                    configured_reviewers=2,
+                    reviews=[],
+                    human_resolution="INVALID_UNRECOGNIZED_ACTION",
+                    write_to_disk=True
+                )
+            self.assertIn("Invalid human_resolution", str(ctx.exception))
+            # Verify no file written to disk
+            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -158,45 +399,6 @@ class TestP0P1Rectification(unittest.TestCase):
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def test_worktree_dispatch_transactional_fail_closed(self):
-        """P1-1: Verify worktree creation failure is transactional and does not advance FSM."""
-        tmpdir = tempfile.mkdtemp()
-        try:
-            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
-            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
-            f1 = Path(tmpdir) / "f1.txt"
-            f1.write_text("initial\n", encoding="utf-8")
-            subprocess.run(["git", "add", "f1.txt"], cwd=tmpdir, check=True)
-            subprocess.run(["git", "commit", "-m", "initial commit"], cwd=tmpdir, check=True)
-            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
-
-            orch = Orchestrator(
-                project_root=tmpdir,
-                config={"reviewer_ids": ["rev1", "rev2"]}
-            )
-            orch.store.create_task("task-tx", "Tx Task", "feat", "main")
-            orch.store.update_task_state("task-tx", AgentState.READY_FOR_REVIEW, checkpoint_ref=head)
-
-            # Mock second worktree to fail
-            orig_fn = orch.git.create_isolated_worktree
-            call_count = [0]
-            def faulty_worktree(reviewer_id, task_id, rnd, commit_sha):
-                call_count[0] += 1
-                if call_count[0] > 1:
-                    raise IOError("Simulated disk error on second worktree")
-                return orig_fn(reviewer_id, task_id, rnd, commit_sha)
-
-            orch.git.create_isolated_worktree = faulty_worktree
-
-            with self.assertRaises(RuntimeError):
-                orch.dispatch_review_requests("task-tx")
-
-            # Assert task state is still READY_FOR_REVIEW (not WAITING_REVIEW)
-            self.assertEqual(orch.store.get_task("task-tx")["state"], AgentState.READY_FOR_REVIEW.value)
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-
     def test_config_keys_penetration_and_require_signoff_fail_closed(self):
         """P0-1: Verify config keys penetration to Orchestrator and signoff fail-closed gate."""
         tmpdir = tempfile.mkdtemp()
@@ -309,6 +511,7 @@ merge:
             self.assertGreaterEqual(res["archived_count"], 4)
             self.assertIn(".dev.yml", res["archived_files"])
             self.assertIn("vote_result.json", res["archived_files"])
+            self.assertGreaterEqual(res["tracked_artifacts_count"], 4)
         finally:
             runner.cleanup()
 

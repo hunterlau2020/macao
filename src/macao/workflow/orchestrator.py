@@ -1,6 +1,7 @@
 """High-Level Multi-Agent Workflow Orchestrator (PRD §3, §10)."""
 
 import os
+import uuid
 import yaml
 import datetime
 from pathlib import Path
@@ -106,8 +107,10 @@ class Orchestrator:
         target_branch: str = "main",
         task_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """E1: IDLE -> CODING (Task Initialization)."""
-        t_id = task_id or f"task-{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d%H%M%S')}"
+        """E1: IDLE -> CODING (Task Initialization with collision-proof high-entropy ID)."""
+        date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+        rand_suffix = uuid.uuid4().hex[:6]
+        t_id = task_id or f"task-{date_str}-{rand_suffix}"
         src_branch = source_branch or f"feature/{t_id}"
 
         # Create Task in store
@@ -156,7 +159,7 @@ class Orchestrator:
     def check_development_checkpoint(self, task_id: str) -> Optional[StateChange]:
         """
         Layer 1a: Scans .macao/.dev.yml for explicit checkpoint signal.
-        Transitions from CODING/REWORK to READY_FOR_REVIEW upon valid manifest.
+        Registers dev_manifest in StateStore and transitions from CODING/REWORK to READY_FOR_REVIEW.
         """
         task = self.store.get_task(task_id)
         if not task:
@@ -187,6 +190,20 @@ class Orchestrator:
         latest_commit = git_info.get("latest_commit")
 
         if dev_rnd == rnd and status == "ready_for_review" and latest_commit:
+            # Register artifact in StateStore (PRD §11.4 / P1-2)
+            try:
+                rel_path = str(dev_file.relative_to(self.root))
+            except Exception:
+                rel_path = ".macao/.dev.yml"
+
+            self.store.register_artifact(
+                task_id=task_id,
+                kind="dev_manifest",
+                checkpoint_ref=latest_commit,
+                review_round=rnd,
+                path=rel_path
+            )
+
             # Transition to READY_FOR_REVIEW (产物型转移)
             trigger = "E6" if current_st == AgentState.REWORK else "E1_PRODUCED"
             change = self.fsm.transition(
@@ -240,7 +257,7 @@ class Orchestrator:
                 worktree_path = self.git.create_isolated_worktree(rev_id, task_id, rnd, checkpoint_ref)
                 created_worktrees[rev_id] = worktree_path
         except Exception as e:
-            # Cleanup any partially created worktrees from this dispatch
+            # Cleanup any partially created worktrees from this dispatch physically
             for rev_id, p in created_worktrees.items():
                 try:
                     self.git.remove_isolated_worktree(rev_id, task_id, rnd)
@@ -293,14 +310,20 @@ class Orchestrator:
 
         return change
 
-    def collect_and_evaluate_consensus(self, task_id: str, configured_reviewers: Optional[int] = None) -> Tuple[Optional[StateChange], Optional[Dict[str, Any]]]:
+    def collect_and_evaluate_consensus(
+        self,
+        task_id: str,
+        configured_reviewers: Optional[int] = None,
+        timed_out_reviewers: Optional[List[str]] = None
+    ) -> Tuple[Optional[StateChange], Optional[Dict[str, Any]]]:
         """
         Consensus Engine Evaluation:
         1. Checks quorum in WAITING_REVIEW -> moves to CONSENSUS_CHECK (E3).
         2. Evaluates votes in CONSENSUS_CHECK:
            - APPROVED -> writes vote_result.json, moves to MERGING (E4).
            - REWORK_REQUIRED -> writes vote_result.json, moves to REWORK (E5 if round < max else HOLD).
-           - DEADLOCK -> DOES NOT WRITE vote_result.json (PRD §3.3 E3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS in CONSENSUS_CHECK.
+           - DEADLOCK / TIMEOUT ABSTAIN -> DOES NOT WRITE vote_result.json (PRD §3.3 E3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS in CONSENSUS_CHECK.
+           - MAX_REWORK_ROUNDS_REACHED -> DOES NOT WRITE vote_result.json to disk (PRD §3.3 E5/E7 / Codex P0-3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS.
         """
         task = self.store.get_task(task_id)
         if not task:
@@ -318,13 +341,26 @@ class Orchestrator:
             allowed_revs = set(self.config.get("reviewer_ids", []))
             reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=allowed_revs)
             quorum = ConsensusEngine.calculate_minimum_quorum(num_configured)
-            if len(reviews) >= quorum:
+            # Quorum can be reached by either enough submitted reviews or timeout processing
+            if len(reviews) >= quorum or timed_out_reviewers:
                 self.fsm.transition(task_id, AgentState.CONSENSUS_CHECK, "E3")
                 current_st = AgentState.CONSENSUS_CHECK
 
         if current_st == AgentState.CONSENSUS_CHECK and ref:
             allowed_revs = set(self.config.get("reviewer_ids", []))
             collected_reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=allowed_revs)
+
+            # Register each collected review artifact in StateStore (P1-2)
+            for r in collected_reviews:
+                self.store.register_artifact(
+                    task_id=task_id,
+                    kind="review_manifest",
+                    checkpoint_ref=ref,
+                    review_round=rnd,
+                    path=r["file_path"],
+                    reviewer_id=r["reviewer_id"]
+                )
+
             votes_list = []
             for r in collected_reviews:
                 v_data = r["data"]
@@ -333,6 +369,23 @@ class Orchestrator:
                     "vote": v_data["vote"],
                     "confidence": float(v_data.get("opinion", {}).get("confidence", 0.9))
                 })
+
+            # Handle Reviewer Timeouts (REQ-TIMEOUT): Synthesize ABSTAIN votes
+            if timed_out_reviewers:
+                for to_rev in timed_out_reviewers:
+                    # Only add if not already submitted
+                    if not any(v["reviewer"] == to_rev for v in votes_list):
+                        votes_list.append({
+                            "reviewer": to_rev,
+                            "vote": Vote.ABSTAIN.value,
+                            "confidence": 0.0,
+                            "timeout": True
+                        })
+                        self.store.log_audit_event(task_id, "REVIEWER_TIMEOUT_ABSTAIN", {
+                            "reviewer_id": to_rev,
+                            "review_round": rnd,
+                            "checkpoint_ref": ref
+                        })
 
             decision, breakdown, confidence = ConsensusEngine.evaluate(
                 votes=votes_list,
@@ -344,7 +397,7 @@ class Orchestrator:
                 self.store.log_audit_event(task_id, "DEADLOCK_DETECTED", {
                     "checkpoint_ref": ref,
                     "review_round": rnd,
-                    "summary": f"Deadlock: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}",
+                    "summary": f"Deadlock: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
                     "vote_breakdown": breakdown
                 })
                 # Trigger HUMAN_OVERRIDE_REQUEST AEP
@@ -357,13 +410,37 @@ class Orchestrator:
                         "checkpoint_ref": ref,
                         "review_round": rnd,
                         "reason": "DEADLOCK_DETECTED",
-                        "summary": f"Deadlock: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}",
+                        "summary": f"Deadlock: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
                         "vote_breakdown": breakdown
                     }
                 )
                 return None, None
 
-            # Generate and write authoritative vote_result.json for non-deadlock decisions
+            # Rule: When max rework rounds is reached, HOLD in CONSENSUS_CHECK and DO NOT write automatic vote_result.json (PRD §3.3 E5/E7 / Codex P0-3)
+            max_rnd = self.config.get("max_rework_rounds", 3)
+            if decision == Decision.REWORK_REQUIRED and rnd >= max_rnd:
+                self.store.log_audit_event(task_id, "MAX_REWORK_ROUNDS_REACHED", {
+                    "review_round": rnd,
+                    "max_rework_rounds": max_rnd,
+                    "summary": f"Max rework rounds reached ({rnd}): reject={breakdown.get('reject')}",
+                    "vote_breakdown": breakdown
+                })
+                self.msg_bus.publish(
+                    msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
+                    from_agent="macao",
+                    to_agent="admin",
+                    payload={
+                        "task_id": task_id,
+                        "checkpoint_ref": ref,
+                        "review_round": rnd,
+                        "reason": "MAX_REWORK_ROUNDS_REACHED",
+                        "summary": f"Max rework rounds reached ({rnd}): reject={breakdown.get('reject')}",
+                        "vote_breakdown": breakdown
+                    }
+                )
+                return None, None
+
+            # Generate and write authoritative vote_result.json for valid non-deadlock decisions
             vdata = self.vote_aggregator.generate_vote_result(
                 checkpoint_ref=ref,
                 executor_id=exec_id,
@@ -374,43 +451,32 @@ class Orchestrator:
                 write_to_disk=True
             )
 
+            # Register vote_result artifact in store (P1-2)
+            self.store.register_artifact(
+                task_id=task_id,
+                kind="vote_result",
+                checkpoint_ref=ref,
+                review_round=rnd,
+                path=".macao/vote_result.json"
+            )
+
             if decision == Decision.APPROVED:
                 change = self.fsm.transition(task_id, AgentState.MERGING, "E4", vdata)
                 return change, vdata
             elif decision == Decision.REWORK_REQUIRED:
-                max_rnd = self.config.get("max_rework_rounds", 3)
-                if rnd < max_rnd:
-                    change = self.fsm.transition(task_id, AgentState.REWORK, "E5", vdata)
-                    self.msg_bus.publish(
-                        msg_type=AEPType.REWORK_REQUEST,
-                        from_agent="macao",
-                        to_agent=exec_id,
-                        payload={
-                            "task_id": task_id,
-                            "review_round": rnd + 1,
-                            "summary": f"Rework required: reject={breakdown.get('reject')}",
-                            "vote_breakdown": breakdown
-                        }
-                    )
-                    return change, vdata
-                else:
-                    # Max rounds reached: hold for human override
-                    self.store.log_audit_event(task_id, "MAX_REWORK_ROUNDS_REACHED", {
-                        "review_round": rnd,
-                        "max_rework_rounds": max_rnd
-                    })
-                    self.msg_bus.publish(
-                        msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
-                        from_agent="macao",
-                        to_agent="admin",
-                        payload={
-                            "task_id": task_id,
-                            "checkpoint_ref": ref,
-                            "review_round": rnd,
-                            "reason": "MAX_REWORK_ROUNDS_REACHED"
-                        }
-                    )
-                    return None, vdata
+                change = self.fsm.transition(task_id, AgentState.REWORK, "E5", vdata)
+                self.msg_bus.publish(
+                    msg_type=AEPType.REWORK_REQUEST,
+                    from_agent="macao",
+                    to_agent=exec_id,
+                    payload={
+                        "task_id": task_id,
+                        "review_round": rnd + 1,
+                        "summary": f"Rework required: reject={breakdown.get('reject')}",
+                        "vote_breakdown": breakdown
+                    }
+                )
+                return change, vdata
             elif decision == Decision.RETRY_REVIEW:
                 change = self.fsm.transition(task_id, AgentState.WAITING_REVIEW, "E9", vdata)
                 return change, vdata
@@ -519,6 +585,15 @@ class Orchestrator:
             reviews=collected_reviews,
             human_resolution=resolution_choice,
             write_to_disk=True
+        )
+
+        # Register authoritative vote_result artifact in store
+        self.store.register_artifact(
+            task_id=task_id,
+            kind="vote_result",
+            checkpoint_ref=ref,
+            review_round=rnd,
+            path=".macao/vote_result.json"
         )
 
         # 4. Perform FSM transition

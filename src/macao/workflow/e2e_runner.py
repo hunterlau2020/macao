@@ -204,10 +204,13 @@ merge:
             "reviewers": reviewers
         })
 
-        # 5. Reviewer Adapters receive task instruction and generate reviews
+        # 5. Reviewer Adapters receive task instruction and generate reviews in their isolated worktrees
         for rev_adapter in reviewer_adapters:
             r_id = rev_adapter.agent_id
-            worktree_dir = self.repo_dir / ".macao" / "worktrees" / r_id / f"r1_{checkpoint_ref[:8]}"
+            worktree_dir = self.repo_dir / ".macao" / "worktrees" / r_id / task_id / "r1"
+            if not worktree_dir.exists():
+                raise RuntimeError(f"Expected isolated worktree not found at {worktree_dir}")
+
             rev_adapter.start()
             rev_adapter.inject_task({
                 "task_id": task_id,
@@ -265,6 +268,9 @@ merge:
         archive_dir = self.repo_dir / ".macao" / "archive" / checkpoint_ref / "r1"
         archived_files = [f.name for f in archive_dir.glob("*")] if archive_dir.exists() else []
 
+        # Check tracked artifacts in StateStore
+        tracked_artifacts = orchestrator.store.list_artifacts(task_id)
+
         return {
             "task_id": task_id,
             "checkpoint_ref": checkpoint_ref,
@@ -275,7 +281,8 @@ merge:
             "steps": steps_log,
             "archived_files": archived_files,
             "archived_count": len(archived_files),
-            "status": "PASS" if (change_merge.to_state == AgentState.DONE and merge_exact_match and len(archived_files) > 0) else "FAIL"
+            "tracked_artifacts_count": len(tracked_artifacts),
+            "status": "PASS" if (change_merge.to_state == AgentState.DONE and merge_exact_match and len(archived_files) > 0 and len(tracked_artifacts) > 0) else "FAIL"
         }
 
     def cleanup(self) -> None:

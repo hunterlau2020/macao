@@ -76,6 +76,7 @@ class VoteAggregator:
     ) -> Dict[str, Any]:
         """
         Calculates consensus decision and produces schema-valid vote_result.json.
+        Validates schema before writing to disk (Fail-closed).
         """
         votes_list = []
         input_artifacts = []
@@ -116,16 +117,19 @@ class VoteAggregator:
         resolution_type = Resolution.AUTOMATIC.value
         if human_resolution:
             resolution_type = Resolution.HUMAN_OVERRIDE.value
-            if human_resolution == "APPROVED":
+            hr_upper = str(human_resolution).strip().upper()
+            if hr_upper in ("APPROVED", "MERGE", "FORCE_MERGE"):
                 decision = Decision.APPROVED
-            elif human_resolution in ("REWORK", "REWORK_REQUIRED"):
+            elif hr_upper in ("REWORK", "REWORK_REQUIRED", "FORCE_REWORK"):
                 decision = Decision.REWORK_REQUIRED
-            elif human_resolution in ("RETRY", "RETRY_REVIEW"):
+            elif hr_upper in ("RETRY", "RETRY_REVIEW"):
                 decision = Decision.RETRY_REVIEW
-            elif human_resolution in ("CANCEL", "CANCELLED"):
+            elif hr_upper in ("CANCEL", "CANCELLED"):
                 decision = Decision.CANCELLED
             else:
-                decision = Decision.APPROVED
+                raise ValueError(
+                    f"Invalid human_resolution '{human_resolution}'. Must be APPROVED, REWORK, RETRY_REVIEW, or CANCEL"
+                )
 
         next_action_map = {
             Decision.APPROVED: "MERGE",
@@ -167,14 +171,15 @@ class VoteAggregator:
         if decision == Decision.DEADLOCK:
             return result
 
+        # Fail-closed: validate schema first before writing to disk
+        is_valid, err = validate_vote_result(result)
+        if not is_valid:
+            raise ValueError(f"Generated vote_result is invalid: {err}")
+
         if write_to_disk:
             out_file = self.root / ".macao" / "vote_result.json"
             out_file.parent.mkdir(parents=True, exist_ok=True)
             with open(out_file, "w", encoding="utf-8") as f:
                 json.dump(result, f, indent=2, ensure_ascii=False)
-
-        is_valid, err = validate_vote_result(result)
-        if not is_valid:
-            raise ValueError(f"Generated vote_result is invalid: {err}")
 
         return result

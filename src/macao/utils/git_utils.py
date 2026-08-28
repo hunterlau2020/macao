@@ -4,7 +4,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 
 
 class GitManager:
@@ -106,10 +106,16 @@ class GitManager:
 
         return worktree_dir
 
-    def remove_worktree(self, worktree_path: Path) -> bool:
+    def remove_isolated_worktree(self, reviewer_id: str, task_id: str, review_round: int) -> bool:
+        """Prune and remove an isolated worktree directory for a reviewer session."""
+        worktree_dir = self.repo_path / ".macao" / "worktrees" / reviewer_id / task_id / f"r{review_round}"
+        return self.remove_worktree(worktree_dir)
+
+    def remove_worktree(self, worktree_path: Union[str, Path]) -> bool:
         """Prune and remove an isolated worktree directory."""
-        code, _, _ = self._run("worktree", "remove", "--force", str(worktree_path))
+        path_obj = Path(worktree_path)
+        code, _, _ = self._run("worktree", "remove", "--force", str(path_obj))
         self._run("worktree", "prune")
-        if worktree_path.exists():
-            shutil.rmtree(worktree_path, ignore_errors=True)
+        if path_obj.exists():
+            shutil.rmtree(path_obj, ignore_errors=True)
         return True

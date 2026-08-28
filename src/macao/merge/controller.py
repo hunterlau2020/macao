@@ -30,11 +30,12 @@ class MergeController:
         Executes merge pipeline (PRD §14.5):
         1. Verifies human signoff if require_signoff is True
         2. Checks inside git work tree (Fail-closed)
-        3. Checkouts target branch and captures pre_merge_head
-        4. Performs git merge --ff-only <checkpoint_ref>
-        5. Runs optional ci_gate_command (with atomic reset rollback on failure)
-        6. Verifies exact 40-character SHA match: HEAD == checkpoint_ref
-        7. Pushes to remote and verifies remote SHA if remote_name is configured (Fail-closed)
+        3. Checks working tree has no uncommitted tracked modifications to prevent destructive data loss (Fail-closed)
+        4. Checkouts target branch and captures pre_merge_head
+        5. Performs git merge --ff-only <checkpoint_ref>
+        6. Runs optional ci_gate_command (with atomic reset rollback on failure)
+        7. Verifies exact 40-character SHA match: HEAD == checkpoint_ref
+        8. Pushes to remote and verifies remote SHA if remote_name is configured (Fail-closed)
         """
         task = self.store.get_task(task_id)
         if not task:
@@ -55,6 +56,12 @@ class MergeController:
         code, _, _ = self.git._run("rev-parse", "--is-inside-work-tree")
         if code != 0:
             return False, "Directory is not a valid git repository (Fail-closed)", None
+
+        # Guard uncommitted tracked modifications to protect user work (Fail-closed)
+        code_diff, out_diff, _ = self.git._run("diff", "--name-only")
+        code_cached, out_cached, _ = self.git._run("diff", "--cached", "--name-only")
+        if code_diff != 0 or code_cached != 0 or out_diff.strip() or out_cached.strip():
+            return False, "Working directory has uncommitted tracked modifications. Refusing to merge (Fail-closed)", None
 
         # 1. Checkout target branch and capture pre-merge HEAD
         code, out, err = self.git._run("checkout", target_branch)
@@ -111,13 +118,17 @@ class MergeController:
                     self.git._run("reset", "--hard", pre_merge_head)
                 return False, f"Git push to {remote_name}/{target_branch} failed: {err or out}", None
 
-            # Verify remote SHA equals checkpoint_ref
-            code_ls, out_ls, _ = self.git._run("ls-remote", remote_name, f"refs/heads/{target_branch}")
-            if code_ls == 0 and out_ls.strip():
-                remote_sha = out_ls.strip().split()[0]
-                if remote_sha != full_checkpoint_ref:
-                    if pre_merge_head:
-                        self.git._run("reset", "--hard", pre_merge_head)
-                    return False, f"Remote SHA mismatch: remote {remote_sha} != local {full_checkpoint_ref}", None
+            # Verify remote SHA equals checkpoint_ref (Fail-closed)
+            code_ls, out_ls, err_ls = self.git._run("ls-remote", remote_name, f"refs/heads/{target_branch}")
+            if code_ls != 0 or not out_ls.strip():
+                if pre_merge_head:
+                    self.git._run("reset", "--hard", pre_merge_head)
+                return False, f"Failed to verify remote ref via ls-remote: {err_ls or 'empty output'} (Fail-closed)", None
+
+            remote_sha = out_ls.strip().split()[0]
+            if remote_sha != full_checkpoint_ref:
+                if pre_merge_head:
+                    self.git._run("reset", "--hard", pre_merge_head)
+                return False, f"Remote SHA mismatch: remote {remote_sha} != local {full_checkpoint_ref}", None
 
         return True, "Merge pipeline completed successfully", head_commit
