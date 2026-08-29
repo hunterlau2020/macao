@@ -13,8 +13,9 @@ from macao.storage.db import get_db, DatabaseManager
 class StateStore:
     """Provides high-level state persistence operations for MACAO."""
 
-    def __init__(self, db_path: str = ".macao/state.db"):
+    def __init__(self, db_path: str = ".macao/state.db", project_root: Optional[str] = None):
         self.db = get_db(db_path)
+        self.project_root = project_root
 
     def _now(self) -> str:
         return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -79,7 +80,22 @@ class StateStore:
         reviewer_id: str = ""
     ) -> int:
         now = self._now()
-        sha256 = hashlib.sha256(content).hexdigest() if content else ""
+        if content is not None:
+            sha256 = hashlib.sha256(content).hexdigest()
+        elif path:
+            p_obj = Path(path)
+            if not p_obj.is_absolute() and self.project_root:
+                p_obj = Path(self.project_root) / path
+            if p_obj.exists() and p_obj.is_file():
+                try:
+                    sha256 = hashlib.sha256(p_obj.read_bytes()).hexdigest()
+                except Exception:
+                    sha256 = ""
+            else:
+                sha256 = ""
+        else:
+            sha256 = ""
+
         with self.db.connection() as conn:
             cursor = conn.execute(
                 """
@@ -136,7 +152,17 @@ class StateStore:
                     "SELECT * FROM audit_events ORDER BY sequence_id DESC LIMIT ?",
                     (limit,)
                 ).fetchall()
-            return [dict(r) for r in rows]
+
+            result = []
+            for r in rows:
+                d = dict(r)
+                if isinstance(d.get("detail"), str):
+                    try:
+                        d["detail"] = json.loads(d["detail"])
+                    except Exception:
+                        pass
+                result.append(d)
+            return result
 
     # --- Message Queue Queries ---
     def list_messages(self, task_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:

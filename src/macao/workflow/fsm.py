@@ -68,10 +68,10 @@ class WorkflowFSM:
             "detail": detail
         })
 
-        # Archive logic (PRD §3.4)
+        # Archive logic (PRD §3.4 / §11.4)
         if trigger_id == "E2" and ref:
             self._archive_file(".macao/.dev.yml", ref, rnd, task_id, "dev_manifest")
-        elif trigger_id in ("E4", "E5", "E7") and ref:
+        elif trigger_id in ("E4", "E5", "E7", "E9", "E10") and ref:
             self._archive_file(".macao/vote_result.json", ref, rnd, task_id, "vote_result")
             self._archive_reviews(ref, rnd, task_id)
         elif trigger_id in ("E4a", "E4b") and ref:
@@ -99,14 +99,15 @@ class WorkflowFSM:
         if reviews_dir.exists():
             archive_dir = self.root / ".macao" / "archive" / checkpoint_ref / f"r{review_round}"
             archive_dir.mkdir(parents=True, exist_ok=True)
-            for rev_file in reviews_dir.glob("*.review.yml"):
+            for rev_file in sorted(reviews_dir.glob("*.review.yml")):
                 dst = archive_dir / rev_file.name
                 shutil.copy2(rev_file, dst)
+                reviewer_id = rev_file.name.replace(".review.yml", "")
                 self.store.mark_artifact_consumed(
                     task_id=task_id,
                     kind="review_manifest",
                     checkpoint_ref=checkpoint_ref,
                     review_round=review_round,
                     archived_path=str(dst.relative_to(self.root)),
-                    reviewer_id=rev_file.stem
+                    reviewer_id=reviewer_id
                 )

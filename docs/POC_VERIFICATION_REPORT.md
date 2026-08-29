@@ -1,9 +1,9 @@
 # MACAO PoC 三假设验证与第一/二阶段受控联调技术报告 (PoC Verification Report)
 
-- **日期**：2026-08-29（完成 4df059e 4 位专家复审意见全面整改，补齐超时场景单测与全量安全防护，49/49 测试全绿通过，5 轮连续回归 0 flake）
-- **验证版本**：Phase 0 / Phase 1 核心框架实现、Phase 1 PTY 实机联调、Phase 2 端到端微任务协同与全部 P0/P1/Timeout 闭环整改
+- **日期**：2026-08-29（完成 ea536ab 4 位专家复审意见全面整改，超时弃权票面落盘与产物消费账本双重闭环，49/49 测试全绿通过，5 轮连续回归 0 flake）
+- **验证版本**：Phase 0 / Phase 1 核心框架实现、Phase 1 PTY 实机联调、Phase 2 端到端微任务协同与全部 P0/P1/Timeout/Artifact 闭环整改
 - **测试结果**：**49 / 49 测试用例全部 PASS (100%)**
-- **验证范围**：物理契约产物规范、共识多数仲裁算法、单进程事件循环与 Worktree 事务性隔离机制、配置装配与单一真理源贯穿、消息广播独立投递表、4 款真实 AI CLI（Claude Code / Codex / OpenCode / AGY）PTY 启停与进程树安全回收、端到端微任务全生命周期协同仿真闭环、Message ID 高熵防碰撞、Schema 严格对齐与人工接管 4 选项、Merge CI 失败原子回滚与远端 Fail-closed、Reviewer 超时未响应自动标记弃权降级与死锁裁决全链路。
+- **验证范围**：物理契约产物规范、共识多数仲裁算法、单进程事件循环与 Worktree 事务性隔离机制、配置装配与单一真理源贯穿、消息广播独立投递表、4 款真实 AI CLI（Claude Code / Codex / OpenCode / AGY）PTY 启停与进程树安全回收、端到端微任务全生命周期协同仿真闭环、Message ID 高熵防碰撞、Schema 严格对齐与人工接管 4 选项、Merge CI 失败原子回滚与远端 Fail-closed、Reviewer 超时未响应自动标记弃权降级与终局 vote_result.json ABSTAIN 票据落盘、Artifact 消费与 SHA256 完整性全账本闭环。
 
 ---
 
@@ -11,25 +11,25 @@
 
 | 假设编号 | 核心假设内容 | 验证方法与测试套件 | 验证结论 |
 |---|---|---|---|
-| **假设 1** | **物理契约文件（`.dev.yml`, `.review.yml`, `vote_result.json`）可作为跨 Agent、跨轮次与崩溃恢复的唯一第一真理源** | `test_schema.py`、`test_state_store.py`、`test_reconcile_crash.py` | **✅ VERIFIED**<br>所有产物均严格符合 Draft-07 Schema 校验；SQLite 仅作为加速索引，崩溃后可完全基于磁盘物理产物 100% 恢复真实业务状态；开发产物、评审产物与仲裁产物全生命周期注册入库跟踪。 |
-| **假设 2** | **2/3 多数仲裁算法配合法定人数 `ceil(2N/3)` 能有效解决多 Reviewer 决策、死锁与弃权，并安全触发人工接管与超时降级** | `test_consensus.py`、`test_orchestrator_sim.py`、`test_p0_p1_rectification.py` | **✅ VERIFIED**<br>完整覆盖 2 人及 3 人评审场景下的全票通过、2/3 赞成、2/3 反对、1:1 平票死锁、弃权降级与评审人去重；死锁与超轮次拒绝时严格 HOLD 且不伪写错误终局；人工接管 4 种选项（`APPROVED` / `REWORK` / `RETRY_REVIEW` / `CANCEL`）100% 连通并通过 AEP Schema；Reviewer 超时自动标记弃权并判定死锁链路测试完整通过。 |
+| **假设 1** | **物理契约文件（`.dev.yml`, `.review.yml`, `vote_result.json`）可作为跨 Agent、跨轮次与崩溃恢复的唯一第一真理源** | `test_schema.py`、`test_state_store.py`、`test_reconcile_crash.py` | **✅ VERIFIED**<br>所有产物均严格符合 Draft-07 Schema 校验；SQLite 仅作为加速索引，崩溃后可完全基于磁盘物理产物 100% 恢复真实业务状态；开发产物、评审产物与仲裁产物全生命周期注册入库跟踪，5 份产物均正确记录 `consumed=1`、`archived_path` 路径及完整 64 位 `sha256` 校验和。 |
+| **假设 2** | **2/3 多数仲裁算法配合法定人数 `ceil(2N/3)` 能有效解决多 Reviewer 决策、死锁与弃权，并安全触发人工接管与超时降级** | `test_consensus.py`、`test_orchestrator_sim.py`、`test_p0_p1_rectification.py` | **✅ VERIFIED**<br>完整覆盖 2 人及 3 人评审场景下的全票通过、2/3 赞成、2/3 反对、1:1 平票死锁、弃权降级与评审人去重；死锁与超轮次拒绝时严格 HOLD 且不伪写错误终局；人工接管 4 种选项（`APPROVED` / `REWORK` / `RETRY_REVIEW` / `CANCEL`）100% 连通并通过 AEP Schema；Reviewer 超时自动标记弃权、死锁 HOLD 触发接管、E7 人工裁定后将 `ABSTAIN` 票据、`reviewers_responded` 统计与 `vote_breakdown.abstain` 完整写入终局 `vote_result.json` 落盘，符合 PRD §2.2 / §3.3 权威口径。 |
 | **假设 3** | **单进程主调度器结合 Git Worktree 物理路径隔离与 AEP 消息队列，足以稳定驱动 10 态 FSM 全生命周期流转** | `test_fsm.py`、`test_msg_bus.py`、`test_orchestrator_sim.py`、`test_config.py`、`test_p0_p1_rectification.py` | **✅ VERIFIED**<br>通过 `MockAgentAdapter` 成功驱动 S1（Happy Path 到 Merge）、S2（多轮返工推进）、S3（死锁人工接管）、S6（任务取消）及异常回退，转移表白名单强制生效，Reviewer 专属 Worktree 事务性准备与隔离 fail-closed（异常时物理清理 worktree 目录），`message_id` 与 `task_id` 均具备高熵随机数确保 0 碰撞，配置组装根注入与多播消息独立投递表闭环。 |
 | **Phase 1 实机** | **真实 AI CLI 进程生命周期与 PTY 交互、ANSI 码流捕获与进程树强杀安全回收** | `test_integ_harness.py`、`macao test-clis` | **✅ VERIFIED (POSIX)**<br>在 Linux 环境下对宿主真实安装的 Claude Code (`claude` 2.1.251)、Codex (`codex` 2.1.0)、OpenCode (`opencode` 1.18.25)、Google Antigravity (`agy` 1.1.22) 逐一验证 PTY 进程拉起、日志清洗与进程组强杀；4/4 真实 CLI 均在 <1s 内完成启动并干净退出，`os.kill(pid, 0)` 确认 0 孤儿/0 僵尸进程残留；Windows 环境优雅跳过。 |
-| **Phase 2 协同** | **端到端微型任务协同流转（Task Start -> Coding Checkpoint -> 3-Reviewer Worktrees -> 2/3 仲裁 -> Fast-forward Merge -> DONE）** | `test_e2e_phase2.py`、`test_p0_p1_rectification.py`、`macao e2e-run` | **✅ VERIFIED (Adapter Contract Driven)**<br>全流程通过 Mock Adapter 契约方法（`start/inject/produce/ack/stop`）驱动完成微型算术模块代码开发提交、3 方专属 Worktree 审查分发、2/3 多数票裁决（votes_yes=3, effective_votes=3）、快进合并前未提交修改安全防护与 CI 失败原子回滚守卫、目标分支 SHA 硬匹配校验（100% Match），产物非覆盖追加归档至 `.macao/archive/<checkpoint_ref>/r1/`（共 5 份文件：.dev.yml, vote_result.json, 3x review.yml），`artifacts` 数据库表跟踪记录 5 份产物。 |
+| **Phase 2 协同** | **端到端微型任务协同流转（Task Start -> Coding Checkpoint -> 3-Reviewer Worktrees -> 2/3 仲裁 -> Fast-forward Merge -> DONE）** | `test_e2e_phase2.py`、`test_p0_p1_rectification.py`、`macao e2e-run` | **✅ VERIFIED (Adapter Contract Driven)**<br>全流程通过 Mock Adapter 契约方法（`start/inject/produce/ack/stop`）驱动完成微型算术模块代码开发提交、3 方专属 Worktree 审查分发、2/3 多数票裁决（votes_yes=3, effective_votes=3）、快进合并前未提交修改安全防护与 CI 失败原子回滚守卫、目标分支 SHA 硬匹配校验（100% Match），产物非覆盖追加归档至 `.macao/archive/<checkpoint_ref>/r1/`（共 5 份文件：.dev.yml, vote_result.json, 3x review.yml），`artifacts` 数据库表跟踪记录 5 份产物（全 `consumed=1`、全 `sha256` 匹配）。 |
 
 ---
 
 ## 二、Phase 2 端到端微型任务协同实机报告
 
 ```text
-        MACAO Phase 2 E2E Micro-Task Report (task-20260828192730-f5e7e1)        
+        MACAO Phase 2 E2E Micro-Task Report (task-20260829042156-e7c877)
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
 ┃ Phase / Step             ┃ Details                         ┃ Status / Result ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
 │ 1. Task Start            │ state=CODING,                   │ OK              │
-│                          │ task_id=task-20260828192730-f5… │                 │
+│                          │ task_id=task-20260829042156-e7… │                 │
 │ 2. Checkpoint Validation │ state=READY_FOR_REVIEW,         │ OK              │
-│                          │ checkpoint_ref=55a26092         │                 │
+│                          │ checkpoint_ref=c8b86d87         │                 │
 │ 3. Worktree Dispatch     │ state=WAITING_REVIEW,           │ OK              │
 │                          │ reviewers_count=3,              │                 │
 │                          │ reviewers=['codex', 'opencode', │                 │

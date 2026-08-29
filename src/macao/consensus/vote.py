@@ -8,7 +8,7 @@ import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
-from macao.core.types import Decision, Resolution
+from macao.core.types import Decision, Resolution, Vote
 from macao.consensus.engine import ConsensusEngine
 from macao.core.schema import validate_review_manifest, validate_vote_result
 
@@ -72,11 +72,13 @@ class VoteAggregator:
         configured_reviewers: int,
         reviews: List[Dict[str, Any]],
         human_resolution: Optional[str] = None,
+        timed_out_reviewers: Optional[List[str]] = None,
         write_to_disk: bool = True
     ) -> Dict[str, Any]:
         """
         Calculates consensus decision and produces schema-valid vote_result.json.
         Validates schema before writing to disk (Fail-closed).
+        Persists timed out reviewers as ABSTAIN in votes and breakdown.
         """
         votes_list = []
         input_artifacts = []
@@ -112,6 +114,17 @@ class VoteAggregator:
                     "description": cat.get("issue", "")
                 })
 
+        # Include timed out reviewers as ABSTAIN (PRD §2.2 / §3.3 / P1-1)
+        if timed_out_reviewers:
+            for to_rev in timed_out_reviewers:
+                if not any(v["reviewer"] == to_rev for v in votes_list):
+                    votes_list.append({
+                        "reviewer": to_rev,
+                        "vote": Vote.ABSTAIN.value,
+                        "confidence": 0.0,
+                        "issues_count": 0
+                    })
+
         decision, breakdown, confidence = ConsensusEngine.evaluate(votes_list, configured_reviewers)
 
         resolution_type = Resolution.AUTOMATIC.value
@@ -145,11 +158,15 @@ class VoteAggregator:
             "executor": executor_id,
             "review_round": review_round,
             "reviewers_total": configured_reviewers,
-            "reviewers_responded": len(reviews),
+            "reviewers_responded": len(votes_list),
             "votes": votes_list,
             "input_artifacts": input_artifacts,
             "consensus_rule": "2/3_majority",
-            "vote_breakdown": breakdown,
+            "vote_breakdown": {
+                "approve": breakdown.get("approve", breakdown.get("yes_approve", 0)),
+                "reject": breakdown.get("reject", breakdown.get("no_approve", 0)),
+                "abstain": breakdown.get("abstain", 0)
+            },
             "decision": decision.value,
             "decision_confidence": confidence,
             "resolution": resolution_type,

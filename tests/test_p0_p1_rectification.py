@@ -1,9 +1,11 @@
 """Unit tests verifying all P0 and P1 rectifications across all expert review rounds."""
 
 import os
+import json
 import shutil
 import unittest
 import tempfile
+import datetime
 import subprocess
 from pathlib import Path
 
@@ -63,7 +65,7 @@ class TestP0P1Rectification(unittest.TestCase):
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_reviewer_timeout_degradation_scenario(self):
-        """REQ-TIMEOUT (ZCode / Codex): Verify reviewer timeout marks ABSTAIN, triggers DEADLOCK and E7 override."""
+        """REQ-TIMEOUT & P1-1: Verify reviewer timeout marks ABSTAIN, triggers DEADLOCK and E7 override persists ABSTAIN."""
         tmpdir = tempfile.mkdtemp()
         try:
             # Init git repo
@@ -77,11 +79,21 @@ class TestP0P1Rectification(unittest.TestCase):
 
             orch = Orchestrator(
                 project_root=tmpdir,
-                config={"reviewer_ids": ["codex", "opencode"]}
+                config={"reviewer_ids": ["codex", "opencode"], "timeouts": {"per_reviewer": "10m"}}
             )
             task = orch.start_task("Timeout Task", "Test Timeout Handling")
             t_id = task["task_id"]
-            orch.store.update_task_state(t_id, AgentState.WAITING_REVIEW, checkpoint_ref=head)
+
+            # Simulate dev manifest & dispatch
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+review_round: 1
+development:
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
 
             # Reviewer 1 (codex) submits approval
             rev_adapter = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
@@ -93,11 +105,16 @@ class TestP0P1Rectification(unittest.TestCase):
                 opinion_status=OpinionStatus.APPROVED
             )
 
-            # Reviewer 2 (opencode) times out -> passes timed_out_reviewers=['opencode']
+            # 1. Advance clock by 11 minutes -> auto timeout detection triggers
+            future_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=11)
+            detected_timeouts = orch.detect_timed_out_reviewers(t_id, current_time=future_time)
+            self.assertEqual(detected_timeouts, ["opencode"])
+
+            # Call consensus without passing timed_out_reviewers -> internally auto-detects
             change, vdata = orch.collect_and_evaluate_consensus(
                 task_id=t_id,
                 configured_reviewers=2,
-                timed_out_reviewers=["opencode"]
+                timed_out_reviewers=detected_timeouts
             )
 
             # 1 Approve + 1 Abstain = 1 Effective Vote < Quorum 2 -> DEADLOCK (HOLD in CONSENSUS_CHECK)
@@ -108,15 +125,31 @@ class TestP0P1Rectification(unittest.TestCase):
             # Assert vote_result.json was NOT written to disk during DEADLOCK
             self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
 
-            # Assert HUMAN_OVERRIDE_REQUEST was published
-            msgs = orch.store.list_messages(limit=10)
-            types = [m["type"] for m in msgs]
-            self.assertIn("HUMAN_OVERRIDE_REQUEST", types)
+            # Assert REVIEWER_TIMEOUT_ABSTAIN and HUMAN_OVERRIDE_REQUEST were logged
+            audits = orch.store.list_audit_events(t_id, limit=20)
+            audit_types = [a["type"] for a in audits]
+            self.assertIn("REVIEWER_TIMEOUT_ABSTAIN", audit_types)
+            self.assertIn("DEADLOCK_DETECTED", audit_types)
 
             # Admin resolves override with APPROVED -> transitions to MERGING
             change_override = orch.resolve_override(t_id, "APPROVED", note="Timeout resolved by admin")
             self.assertEqual(change_override.to_state, AgentState.MERGING)
-            self.assertTrue((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+
+            # Assert vote_result.json on disk contains the ABSTAIN vote and correct statistics (PRD §2.2 / §3.3)
+            vote_json_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertTrue(vote_json_file.exists())
+            with open(vote_json_file, "r", encoding="utf-8") as f:
+                v_res = json.load(f)
+
+            self.assertEqual(v_res["decision"], "APPROVED")
+            self.assertEqual(v_res["resolution"], "human_override")
+            self.assertEqual(v_res["reviewers_responded"], 2)
+            self.assertEqual(v_res["vote_breakdown"]["approve"], 1)
+            self.assertEqual(v_res["vote_breakdown"]["abstain"], 1)
+
+            votes_map = {v["reviewer"]: v["vote"] for v in v_res["votes"]}
+            self.assertEqual(votes_map["codex"], "YES_APPROVE")
+            self.assertEqual(votes_map["opencode"], "ABSTAIN")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -246,7 +279,7 @@ class TestP0P1Rectification(unittest.TestCase):
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_artifacts_registered_and_tracked_in_database(self):
-        """P1-2 (Claude): Verify that dev_manifest, review_manifest, and vote_result are registered in database."""
+        """P1-2 (Claude / Codex / Grok / ZCode): Verify full artifact lifecycle (register -> consume -> archive -> sha256)."""
         runner = ControlledE2ERunner()
         try:
             res = runner.run_e2e_cycle()
@@ -255,12 +288,20 @@ class TestP0P1Rectification(unittest.TestCase):
             # Check database artifacts
             orch = Orchestrator(project_root=str(runner.repo_dir))
             artifacts = orch.store.list_artifacts(res["task_id"])
-            self.assertGreaterEqual(len(artifacts), 4)
+            self.assertEqual(len(artifacts), 5)
 
             kinds = [a["kind"] for a in artifacts]
             self.assertIn("dev_manifest", kinds)
             self.assertIn("review_manifest", kinds)
             self.assertIn("vote_result", kinds)
+
+            # Assert all 5 artifacts are marked consumed, have valid archive paths, and valid SHA256 hashes
+            for a in artifacts:
+                self.assertEqual(a["consumed"], 1, f"Artifact {a['kind']} {a.get('reviewer_id')} consumed != 1")
+                self.assertIsNotNone(a["archived_path"], f"Artifact {a['kind']} {a.get('reviewer_id')} archived_path is None")
+                self.assertTrue(a["archived_path"].startswith(".macao/archive/"), f"Invalid archived path: {a['archived_path']}")
+                self.assertNotEqual(a["sha256"], "", f"Artifact {a['kind']} {a.get('reviewer_id')} sha256 is empty")
+                self.assertEqual(len(a["sha256"]), 64, f"Invalid SHA256 length: {a['sha256']}")
         finally:
             runner.cleanup()
 

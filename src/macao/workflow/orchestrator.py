@@ -29,6 +29,25 @@ from macao.utils.git_utils import GitManager
 from macao.core.config import ConfigManager
 
 
+def parse_duration(val: Union[str, int, float]) -> float:
+    """Parses duration string like '10m', '30s', '1h' to float seconds."""
+    if isinstance(val, (int, float)):
+        return float(val)
+    val = str(val).strip().lower()
+    if val.endswith("s"):
+        return float(val[:-1])
+    elif val.endswith("m"):
+        return float(val[:-1]) * 60
+    elif val.endswith("h"):
+        return float(val[:-1]) * 3600
+    elif val.endswith("d"):
+        return float(val[:-1]) * 86400
+    try:
+        return float(val)
+    except ValueError:
+        return 600.0
+
+
 class Orchestrator:
     """Coordinates Agent Lifecycles, State Transitions, and Artifact Pipelines."""
 
@@ -50,7 +69,7 @@ class Orchestrator:
             self.actual_db_path = str(self.macao_dir / "state.db")
 
         self.db_path = self.actual_db_path
-        self.store = StateStore(self.actual_db_path)
+        self.store = StateStore(self.actual_db_path, project_root=str(self.root))
         self.msg_bus = MessageBus(self.actual_db_path)
         self.git = GitManager(str(self.root))
         self.fsm = WorkflowFSM(self.store, str(self.root))
@@ -66,6 +85,7 @@ class Orchestrator:
         merge_policy = raw_config.get("merge", {})
         team = raw_config.get("team", {})
         repo = raw_config.get("project", {}).get("repository", {})
+        timeouts = raw_config.get("timeouts", {})
 
         reviewers_list = raw_config.get("reviewers") or team.get("reviewers") or [
             {"id": "codex", "cli": "codex", "adapter": "pty-wrapper"},
@@ -93,7 +113,8 @@ class Orchestrator:
             "target_branch": raw_config.get("target_branch", repo.get("default_branch", "main")),
             "executor_id": raw_config.get("executor_id", team.get("executor", {}).get("id", "claude-code")),
             "reviewers": reviewers_list,
-            "reviewer_ids": reviewer_ids
+            "reviewer_ids": reviewer_ids,
+            "timeouts": timeouts
         }
 
     # --- High-Level Workflow Actions ---
@@ -220,7 +241,7 @@ class Orchestrator:
         """
         E2: READY_FOR_REVIEW -> WAITING_REVIEW.
         Creates dedicated isolated worktrees for each reviewer FIRST (Fail-closed & Transactional).
-        Only after all worktrees succeed, transitions FSM and publishes REVIEW_REQUEST to reviewers.
+        Only after all worktrees succeed, transitions FSM and publishes REVIEW_REQUEST with deadline to reviewers.
         """
         task = self.store.get_task(task_id)
         if not task:
@@ -276,7 +297,21 @@ class Orchestrator:
         # 4. Only after all worktrees are successfully prepared, transition FSM (E2) and archive .dev.yml
         change = self.fsm.transition(task_id, AgentState.WAITING_REVIEW, "E2")
 
-        # 5. Build review contexts and publish REVIEW_REQUEST to each reviewer
+        # 5. Calculate deadline and publish REVIEW_REQUEST with deadline to each reviewer
+        timeout_val = self.config.get("timeouts", {}).get("per_reviewer", "10m")
+        timeout_sec = parse_duration(timeout_val)
+        now_dt = datetime.datetime.now(datetime.timezone.utc)
+        deadline_dt = now_dt + datetime.timedelta(seconds=timeout_sec)
+        deadline_iso = deadline_dt.isoformat()
+
+        self.store.log_audit_event(task_id, "REVIEW_REQUESTS_DISPATCHED", {
+            "checkpoint_ref": checkpoint_ref,
+            "review_round": rnd,
+            "reviewers": list(created_worktrees.keys()),
+            "deadline": deadline_iso,
+            "timeout_seconds": timeout_sec
+        })
+
         for rev_id, worktree_path in created_worktrees.items():
             ctx_builder = ReviewContextBuilder(
                 task_description=task.get("title", ""),
@@ -298,17 +333,72 @@ class Orchestrator:
                 "checkpoint_ref": checkpoint_ref,
                 "review_round": rnd,
                 "review_context": review_context,
-                "isolated_worktree_path": str(worktree_path)
+                "isolated_worktree_path": str(worktree_path),
+                "deadline": deadline_iso
             }
 
             self.msg_bus.publish(
                 msg_type=AEPType.REVIEW_REQUEST,
                 from_agent="macao",
                 to_agent=rev_id,
-                payload=payload
+                payload=payload,
+                deadline=deadline_iso
             )
 
         return change
+
+    def detect_timed_out_reviewers(
+        self,
+        task_id: str,
+        current_time: Optional[datetime.datetime] = None
+    ) -> List[str]:
+        """
+        Scans active review round for unsubmitted reviewers whose review deadline has elapsed.
+        """
+        task = self.store.get_task(task_id)
+        if not task:
+            return []
+
+        if task["state"] not in (AgentState.WAITING_REVIEW.value, AgentState.CONSENSUS_CHECK.value):
+            return []
+
+        ref = task.get("checkpoint_ref")
+        rnd = task.get("review_round", 1)
+        if not ref:
+            return []
+
+        audits = self.store.list_audit_events(task_id, limit=50)
+        dispatch_time = None
+        for a in audits:
+            if a.get("type") in ("STATE_TRANSITION_E2", "REVIEW_REQUESTS_DISPATCHED") and a.get("detail", {}).get("review_round") == rnd:
+                ts_str = a.get("ts") or a.get("timestamp")
+                if ts_str:
+                    try:
+                        dispatch_time = datetime.datetime.fromisoformat(ts_str)
+                    except Exception:
+                        pass
+                break
+
+        if not dispatch_time:
+            return []
+
+        timeout_val = self.config.get("timeouts", {}).get("per_reviewer", "10m")
+        timeout_sec = parse_duration(timeout_val)
+
+        now = current_time or datetime.datetime.now(datetime.timezone.utc)
+        if dispatch_time.tzinfo is None:
+            dispatch_time = dispatch_time.replace(tzinfo=datetime.timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=datetime.timezone.utc)
+
+        elapsed = (now - dispatch_time).total_seconds()
+        if elapsed < timeout_sec:
+            return []
+
+        expected = set(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"]))
+        submitted = {r["reviewer_id"] for r in self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=expected)}
+        timed_out = sorted(list(expected - submitted))
+        return timed_out
 
     def collect_and_evaluate_consensus(
         self,
@@ -335,6 +425,10 @@ class Orchestrator:
         exec_id = task.get("executor_id") or self.config.get("executor_id", "claude-code")
 
         num_configured = configured_reviewers or len(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"]))
+
+        # Auto-detect timeouts if not explicitly supplied
+        if timed_out_reviewers is None:
+            timed_out_reviewers = self.detect_timed_out_reviewers(task_id)
 
         # Check quorum transition from WAITING_REVIEW -> CONSENSUS_CHECK
         if current_st == AgentState.WAITING_REVIEW and ref:
@@ -370,10 +464,9 @@ class Orchestrator:
                     "confidence": float(v_data.get("opinion", {}).get("confidence", 0.9))
                 })
 
-            # Handle Reviewer Timeouts (REQ-TIMEOUT): Synthesize ABSTAIN votes
+            # Handle Reviewer Timeouts (REQ-TIMEOUT): Synthesize ABSTAIN votes and audit
             if timed_out_reviewers:
                 for to_rev in timed_out_reviewers:
-                    # Only add if not already submitted
                     if not any(v["reviewer"] == to_rev for v in votes_list):
                         votes_list.append({
                             "reviewer": to_rev,
@@ -448,6 +541,7 @@ class Orchestrator:
                 configured_reviewers=num_configured,
                 reviews=collected_reviews,
                 human_resolution=None,
+                timed_out_reviewers=timed_out_reviewers,
                 write_to_disk=True
             )
 
@@ -574,7 +668,15 @@ class Orchestrator:
         }
         target_state, trigger_id, resolution_choice = choice_map[choice_enum]
 
-        # 3. Generate and write authoritative vote_result.json with human resolution
+        # 3. Retrieve timed out reviewers from this round's audit events (PRD §2.2 / §3.3 / P1-1)
+        audits = self.store.list_audit_events(task_id, limit=50)
+        timed_out_revs = [
+            a["detail"]["reviewer_id"]
+            for a in audits
+            if a.get("type") == "REVIEWER_TIMEOUT_ABSTAIN" and a.get("detail", {}).get("review_round") == rnd
+        ]
+
+        # 4. Generate and write authoritative vote_result.json with human resolution and ABSTAIN votes
         allowed_revs = set(self.config.get("reviewer_ids", []))
         collected_reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=allowed_revs)
         vdata = self.vote_aggregator.generate_vote_result(
@@ -584,6 +686,7 @@ class Orchestrator:
             configured_reviewers=len(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"])),
             reviews=collected_reviews,
             human_resolution=resolution_choice,
+            timed_out_reviewers=timed_out_revs,
             write_to_disk=True
         )
 
@@ -596,10 +699,10 @@ class Orchestrator:
             path=".macao/vote_result.json"
         )
 
-        # 4. Perform FSM transition
+        # 5. Perform FSM transition
         change = self.fsm.transition(task_id, target_state, trigger_id, vdata)
 
-        # 5. Broadcast notification using standard Schema AEPType.STATE_CHANGED
+        # 6. Broadcast notification using standard Schema AEPType.STATE_CHANGED
         self.msg_bus.publish(
             msg_type=AEPType.STATE_CHANGED,
             from_agent="human_admin",
