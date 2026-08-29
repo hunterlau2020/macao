@@ -354,6 +354,7 @@ class Orchestrator:
     ) -> List[str]:
         """
         Scans active review round for unsubmitted reviewers whose review deadline has elapsed.
+        Uses targeted query on StateStore to eliminate limit window truncation.
         """
         task = self.store.get_task(task_id)
         if not task:
@@ -367,17 +368,23 @@ class Orchestrator:
         if not ref:
             return []
 
-        audits = self.store.list_audit_events(task_id, limit=50)
+        # Targeted query on dispatch audits
+        audits = self.store.get_audit_events_by_type(task_id, "REVIEW_REQUESTS_DISPATCHED", review_round=rnd)
+        if not audits:
+            audits = self.store.get_audit_events_by_type(task_id, "STATE_TRANSITION_E2", review_round=rnd)
+
+        if not audits:
+            return []
+
         dispatch_time = None
         for a in audits:
-            if a.get("type") in ("STATE_TRANSITION_E2", "REVIEW_REQUESTS_DISPATCHED") and a.get("detail", {}).get("review_round") == rnd:
-                ts_str = a.get("ts") or a.get("timestamp")
-                if ts_str:
-                    try:
-                        dispatch_time = datetime.datetime.fromisoformat(ts_str)
-                    except Exception:
-                        pass
-                break
+            ts_str = a.get("ts") or a.get("timestamp")
+            if ts_str:
+                try:
+                    dispatch_time = datetime.datetime.fromisoformat(ts_str)
+                    break
+                except Exception:
+                    pass
 
         if not dispatch_time:
             return []
@@ -412,7 +419,7 @@ class Orchestrator:
         2. Evaluates votes in CONSENSUS_CHECK:
            - APPROVED -> writes vote_result.json, moves to MERGING (E4).
            - REWORK_REQUIRED -> writes vote_result.json, moves to REWORK (E5 if round < max else HOLD).
-           - DEADLOCK / TIMEOUT ABSTAIN -> DOES NOT WRITE vote_result.json (PRD §3.3 E3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS in CONSENSUS_CHECK.
+           - DEADLOCK / TIMEOUT ABSTAIN -> DOES NOT WRITE vote_result.json (PRD §3.3 E3 / §6.1 / P1-NEW-3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS in CONSENSUS_CHECK.
            - MAX_REWORK_ROUNDS_REACHED -> DOES NOT WRITE vote_result.json to disk (PRD §3.3 E5/E7 / Codex P0-3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS.
         """
         task = self.store.get_task(task_id)
@@ -464,8 +471,10 @@ class Orchestrator:
                     "confidence": float(v_data.get("opinion", {}).get("confidence", 0.9))
                 })
 
-            # Handle Reviewer Timeouts (REQ-TIMEOUT): Synthesize ABSTAIN votes and audit
+            # Handle Reviewer Timeouts (REQ-TIMEOUT): Synthesize ABSTAIN votes and idempotent audit
             if timed_out_reviewers:
+                existing_timeouts = self.store.get_audit_events_by_type(task_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=rnd)
+                existing_timed_out_ids = {a.get("detail", {}).get("reviewer_id") for a in existing_timeouts}
                 for to_rev in timed_out_reviewers:
                     if not any(v["reviewer"] == to_rev for v in votes_list):
                         votes_list.append({
@@ -474,23 +483,28 @@ class Orchestrator:
                             "confidence": 0.0,
                             "timeout": True
                         })
-                        self.store.log_audit_event(task_id, "REVIEWER_TIMEOUT_ABSTAIN", {
-                            "reviewer_id": to_rev,
-                            "review_round": rnd,
-                            "checkpoint_ref": ref
-                        })
+                        if to_rev not in existing_timed_out_ids:
+                            self.store.log_audit_event(task_id, "REVIEWER_TIMEOUT_ABSTAIN", {
+                                "reviewer_id": to_rev,
+                                "review_round": rnd,
+                                "checkpoint_ref": ref
+                            })
 
             decision, breakdown, confidence = ConsensusEngine.evaluate(
                 votes=votes_list,
                 configured_reviewers=num_configured
             )
 
-            # Rule: DEADLOCK must hold in CONSENSUS_CHECK and NOT write vote_result.json to disk (PRD §3.3 E3 / P0-1)
-            if decision == Decision.DEADLOCK:
+            # Rule (P1-NEW-3 / PRD §2.2 / §3.3 / §6.1):
+            # If decision is DEADLOCK OR any reviewer timed out, MUST HOLD in CONSENSUS_CHECK and NOT automatically transition to MERGING.
+            # Timeout degradation requires human confirmation via resolve_override.
+            if decision == Decision.DEADLOCK or (timed_out_reviewers and len(timed_out_reviewers) > 0):
+                reason_code = "TIMEOUT_ESCALATION" if timed_out_reviewers else "DEADLOCK_DETECTED"
                 self.store.log_audit_event(task_id, "DEADLOCK_DETECTED", {
                     "checkpoint_ref": ref,
                     "review_round": rnd,
-                    "summary": f"Deadlock: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
+                    "reason": reason_code,
+                    "summary": f"{reason_code}: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
                     "vote_breakdown": breakdown
                 })
                 # Trigger HUMAN_OVERRIDE_REQUEST AEP
@@ -502,8 +516,8 @@ class Orchestrator:
                         "task_id": task_id,
                         "checkpoint_ref": ref,
                         "review_round": rnd,
-                        "reason": "DEADLOCK_DETECTED",
-                        "summary": f"Deadlock: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
+                        "reason": reason_code,
+                        "summary": f"{reason_code}: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
                         "vote_breakdown": breakdown
                     }
                 )
@@ -668,12 +682,12 @@ class Orchestrator:
         }
         target_state, trigger_id, resolution_choice = choice_map[choice_enum]
 
-        # 3. Retrieve timed out reviewers from this round's audit events (PRD §2.2 / §3.3 / P1-1)
-        audits = self.store.list_audit_events(task_id, limit=50)
+        # 3. Retrieve timed out reviewers from targeted query on audit events (PRD §2.2 / §3.3 / P1-1 / P1-NEW-4)
+        timeout_audits = self.store.get_audit_events_by_type(task_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=rnd)
         timed_out_revs = [
             a["detail"]["reviewer_id"]
-            for a in audits
-            if a.get("type") == "REVIEWER_TIMEOUT_ABSTAIN" and a.get("detail", {}).get("review_round") == rnd
+            for a in timeout_audits
+            if "reviewer_id" in a.get("detail", {})
         ]
 
         # 4. Generate and write authoritative vote_result.json with human resolution and ABSTAIN votes

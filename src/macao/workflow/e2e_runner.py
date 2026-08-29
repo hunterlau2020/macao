@@ -235,7 +235,8 @@ merge:
 
         breakdown = vdata.get("vote_breakdown", {})
         approve_count = breakdown.get("approve", breakdown.get("yes_approve", 0))
-        effective_count = breakdown.get("effective_votes", approve_count)
+        reject_count = breakdown.get("reject", breakdown.get("no_approve", 0))
+        effective_count = approve_count + reject_count
 
         steps_log.append({
             "step": "4. Consensus Evaluation",

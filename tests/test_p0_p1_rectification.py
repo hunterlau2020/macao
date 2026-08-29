@@ -153,6 +153,154 @@ development:
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    def test_three_reviewer_timeout_must_hold_and_require_human_override(self):
+        """P1-NEW-3: In 3-reviewer scenario (2 Approve + 1 Timeout), timeout MUST HOLD and NOT auto-merge."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "README.md").write_text("# Test\n")
+            subprocess.run(["git", "add", "README.md"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            orch = Orchestrator(
+                project_root=tmpdir,
+                config={"reviewer_ids": ["codex", "opencode", "antigravity"], "timeouts": {"per_reviewer": "10m"}}
+            )
+            task = orch.start_task("Timeout 3Rev Task", "Test 3Rev Timeout Handling")
+            t_id = task["task_id"]
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+review_round: 1
+development:
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Reviewer 1 & 2 submit approval (2 of 3)
+            for r_id in ["codex", "antigravity"]:
+                rev_adapter = MockAgentAdapter(agent_id=r_id, cli_name=r_id, role="reviewer")
+                rev_adapter.simulate_produce_review_manifest(
+                    project_root=tmpdir,
+                    checkpoint_ref=head,
+                    review_round=1,
+                    vote=Vote.YES_APPROVE,
+                    opinion_status=OpinionStatus.APPROVED
+                )
+
+            # Advance clock by 11 minutes -> opencode times out
+            future_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=11)
+            detected_timeouts = orch.detect_timed_out_reviewers(t_id, current_time=future_time)
+            self.assertEqual(detected_timeouts, ["opencode"])
+
+            # Call consensus: Even though 2/3 approved, because opencode timed out, it MUST HOLD in CONSENSUS_CHECK!
+            change, vdata = orch.collect_and_evaluate_consensus(
+                task_id=t_id,
+                configured_reviewers=3,
+                timed_out_reviewers=detected_timeouts
+            )
+
+            self.assertIsNone(change)
+            self.assertIsNone(vdata)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+            # Automatic vote_result.json must NOT be written to disk
+            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+
+            # Human resolves override with APPROVED -> moves to MERGING
+            change_ov = orch.resolve_override(t_id, "APPROVED", note="Approved by human admin despite timeout")
+            self.assertEqual(change_ov.to_state, AgentState.MERGING)
+
+            # Assert vote_result.json is written with 3 reviewers, 2 approve, 1 abstain
+            vote_json_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertTrue(vote_json_file.exists())
+            with open(vote_json_file, "r", encoding="utf-8") as f:
+                v_res = json.load(f)
+
+            self.assertEqual(v_res["decision"], "APPROVED")
+            self.assertEqual(v_res["resolution"], "human_override")
+            self.assertEqual(v_res["reviewers_responded"], 3)
+            self.assertEqual(v_res["vote_breakdown"]["approve"], 2)
+            self.assertEqual(v_res["vote_breakdown"]["abstain"], 1)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_audit_polling_over_50_does_not_lose_timeout_reviewers(self):
+        """P1-NEW-4: Polling repeatedly (>80 events) does not push out dispatch event or lose timeout reviewers."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "README.md").write_text("# Test\n")
+            subprocess.run(["git", "add", "README.md"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            orch = Orchestrator(
+                project_root=tmpdir,
+                config={"reviewer_ids": ["codex", "opencode"], "timeouts": {"per_reviewer": "10m"}}
+            )
+            task = orch.start_task("Poll Overflow Task", "Test Robust Query")
+            t_id = task["task_id"]
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+review_round: 1
+development:
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Reviewer 1 (codex) submits approval
+            rev_adapter = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
+            rev_adapter.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote=Vote.YES_APPROVE,
+                opinion_status=OpinionStatus.APPROVED
+            )
+
+            future_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=11)
+
+            # Simulate heavy polling generating 100 dummy audit events
+            for i in range(100):
+                orch.store.log_audit_event(t_id, "POLL_HEARTBEAT", {"poll_seq": i, "review_round": 1})
+
+            # Detect timeout must still accurately find opencode
+            detected = orch.detect_timed_out_reviewers(t_id, current_time=future_time)
+            self.assertEqual(detected, ["opencode"])
+
+            # Call consensus
+            orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2, timed_out_reviewers=detected)
+
+            # Generate 50 more dummy audit events
+            for i in range(50):
+                orch.store.log_audit_event(t_id, "POLL_HEARTBEAT", {"poll_seq": 100 + i, "review_round": 1})
+
+            # Resolve override
+            orch.resolve_override(t_id, "APPROVED", note="Override after heavy polling")
+
+            # Assert vote_result.json still contains opencode ABSTAIN
+            vote_json_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertTrue(vote_json_file.exists())
+            with open(vote_json_file, "r", encoding="utf-8") as f:
+                v_res = json.load(f)
+
+            self.assertEqual(v_res["reviewers_responded"], 2)
+            self.assertEqual(v_res["vote_breakdown"]["abstain"], 1)
+            votes_map = {v["reviewer"]: v["vote"] for v in v_res["votes"]}
+            self.assertEqual(votes_map["opencode"], "ABSTAIN")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
     def test_max_rework_rounds_reached_holds_without_writing_disk_vote_result(self):
         """P0-2 (Codex): Verify max rework rounds reached HOLDS without writing automatic vote_result.json."""
         tmpdir = tempfile.mkdtemp()

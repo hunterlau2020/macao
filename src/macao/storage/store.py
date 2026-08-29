@@ -164,6 +164,33 @@ class StateStore:
                 result.append(d)
             return result
 
+    def get_audit_events_by_type(
+        self,
+        task_id: str,
+        event_type: str,
+        review_round: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Finds all audit events of a specific type for a task, optionally filtered by review_round."""
+        with self.db.connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM audit_events WHERE task_id = ? AND type = ? ORDER BY sequence_id DESC",
+                (task_id, event_type)
+            ).fetchall()
+
+            result = []
+            for r in rows:
+                d = dict(r)
+                if isinstance(d.get("detail"), str):
+                    try:
+                        d["detail"] = json.loads(d["detail"])
+                    except Exception:
+                        pass
+                if review_round is not None:
+                    if d.get("detail", {}).get("review_round") != review_round:
+                        continue
+                result.append(d)
+            return result
+
     # --- Message Queue Queries ---
     def list_messages(self, task_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         with self.db.connection() as conn:

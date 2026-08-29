@@ -33,7 +33,7 @@
 
 ### P1-1：超时 reviewer 由调用者断言，生产系统没有真实超时判定路径
 
-**状态**：CONTRADICTED  
+**状态**：CONTRADICTED
 **证据**：`src/macao/workflow/orchestrator.py:313-317,339-346,373-388`；`tests/test_p0_p1_rectification.py:65-100`；`docs/MACAO_REVIEW_GUIDELINES.md:57-62`；`docs/MACAO_PRD_v2.md:123-129,832-849,1372`
 
 `collect_and_evaluate_consensus()` 新增的 `timed_out_reviewers` 是调用者传入的名单。Review request 没有由生产流程持久化和消费 deadline，也没有生产 caller/scanner 根据当前时间计算该名单。现有测试直接传入 `timed_out_reviewers=["opencode"]`，因此验证的是“已知答案注入后的分支”，不是 reviewer 不响应后系统自行完成 deadline → ping/retry → timeout/abstain → escalation 的真实路径。
@@ -49,7 +49,7 @@
 
 ### P1-2：合成的 timeout ABSTAIN 未写入终局 vote_result.json
 
-**状态**：CONTRADICTED  
+**状态**：CONTRADICTED
 **证据**：`src/macao/workflow/orchestrator.py:364-393,443-452,577-587`；`src/macao/consensus/vote.py:81-115,141-153`；`docs/MACAO_PRD_v2.md:305-318,832-834`
 
 Orchestrator 仅把 timeout `ABSTAIN` 追加到临时 `votes_list` 用于本次决策；自动终局与人工 override 随后调用 `generate_vote_result()` 时，传入的仍只有 `collected_reviews`。`VoteAggregator` 又完全从 review manifests 重建 votes，并以 `len(reviews)` 生成 `reviewers_responded`。
@@ -60,7 +60,7 @@ Orchestrator 仅把 timeout `ABSTAIN` 追加到临时 `votes_list` 用于本次�
 
 ### P1-3：push 成功后的远端校验不确定态被错误地当作可本地回滚
 
-**状态**：CONTRADICTED  
+**状态**：CONTRADICTED
 **证据**：`src/macao/merge/controller.py:115-132`；`src/macao/workflow/orchestrator.py:507-527`
 
 若 `git push` 已成功，而紧随其后的 `git ls-remote` 因临时网络故障返回失败或空输出，远端可能已经包含 checkpoint。当前代码会仅把本地目标分支 `reset --hard` 到 `pre_merge_head` 并返回失败；`execute_merge()` 随即把任务转到 `REWORK`。远端分支、本地分支与工作流状态由此可能指向三个不同事实。
@@ -73,7 +73,7 @@ Orchestrator 仅把 timeout `ABSTAIN` 追加到临时 `votes_list` 用于本次�
 
 ### P2-1：review artifact 的消费更新使用错误 reviewer key
 
-**状态**：CONTRADICTED  
+**状态**：CONTRADICTED
 **证据**：`src/macao/workflow/orchestrator.py:353-362`；`src/macao/workflow/fsm.py:97-112`；`src/macao/storage/store.py:95-104`
 
 注册 artifact 时 reviewer ID 为 manifest 内的 `codex` 等值；归档时对 `codex.review.yml` 使用 `rev_file.stem`，得到的是 `codex.review`。`mark_artifact_consumed()` 的 UPDATE 要求 reviewer_id 精确匹配，所以更新不到已注册行。E2E 即使在磁盘生成了归档文件，SQLite 中 review artifacts 仍会保持 `consumed=0` 且 `archived_path` 为空，磁盘与账本不一致。
@@ -82,7 +82,7 @@ Orchestrator 仅把 timeout `ABSTAIN` 追加到临时 `votes_list` 用于本次�
 
 ### P2-2：task ID 仅保留 24-bit UUID 熵，碰撞仍未被处理
 
-**状态**：PARTIALLY_VERIFIED  
+**状态**：PARTIALLY_VERIFIED
 **证据**：`src/macao/workflow/orchestrator.py:101-123`；`tests/test_p0_p1_rectification.py:48-63`
 
 task ID 从纯秒级时间戳改善为“秒级时间戳 + 6 个十六进制字符”，但同一秒内仅有 24-bit 随机空间，且数据库唯一键冲突没有有界重试。按生日碰撞近似，同秒创建 1,000 个任务的碰撞概率约 2.9%，5,000 个超过 50%。当前 100 次顺序生成测试只证明该次样本未碰撞，不能证明唯一性。
