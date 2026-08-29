@@ -84,3 +84,9 @@ class OpenCodeAdapter(AgentAdapter):
 
     def ack(self, message_id: str) -> bool:
         return True
+
+    def cancel(self, reason: str = "user_cancel") -> bool:
+        return self.stop(reason)
+
+    def get_logs(self, tail_lines: int = 300) -> str:
+        return "\n".join(self.session.get_clean_logs(tail_lines)) if self.session else ""

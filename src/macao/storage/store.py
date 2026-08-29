@@ -109,15 +109,35 @@ class StateStore:
             return cursor.lastrowid
 
     def mark_artifact_consumed(self, task_id: str, kind: str, checkpoint_ref: str, review_round: int, archived_path: str, reviewer_id: str = "") -> None:
+        p_obj = Path(archived_path)
+        if not p_obj.is_absolute() and self.project_root:
+            p_obj = Path(self.project_root) / archived_path
+        sha256 = ""
+        if p_obj.exists() and p_obj.is_file():
+            try:
+                sha256 = hashlib.sha256(p_obj.read_bytes()).hexdigest()
+            except Exception:
+                pass
+
         with self.db.connection() as conn:
-            conn.execute(
-                """
-                UPDATE artifacts
-                SET consumed = 1, archived_path = ?
-                WHERE task_id = ? AND kind = ? AND checkpoint_ref = ? AND review_round = ? AND reviewer_id = ?
-                """,
-                (archived_path, task_id, kind, checkpoint_ref, review_round, reviewer_id)
-            )
+            if sha256:
+                conn.execute(
+                    """
+                    UPDATE artifacts
+                    SET consumed = 1, archived_path = ?, sha256 = CASE WHEN (sha256 IS NULL OR sha256 = '') THEN ? ELSE sha256 END
+                    WHERE task_id = ? AND kind = ? AND checkpoint_ref = ? AND review_round = ? AND reviewer_id = ?
+                    """,
+                    (archived_path, sha256, task_id, kind, checkpoint_ref, review_round, reviewer_id)
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE artifacts
+                    SET consumed = 1, archived_path = ?
+                    WHERE task_id = ? AND kind = ? AND checkpoint_ref = ? AND review_round = ? AND reviewer_id = ?
+                    """,
+                    (archived_path, task_id, kind, checkpoint_ref, review_round, reviewer_id)
+                )
 
     def list_artifacts(self, task_id: str, review_round: Optional[int] = None) -> List[Dict[str, Any]]:
         with self.db.connection() as conn:

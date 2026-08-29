@@ -26,6 +26,11 @@ class GitManager:
         except Exception as e:
             return 1, "", str(e)
 
+    def is_git_repository(self) -> bool:
+        """Checks if repo_path is inside a valid git work tree."""
+        code, _, _ = self._run("rev-parse", "--is-inside-work-tree")
+        return code == 0
+
     def commit_exists(self, ref: str) -> bool:
         code, _, _ = self._run("cat-file", "-e", f"{ref}^{{commit}}")
         return code == 0

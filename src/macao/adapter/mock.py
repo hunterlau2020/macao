@@ -73,6 +73,14 @@ class MockAgentAdapter(AgentAdapter):
         """AEP message acknowledgment."""
         return True
 
+    def cancel(self, reason: str = "user_cancel") -> bool:
+        return self.stop(reason)
+
+    def get_logs(self, tail_lines: int = 300) -> str:
+        if tail_lines > 0:
+            return "\n".join(self.logs[-tail_lines:])
+        return "\n".join(self.logs)
+
     def simulate_produce_dev_manifest(
         self,
         project_root: str,

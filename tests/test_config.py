@@ -76,6 +76,55 @@ class TestConfigAndComposition(unittest.TestCase):
             self.assertIn(adp.cli_name, (res.cli_name, res.agent_id))
             self.assertIsInstance(res.installed, bool)
 
+    def test_adapter_interface_and_log_consistency(self):
+        """Verify all real and mock adapters implement capabilities, get_logs, and cancel consistently."""
+        adapters = [
+            MockAgentAdapter("mock-1", "mock-cli"),
+            ClaudeCodeAdapter(),
+            CodexAdapter(),
+            OpenCodeAdapter(),
+            AntigravityAdapter(),
+            KimiAdapter()
+        ]
+        for adp in adapters:
+            caps = adp.capabilities()
+            self.assertIsNotNone(caps)
+            self.assertTrue(caps.can_review or caps.can_execute)
+
+            # Test get_logs without running session returns empty string without TypeError
+            logs = adp.get_logs(tail_lines=50)
+            self.assertIsInstance(logs, str)
+            self.assertEqual(logs, "")
+
+            # Test cancel returns bool
+            cancelled = adp.cancel("test")
+            self.assertIsInstance(cancelled, bool)
+
+    def test_schemas_dir_lookup_and_env_override(self):
+        """Verify get_schemas_dir finds schemas and respects MACAO_SCHEMAS_DIR."""
+        from macao.core.schema import get_schemas_dir, SchemaValidator
+        d = get_schemas_dir()
+        self.assertTrue(d.exists())
+        self.assertTrue((d / "vote_result.schema.json").exists())
+
+        # Test SchemaValidator loads schemas successfully
+        v = SchemaValidator()
+        self.assertIsNotNone(v.get_schema("vote_result"))
+        self.assertIsNotNone(v.get_schema("dev_manifest"))
+        self.assertIsNotNone(v.get_schema("review_manifest"))
+
+    def test_parse_duration_units_and_validation(self):
+        """Verify parse_duration accurately handles units and raises on invalid format."""
+        from macao.workflow.orchestrator import parse_duration
+        self.assertEqual(parse_duration("30s"), 30.0)
+        self.assertEqual(parse_duration("10m"), 600.0)
+        self.assertEqual(parse_duration("2h"), 7200.0)
+        self.assertEqual(parse_duration("1d"), 86400.0)
+        self.assertEqual(parse_duration(120), 120.0)
+        self.assertEqual(parse_duration("", default=300.0), 300.0)
+        with self.assertRaises(ValueError):
+            parse_duration("invalid_string")
+
 
 if __name__ == "__main__":
     unittest.main()

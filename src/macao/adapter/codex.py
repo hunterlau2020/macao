@@ -74,4 +74,4 @@ class CodexAdapter(AgentAdapter):
         return self.stop(reason)
 
     def get_logs(self, tail_lines: int = 300) -> str:
-        return self.session.get_clean_logs(tail_lines) if self.session else ""
+        return "\n".join(self.session.get_clean_logs(tail_lines)) if self.session else ""

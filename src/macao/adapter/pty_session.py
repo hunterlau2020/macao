@@ -112,8 +112,10 @@ class PTYSession:
         """Alias for send_input."""
         return self.send_input(text)
 
-    def get_clean_logs(self) -> List[str]:
-        """Returns captured output logs."""
+    def get_clean_logs(self, tail_lines: Optional[int] = None) -> List[str]:
+        """Returns captured output logs, optionally tailed."""
+        if tail_lines is not None and tail_lines > 0:
+            return list(self.logs)[-tail_lines:]
         return list(self.logs)
 
     def terminate(self, timeout_sec: float = 3.0) -> None:

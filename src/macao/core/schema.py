@@ -9,13 +9,24 @@ import jsonschema
 
 # Locate docs/schemas directory
 def get_schemas_dir() -> Path:
+    # 1. Environment variable override
+    env_dir = os.getenv("MACAO_SCHEMAS_DIR")
+    if env_dir and Path(env_dir).is_dir():
+        return Path(env_dir).resolve()
+
+    # 2. Package-internal bundled schemas
+    pkg_schemas = Path(__file__).resolve().parent.parent / "schemas"
+    if pkg_schemas.exists() and pkg_schemas.is_dir():
+        return pkg_schemas
+
+    # 3. Traverse upwards to find repository docs/schemas
     current = Path(__file__).resolve()
-    # Traverse upwards to find docs/schemas
     for parent in current.parents:
         cand = parent / "docs" / "schemas"
         if cand.exists() and cand.is_dir():
             return cand
-    # Fallback to local relative
+
+    # 4. Fallback to local relative
     return Path("docs/schemas").resolve()
 
 

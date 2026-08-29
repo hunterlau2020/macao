@@ -44,3 +44,13 @@ class AgentAdapter(ABC):
     def ack(self, message_id: str) -> bool:
         """Idempotent ACK for received message."""
         pass
+
+    @abstractmethod
+    def cancel(self, reason: str = "user_cancel") -> bool:
+        """Cancels ongoing task and terminates CLI session."""
+        pass
+
+    @abstractmethod
+    def get_logs(self, tail_lines: int = 300) -> str:
+        """Returns captured output logs."""
+        pass

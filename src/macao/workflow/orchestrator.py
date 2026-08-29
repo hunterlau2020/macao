@@ -30,23 +30,29 @@ from macao.utils.git_utils import GitManager
 from macao.core.config import ConfigManager
 
 
-def parse_duration(val: Union[str, int, float]) -> float:
+def parse_duration(val: Union[str, int, float], default: Optional[float] = None) -> float:
     """Parses duration string like '10m', '30s', '1h' to float seconds."""
     if isinstance(val, (int, float)):
         return float(val)
-    val = str(val).strip().lower()
-    if val.endswith("s"):
-        return float(val[:-1])
-    elif val.endswith("m"):
-        return float(val[:-1]) * 60
-    elif val.endswith("h"):
-        return float(val[:-1]) * 3600
-    elif val.endswith("d"):
-        return float(val[:-1]) * 86400
-    try:
-        return float(val)
-    except ValueError:
+    if not val:
+        if default is not None:
+            return default
         return 600.0
+    v = str(val).strip().lower()
+    if v.endswith("s"):
+        return float(v[:-1])
+    elif v.endswith("m"):
+        return float(v[:-1]) * 60
+    elif v.endswith("h"):
+        return float(v[:-1]) * 3600
+    elif v.endswith("d"):
+        return float(v[:-1]) * 86400
+    try:
+        return float(v)
+    except ValueError:
+        if default is not None:
+            return default
+        raise ValueError(f"Invalid duration format: '{val}'")
 
 
 class Orchestrator:
@@ -130,19 +136,26 @@ class Orchestrator:
         task_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """E1: IDLE -> CODING (Task Initialization with collision-proof high-entropy ID)."""
-        date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
-        rand_suffix = uuid.uuid4().hex[:6]
-        t_id = task_id or f"task-{date_str}-{rand_suffix}"
-        src_branch = source_branch or f"feature/{t_id}"
+        # Create Task in store with collision-proof high-entropy ID and bounded retry (P0-1)
+        for attempt in range(5):
+            date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+            rand_suffix = uuid.uuid4().hex[:8]
+            t_id = task_id or f"task-{date_str}-{rand_suffix}"
+            src_branch = source_branch or f"feature/{t_id}"
 
-        # Create Task in store
-        task_record = self.store.create_task(
-            task_id=t_id,
-            title=title,
-            source_branch=src_branch,
-            target_branch=target_branch,
-            acceptance_criteria=acceptance_criteria or {}
-        )
+            try:
+                task_record = self.store.create_task(
+                    task_id=t_id,
+                    title=title,
+                    source_branch=src_branch,
+                    target_branch=target_branch,
+                    acceptance_criteria=acceptance_criteria or {}
+                )
+                break
+            except Exception:
+                if task_id is not None or attempt == 4:
+                    raise
+                continue
 
         # Transition FSM to CODING
         self.fsm.transition(t_id, AgentState.CODING, "E1", {
