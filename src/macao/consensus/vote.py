@@ -84,7 +84,14 @@ class VoteAggregator:
         input_artifacts = []
         issues_to_fix = []
 
+        valid_reviews = []
         for r in reviews:
+            rev_id = r["data"]["reviewer"]["id"]
+            if timed_out_reviewers and rev_id in timed_out_reviewers:
+                continue
+            valid_reviews.append(r)
+
+        for r in valid_reviews:
             data = r["data"]
             rev_id = data["reviewer"]["id"]
             vote_val = data["vote"]

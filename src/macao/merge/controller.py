@@ -45,12 +45,20 @@ class MergeController:
         if not checkpoint_ref:
             return False, "No checkpoint_ref attached to task", None
 
-        # Check signoff requirement (Fail-closed)
+        # Check signoff requirement (Fail-closed & Bound to checkpoint_ref: PRD §3.3 E4a / §14.5 / P1-NEW-5)
         if require_signoff:
-            audits = self.store.list_audit_events(task_id, limit=50)
-            signoffs = [a for a in audits if a.get("type") in ("HUMAN_MERGE_APPROVED", "MERGE_SIGNOFF_APPROVED")]
-            if not signoffs:
-                return False, "Human signoff required before merge (macao merge approve)", None
+            signoffs = (
+                self.store.get_audit_events_by_type(task_id, "HUMAN_MERGE_APPROVED") +
+                self.store.get_audit_events_by_type(task_id, "MERGE_SIGNOFF_APPROVED")
+            )
+            valid_signoff = False
+            for s in signoffs:
+                s_ref = s.get("detail", {}).get("checkpoint_ref")
+                if s_ref == checkpoint_ref:
+                    valid_signoff = True
+                    break
+            if not valid_signoff:
+                return False, f"Human signoff required for checkpoint {checkpoint_ref} before merge (macao merge approve)", None
 
         # Check if in a valid git repository (Fail-closed)
         code, _, _ = self.git._run("rev-parse", "--is-inside-work-tree")

@@ -478,6 +478,15 @@ development:
         """P0-NEW-2: Verify resolve_override handles all 4 choices and produces schema-valid AEP messages."""
         tmpdir = tempfile.mkdtemp()
         try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+            f_init = Path(tmpdir) / "init.txt"
+            f_init.write_text("init\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
             db_path = os.path.join(tmpdir, "test_ov.db")
             orch = Orchestrator(
                 project_root=tmpdir,
@@ -495,7 +504,7 @@ development:
             for i, (choice, expected_state) in enumerate(choices):
                 t_id = f"task-ov-{i}"
                 orch.store.create_task(t_id, f"Override Task {i}", "feat", "main")
-                orch.store.update_task_state(t_id, AgentState.CONSENSUS_CHECK, checkpoint_ref=f"commit-{i}", review_round=1)
+                orch.store.update_task_state(t_id, AgentState.CONSENSUS_CHECK, checkpoint_ref=head, review_round=1)
 
                 change = orch.resolve_override(t_id, choice, note=f"Human decision {i}")
                 self.assertEqual(change.to_state, expected_state)
@@ -703,6 +712,242 @@ merge:
             self.assertGreaterEqual(res["tracked_artifacts_count"], 4)
         finally:
             runner.cleanup()
+
+    def test_signoff_bound_to_checkpoint_ref_prevents_stale_merge(self):
+        """P1-NEW-5: Verify human signoff must match checkpoint_ref, preventing stale round 1 signoff from merging round 2 code."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+
+            # Initial commit on main
+            f_init = Path(tmpdir) / "init.txt"
+            f_init.write_text("init\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+
+            # Round 1 commit (ref_r1)
+            subprocess.run(["git", "checkout", "-b", "feat/p1-test"], cwd=tmpdir, check=True, capture_output=True)
+            f_r1 = Path(tmpdir) / "r1.txt"
+            f_r1.write_text("round 1 code\n", encoding="utf-8")
+            subprocess.run(["git", "add", "r1.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "r1 commit"], cwd=tmpdir, check=True)
+            ref_r1 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            # Round 2 commit (ref_r2)
+            f_r2 = Path(tmpdir) / "r2.txt"
+            f_r2.write_text("round 2 rework code\n", encoding="utf-8")
+            subprocess.run(["git", "add", "r2.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "r2 commit"], cwd=tmpdir, check=True)
+            ref_r2 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            # Switch back to main
+            subprocess.run(["git", "checkout", "main"], cwd=tmpdir, check=True, capture_output=True)
+
+            from macao.storage.store import StateStore
+            store = StateStore(os.path.join(tmpdir, "state.db"), project_root=tmpdir)
+            store.create_task("task-stale-signoff", "Stale Signoff Task", "feat/p1-test", "main")
+            store.update_task_state("task-stale-signoff", AgentState.MERGING, checkpoint_ref=ref_r2, review_round=2)
+
+            # Grant signoff ONLY for Round 1 (ref_r1)
+            store.log_audit_event("task-stale-signoff", "HUMAN_MERGE_APPROVED", {
+                "checkpoint_ref": ref_r1,
+                "note": "Signed off round 1 commit"
+            })
+
+            ctrl = MergeController(store, project_root=tmpdir)
+
+            # Attempt merge of round 2 commit (ref_r2) with stale signoff
+            ok, msg, _ = ctrl.execute_merge_pipeline(
+                "task-stale-signoff",
+                target_branch="main",
+                require_signoff=True
+            )
+            self.assertFalse(ok)
+            self.assertIn("Human signoff required for checkpoint", msg)
+            self.assertIn(ref_r2, msg)
+
+            # Now grant valid signoff for Round 2 (ref_r2)
+            store.log_audit_event("task-stale-signoff", "HUMAN_MERGE_APPROVED", {
+                "checkpoint_ref": ref_r2,
+                "note": "Signed off round 2 commit"
+            })
+            ok_valid, msg_valid, merged_commit = ctrl.execute_merge_pipeline(
+                "task-stale-signoff",
+                target_branch="main",
+                require_signoff=True
+            )
+            self.assertTrue(ok_valid)
+            self.assertEqual(merged_commit, ref_r2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_late_review_after_timeout_maintains_hold_and_does_not_auto_merge(self):
+        """P1-NEW-7 / P1-Q2: Verify late review submission after timeout disposition cannot bypass HOLD or trigger auto-merge."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # Initialize git repo
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+            f_init = Path(tmpdir) / "init.txt"
+            f_init.write_text("init\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            orch = Orchestrator(
+                project_root=tmpdir,
+                config={
+                    "reviewer_ids": ["codex", "opencode"],
+                    "timeouts": {"per_reviewer": "0s"}
+                }
+            )
+            t = orch.start_task("Late Review Test", "Testing late submission protection")
+            t_id = t["task_id"]
+
+            orch.store.update_task_state(t_id, AgentState.WAITING_REVIEW, checkpoint_ref=head, review_round=1)
+
+            # Dispatch audit logged in the past
+            past_time = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=10)).isoformat()
+            orch.store.log_audit_event(t_id, "REVIEW_REQUESTS_DISPATCHED", {
+                "checkpoint_ref": head,
+                "review_round": 1,
+                "reviewers": ["codex", "opencode"],
+                "deadline": past_time
+            })
+
+            # codex submits YES review via MockAgentAdapter
+            codex_adapter = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
+            codex_adapter.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote=Vote.YES_APPROVE,
+                opinion_status=OpinionStatus.APPROVED
+            )
+
+            # First collect: opencode times out -> system must HOLD in CONSENSUS_CHECK and log REVIEWER_TIMEOUT_ABSTAIN
+            change, vdata = orch.collect_and_evaluate_consensus(t_id)
+            self.assertIsNone(change)
+            self.assertIsNone(vdata)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            timeout_audits = orch.store.get_audit_events_by_type(t_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=1)
+            self.assertEqual(len(timeout_audits), 1)
+            self.assertEqual(timeout_audits[0]["detail"]["reviewer_id"], "opencode")
+
+            # Now simulate opencode LATE submitting a YES review
+            opencode_adapter = MockAgentAdapter(agent_id="opencode", cli_name="opencode", role="reviewer")
+            opencode_adapter.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote=Vote.YES_APPROVE,
+                opinion_status=OpinionStatus.APPROVED
+            )
+
+            # Second collect: Even with opencode file now present, timeout disposition must HOLD and NOT auto-merge
+            change2, vdata2 = orch.collect_and_evaluate_consensus(t_id)
+            self.assertIsNone(change2)
+            self.assertIsNone(vdata2)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            late_audits = orch.store.get_audit_events_by_type(t_id, "LATE_REVIEW_ISOLATED", review_round=1)
+            self.assertGreaterEqual(len(late_audits), 1)
+
+            # Confirm only explicit human override can transition to MERGING with human_override resolution
+            change_human = orch.resolve_override(t_id, "APPROVED", note="Human override signoff")
+            self.assertEqual(change_human.to_state, AgentState.MERGING)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.MERGING.value)
+
+            vote_res_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertTrue(vote_res_file.exists())
+            with open(vote_res_file, "r") as f:
+                vr = json.load(f)
+            self.assertEqual(vr["resolution"], "human_override")
+            self.assertEqual(vr["reviewers_responded"], 2)
+            self.assertEqual(vr["vote_breakdown"]["abstain"], 1)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_retry_review_override_clears_reviews_and_redispatches_fresh_requests(self):
+        """P1-NEW-6: Verify RETRY_REVIEW (E9) clears active reviews and re-dispatches with fresh deadline."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
+            f_init = Path(tmpdir) / "init.txt"
+            f_init.write_text("init\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            orch = Orchestrator(
+                project_root=tmpdir,
+                config={
+                    "reviewer_ids": ["codex", "opencode"],
+                    "timeouts": {"per_reviewer": "10m"}
+                }
+            )
+            t = orch.start_task("Retry Test", "Testing E9 retry dispatch")
+            t_id = t["task_id"]
+
+            orch.store.update_task_state(t_id, AgentState.CONSENSUS_CHECK, checkpoint_ref=head_sha, review_round=1)
+
+            # Put some review files in .macao/.reviews/
+            reviews_dir = Path(tmpdir) / ".macao" / ".reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            (reviews_dir / "codex.review.yml").write_text("reviewer: codex\n", encoding="utf-8")
+            (reviews_dir / "opencode.review.yml").write_text("reviewer: opencode\n", encoding="utf-8")
+
+            # Resolve override with RETRY_REVIEW
+            change = orch.resolve_override(t_id, "RETRY_REVIEW", note="Retrying review round")
+            self.assertEqual(change.to_state, AgentState.WAITING_REVIEW)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.WAITING_REVIEW.value)
+
+            # Assert .reviews/ active directory is cleared of old review files
+            remaining_reviews = list(reviews_dir.glob("*.review.yml"))
+            self.assertEqual(remaining_reviews, [])
+
+            # Assert fresh REVIEW_REQUESTS_DISPATCHED audit event is logged
+            dispatch_audits = orch.store.get_audit_events_by_type(t_id, "REVIEW_REQUESTS_DISPATCHED", review_round=1)
+            self.assertGreaterEqual(len(dispatch_audits), 1)
+
+            # Assert fresh messages published
+            msgs = orch.store.list_messages()
+            rev_msgs = [m for m in msgs if m.get("type") == "REVIEW_REQUEST"]
+            self.assertGreaterEqual(len(rev_msgs), 2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_resolve_override_invalid_transition_does_not_write_orphan_vote_result(self):
+        """P2-NEW-2: Verify illegal state transition in resolve_override raises ValueError without leaving orphan vote_result.json."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            orch = Orchestrator(project_root=tmpdir)
+            t = orch.start_task("Invalid Transition Task", "Testing fail-closed override")
+            t_id = t["task_id"]
+
+            # Task is in CODING state; override to APPROVED is illegal
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CODING.value)
+
+            with self.assertRaises(ValueError) as ctx:
+                orch.resolve_override(t_id, "APPROVED", note="Attempt illegal transition")
+            self.assertIn("Illegal state transition", str(ctx.exception))
+
+            # Verify no orphan vote_result.json was written to disk
+            vote_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertFalse(vote_file.exists())
+
+            # Verify no vote_result was registered in artifacts table
+            artifacts = orch.store.list_artifacts(t_id)
+            vote_artifacts = [a for a in artifacts if a.get("kind") == "vote_result"]
+            self.assertEqual(vote_artifacts, [])
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == "__main__":

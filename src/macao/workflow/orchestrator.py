@@ -25,6 +25,7 @@ from macao.utils.context_builder import ReviewContextBuilder
 from macao.adapter.base import AgentAdapter
 from macao.merge.controller import MergeController
 from macao.workflow.fsm import WorkflowFSM
+from macao.workflow.transitions import TransitionTable
 from macao.utils.git_utils import GitManager
 from macao.core.config import ConfigManager
 
@@ -295,7 +296,11 @@ class Orchestrator:
             )
 
         # 4. Only after all worktrees are successfully prepared, transition FSM (E2) and archive .dev.yml
-        change = self.fsm.transition(task_id, AgentState.WAITING_REVIEW, "E2")
+        current_state = AgentState(task["state"])
+        if current_state != AgentState.WAITING_REVIEW:
+            change = self.fsm.transition(task_id, AgentState.WAITING_REVIEW, "E2")
+        else:
+            change = StateChange(task_id, AgentState.WAITING_REVIEW, AgentState.WAITING_REVIEW, "E2_REDISPATCH", rnd, checkpoint_ref)
 
         # 5. Calculate deadline and publish REVIEW_REQUEST with deadline to each reviewer
         timeout_val = self.config.get("timeouts", {}).get("per_reviewer", "10m")
@@ -368,7 +373,7 @@ class Orchestrator:
         if not ref:
             return []
 
-        # Targeted query on dispatch audits
+        # Targeted query on dispatch audits (sorted newest first)
         audits = self.store.get_audit_events_by_type(task_id, "REVIEW_REQUESTS_DISPATCHED", review_round=rnd)
         if not audits:
             audits = self.store.get_audit_events_by_type(task_id, "STATE_TRANSITION_E2", review_round=rnd)
@@ -419,7 +424,7 @@ class Orchestrator:
         2. Evaluates votes in CONSENSUS_CHECK:
            - APPROVED -> writes vote_result.json, moves to MERGING (E4).
            - REWORK_REQUIRED -> writes vote_result.json, moves to REWORK (E5 if round < max else HOLD).
-           - DEADLOCK / TIMEOUT ABSTAIN -> DOES NOT WRITE vote_result.json (PRD §3.3 E3 / §6.1 / P1-NEW-3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS in CONSENSUS_CHECK.
+           - DEADLOCK / TIMEOUT ABSTAIN -> DOES NOT WRITE vote_result.json (PRD §3.3 E3 / §6.1 / P1-NEW-3 / P1-NEW-7), triggers HUMAN_OVERRIDE_REQUEST, HOLDS in CONSENSUS_CHECK.
            - MAX_REWORK_ROUNDS_REACHED -> DOES NOT WRITE vote_result.json to disk (PRD §3.3 E5/E7 / Codex P0-3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS.
         """
         task = self.store.get_task(task_id)
@@ -433,9 +438,16 @@ class Orchestrator:
 
         num_configured = configured_reviewers or len(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"]))
 
+        # Check historical timeout disposition in this round (PRD §3.3 / P1-NEW-7 / P1-Q2)
+        existing_timeouts = self.store.get_audit_events_by_type(task_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=rnd)
+        historical_timed_out_ids = {a.get("detail", {}).get("reviewer_id") for a in existing_timeouts if "reviewer_id" in a.get("detail", {})}
+
         # Auto-detect timeouts if not explicitly supplied
         if timed_out_reviewers is None:
-            timed_out_reviewers = self.detect_timed_out_reviewers(task_id)
+            detected = self.detect_timed_out_reviewers(task_id)
+            timed_out_reviewers = sorted(list(set(detected) | historical_timed_out_ids))
+        else:
+            timed_out_reviewers = sorted(list(set(timed_out_reviewers) | historical_timed_out_ids))
 
         # Check quorum transition from WAITING_REVIEW -> CONSENSUS_CHECK
         if current_st == AgentState.WAITING_REVIEW and ref:
@@ -462,8 +474,23 @@ class Orchestrator:
                     reviewer_id=r["reviewer_id"]
                 )
 
-            votes_list = []
+            # Late Review Isolation (P1-NEW-7 / P1-Q2 / Codex P1-2):
+            # Once a reviewer has timed out, their late submitted manifest must NOT participate in automated consensus.
+            valid_reviews = []
             for r in collected_reviews:
+                r_id = r.get("reviewer_id")
+                if timed_out_reviewers and r_id in timed_out_reviewers:
+                    self.store.log_audit_event(task_id, "LATE_REVIEW_ISOLATED", {
+                        "reviewer_id": r_id,
+                        "review_round": rnd,
+                        "checkpoint_ref": ref,
+                        "note": "Late review submitted after timeout disposition; isolated from automated consensus"
+                    })
+                else:
+                    valid_reviews.append(r)
+
+            votes_list = []
+            for r in valid_reviews:
                 v_data = r["data"]
                 votes_list.append({
                     "reviewer": v_data["reviewer"]["id"],
@@ -473,8 +500,6 @@ class Orchestrator:
 
             # Handle Reviewer Timeouts (REQ-TIMEOUT): Synthesize ABSTAIN votes and idempotent audit
             if timed_out_reviewers:
-                existing_timeouts = self.store.get_audit_events_by_type(task_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=rnd)
-                existing_timed_out_ids = {a.get("detail", {}).get("reviewer_id") for a in existing_timeouts}
                 for to_rev in timed_out_reviewers:
                     if not any(v["reviewer"] == to_rev for v in votes_list):
                         votes_list.append({
@@ -483,68 +508,73 @@ class Orchestrator:
                             "confidence": 0.0,
                             "timeout": True
                         })
-                        if to_rev not in existing_timed_out_ids:
+                        if to_rev not in historical_timed_out_ids:
                             self.store.log_audit_event(task_id, "REVIEWER_TIMEOUT_ABSTAIN", {
                                 "reviewer_id": to_rev,
                                 "review_round": rnd,
                                 "checkpoint_ref": ref
                             })
+                            historical_timed_out_ids.add(to_rev)
 
             decision, breakdown, confidence = ConsensusEngine.evaluate(
                 votes=votes_list,
                 configured_reviewers=num_configured
             )
 
-            # Rule (P1-NEW-3 / PRD §2.2 / §3.3 / §6.1):
+            # Rule (P1-NEW-3 / P1-NEW-7 / PRD §2.2 / §3.3 / §6.1):
             # If decision is DEADLOCK OR any reviewer timed out, MUST HOLD in CONSENSUS_CHECK and NOT automatically transition to MERGING.
             # Timeout degradation requires human confirmation via resolve_override.
             if decision == Decision.DEADLOCK or (timed_out_reviewers and len(timed_out_reviewers) > 0):
                 reason_code = "TIMEOUT_ESCALATION" if timed_out_reviewers else "DEADLOCK_DETECTED"
-                self.store.log_audit_event(task_id, "DEADLOCK_DETECTED", {
-                    "checkpoint_ref": ref,
-                    "review_round": rnd,
-                    "reason": reason_code,
-                    "summary": f"{reason_code}: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
-                    "vote_breakdown": breakdown
-                })
-                # Trigger HUMAN_OVERRIDE_REQUEST AEP
-                self.msg_bus.publish(
-                    msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
-                    from_agent="macao",
-                    to_agent="admin",
-                    payload={
-                        "task_id": task_id,
+                existing_deadlocks = self.store.get_audit_events_by_type(task_id, "DEADLOCK_DETECTED", review_round=rnd)
+                if not existing_deadlocks:
+                    self.store.log_audit_event(task_id, "DEADLOCK_DETECTED", {
                         "checkpoint_ref": ref,
                         "review_round": rnd,
                         "reason": reason_code,
                         "summary": f"{reason_code}: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
                         "vote_breakdown": breakdown
-                    }
-                )
+                    })
+                    # Trigger HUMAN_OVERRIDE_REQUEST AEP
+                    self.msg_bus.publish(
+                        msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
+                        from_agent="macao",
+                        to_agent="admin",
+                        payload={
+                            "task_id": task_id,
+                            "checkpoint_ref": ref,
+                            "review_round": rnd,
+                            "reason": reason_code,
+                            "summary": f"{reason_code}: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
+                            "vote_breakdown": breakdown
+                        }
+                    )
                 return None, None
 
             # Rule: When max rework rounds is reached, HOLD in CONSENSUS_CHECK and DO NOT write automatic vote_result.json (PRD §3.3 E5/E7 / Codex P0-3)
             max_rnd = self.config.get("max_rework_rounds", 3)
             if decision == Decision.REWORK_REQUIRED and rnd >= max_rnd:
-                self.store.log_audit_event(task_id, "MAX_REWORK_ROUNDS_REACHED", {
-                    "review_round": rnd,
-                    "max_rework_rounds": max_rnd,
-                    "summary": f"Max rework rounds reached ({rnd}): reject={breakdown.get('reject')}",
-                    "vote_breakdown": breakdown
-                })
-                self.msg_bus.publish(
-                    msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
-                    from_agent="macao",
-                    to_agent="admin",
-                    payload={
-                        "task_id": task_id,
-                        "checkpoint_ref": ref,
+                existing_max = self.store.get_audit_events_by_type(task_id, "MAX_REWORK_ROUNDS_REACHED", review_round=rnd)
+                if not existing_max:
+                    self.store.log_audit_event(task_id, "MAX_REWORK_ROUNDS_REACHED", {
                         "review_round": rnd,
-                        "reason": "MAX_REWORK_ROUNDS_REACHED",
+                        "max_rework_rounds": max_rnd,
                         "summary": f"Max rework rounds reached ({rnd}): reject={breakdown.get('reject')}",
                         "vote_breakdown": breakdown
-                    }
-                )
+                    })
+                    self.msg_bus.publish(
+                        msg_type=AEPType.HUMAN_OVERRIDE_REQUEST,
+                        from_agent="macao",
+                        to_agent="admin",
+                        payload={
+                            "task_id": task_id,
+                            "checkpoint_ref": ref,
+                            "review_round": rnd,
+                            "reason": "MAX_REWORK_ROUNDS_REACHED",
+                            "summary": f"Max rework rounds reached ({rnd}): reject={breakdown.get('reject')}",
+                            "vote_breakdown": breakdown
+                        }
+                    )
                 return None, None
 
             # Generate and write authoritative vote_result.json for valid non-deadlock decisions
@@ -553,7 +583,7 @@ class Orchestrator:
                 executor_id=exec_id,
                 review_round=rnd,
                 configured_reviewers=num_configured,
-                reviews=collected_reviews,
+                reviews=valid_reviews,
                 human_resolution=None,
                 timed_out_reviewers=timed_out_reviewers,
                 write_to_disk=True
@@ -635,7 +665,11 @@ class Orchestrator:
             return False, msg, change
 
     def resolve_override(self, task_id: str, choice: Union[OverrideChoice, str], note: str = "") -> StateChange:
-        """E7 / E9 / E10: Resolves human override, writes final vote_result.json, and executes state transition."""
+        """
+        E7 / E9 / E10: Resolves human override.
+        Validates transition legality before writing disk artifacts (Fail-closed & P2-NEW-2).
+        Executes full re-dispatch on RETRY_REVIEW (PRD §3.3 E9 / P1-NEW-6).
+        """
         task = self.store.get_task(task_id)
         if not task:
             raise ValueError(f"Task {task_id} not found")
@@ -643,6 +677,7 @@ class Orchestrator:
         ref = task.get("checkpoint_ref", "")
         rnd = task.get("review_round", 1)
         exec_id = task.get("executor_id") or self.config.get("executor_id", "claude-code")
+        from_state = AgentState(task["state"])
 
         # Normalize choice
         if isinstance(choice, str):
@@ -660,7 +695,28 @@ class Orchestrator:
         else:
             choice_enum = choice
 
-        # 1. Write human override audit event
+        # 1. Map choice to target state, trigger ID, and resolution string
+        choice_map = {
+            OverrideChoice.APPROVED: (AgentState.MERGING, "E7", "APPROVED"),
+            OverrideChoice.REWORK: (AgentState.REWORK, "E7", "REWORK"),
+            OverrideChoice.RETRY_REVIEW: (AgentState.WAITING_REVIEW, "E9", "RETRY_REVIEW"),
+            OverrideChoice.CANCEL: (AgentState.CANCELLED, "E10", "CANCEL")
+        }
+        target_state, trigger_id, resolution_choice = choice_map[choice_enum]
+
+        # 2. Pre-validate FSM transition legality (Fail-closed & P2-NEW-2: prevent orphan vote_result.json)
+        if not TransitionTable.can_transition(from_state, target_state, trigger_id):
+            self.store.log_audit_event(task_id, "TRANSITION_REJECTED", {
+                "from_state": from_state.value,
+                "to_state": target_state.value,
+                "trigger_id": trigger_id,
+                "choice": choice_enum.value
+            })
+            raise ValueError(
+                f"Illegal state transition from {from_state.value} to {target_state.value} via trigger {trigger_id}"
+            )
+
+        # 3. Write human override audit event
         self.store.log_audit_event(
             task_id=task_id,
             event_type="HUMAN_OVERRIDE",
@@ -673,16 +729,7 @@ class Orchestrator:
             }
         )
 
-        # 2. Map choice to target state, trigger ID, and resolution string
-        choice_map = {
-            OverrideChoice.APPROVED: (AgentState.MERGING, "E7", "APPROVED"),
-            OverrideChoice.REWORK: (AgentState.REWORK, "E7", "REWORK"),
-            OverrideChoice.RETRY_REVIEW: (AgentState.WAITING_REVIEW, "E9", "RETRY_REVIEW"),
-            OverrideChoice.CANCEL: (AgentState.CANCELLED, "E10", "CANCEL")
-        }
-        target_state, trigger_id, resolution_choice = choice_map[choice_enum]
-
-        # 3. Retrieve timed out reviewers from targeted query on audit events (PRD §2.2 / §3.3 / P1-1 / P1-NEW-4)
+        # 4. Retrieve timed out reviewers from targeted query on audit events (PRD §2.2 / §3.3 / P1-1 / P1-NEW-4)
         timeout_audits = self.store.get_audit_events_by_type(task_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=rnd)
         timed_out_revs = [
             a["detail"]["reviewer_id"]
@@ -690,7 +737,7 @@ class Orchestrator:
             if "reviewer_id" in a.get("detail", {})
         ]
 
-        # 4. Generate and write authoritative vote_result.json with human resolution and ABSTAIN votes
+        # 5. Generate and write authoritative vote_result.json with human resolution and ABSTAIN votes
         allowed_revs = set(self.config.get("reviewer_ids", []))
         collected_reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=allowed_revs)
         vdata = self.vote_aggregator.generate_vote_result(
@@ -713,10 +760,22 @@ class Orchestrator:
             path=".macao/vote_result.json"
         )
 
-        # 5. Perform FSM transition
+        # 6. Perform FSM transition (archives vote_result.json & reviews to .macao/archive/)
         change = self.fsm.transition(task_id, target_state, trigger_id, vdata)
 
-        # 6. Broadcast notification using standard Schema AEPType.STATE_CHANGED
+        # 7. For RETRY_REVIEW (E9), clean obsolete reviews from active directory and re-dispatch fresh requests (PRD §3.3 E9 / P1-NEW-6)
+        if choice_enum == OverrideChoice.RETRY_REVIEW:
+            reviews_dir = self.root / ".macao" / ".reviews"
+            if reviews_dir.exists():
+                for rev_file in reviews_dir.glob("*.review.yml"):
+                    try:
+                        rev_file.unlink()
+                    except Exception:
+                        pass
+            # Re-dispatch review requests to reviewers with fresh deadline
+            self.dispatch_review_requests(task_id)
+
+        # 8. Broadcast notification using standard Schema AEPType.STATE_CHANGED
         self.msg_bus.publish(
             msg_type=AEPType.STATE_CHANGED,
             from_agent="human_admin",
