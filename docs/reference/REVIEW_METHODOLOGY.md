@@ -1,9 +1,10 @@
 # Washdb 评审方法论
 
 > **版本**：v2.2（2026-08-09）
-> **状态**：候选强制规范，完成双签后生效  
-> **适用对象**：财务数据 Loader、Raw/Normalized/Candidates/Cleaned/Audit Pipeline、策略与实现文档  
-> **上位准则**：`docs/CLEAN_FINANCIAL_STATEMENT_PRINCIPLE.md`  
+> **状态**：候选强制规范，完成双签后生效
+> **适用对象**：财务数据 Loader、Raw/Normalized/Candidates/Cleaned/Audit Pipeline、策略与实现文档
+> **上位准则**：`docs/CLEAN_FINANCIAL_STATEMENT_PRINCIPLE.md`
+
 > **相关设计**：`docs/US_FINANCIAL_CLEANING_STRATEGY_V3.md`、`docs/US_FINANCIAL_PIPELINE_IMPLEMENTATION.md`
 
 本方法论的核心是：

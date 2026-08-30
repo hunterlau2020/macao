@@ -143,8 +143,9 @@ stateDiagram-v2
     CODING --> READY_FOR_REVIEW: Checkpoint Commit + .dev.yml 产物门禁 (E1)
     READY_FOR_REVIEW --> WAITING_REVIEW: Git Worktrees 隔离创建 + AEP 派发 (E2)
     WAITING_REVIEW --> CONSENSUS_CHECK: 收集 .review.yml / 超时 ABSTAIN 降级 (E3)
-    
+
     state CONSENSUS_CHECK {
+
         [*] --> Evaluating
         Evaluating --> ConsensusApproved: 赞成票 >= 2/3
         Evaluating --> DeadlockOrTimeout: 1:1 分歧 / 超时弃权

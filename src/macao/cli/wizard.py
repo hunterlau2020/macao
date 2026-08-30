@@ -77,7 +77,7 @@ def detect_ci_command(project_root: Path) -> Optional[str]:
 def ensure_gitignore_isolation(project_root: Path) -> bool:
     """Ensures .macao/worktrees/ and *.db are safely added to .gitignore."""
     gi_path = project_root / ".gitignore"
-    entry = "\n# MACAO Runtime Worktrees & State DB (Auto-added)\n.macao/worktrees/\n.macao/*.db\n.macao/*.db-journal\n.macao/*.db-wal\n"
+    entry = "\n# MACAO Runtime Worktrees & State Store (Auto-added)\n.macao/worktrees/\n.macao/.reviews/\n.macao/.dev.yml\n.macao/vote_result.json\n.macao/archive/\n.macao/*.db\n.macao/*.db-journal\n.macao/*.db-wal\n.macao/*.db-shm\n"
 
     content = gi_path.read_text(encoding="utf-8") if gi_path.exists() else ""
     if ".macao/worktrees/" not in content:
@@ -85,6 +85,7 @@ def ensure_gitignore_isolation(project_root: Path) -> bool:
             f.write(entry)
         return True
     return False
+
 
 
 def generate_smart_config(

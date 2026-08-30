@@ -124,8 +124,8 @@ def render_cli_integ_report(results: List[Dict[str, Any]]) -> None:
 
 
 def render_e2e_report(result: Dict[str, Any]) -> None:
-    """Renders the Phase 2 End-to-End Micro-Task Collaboration Report."""
-    table = Table(title=f"MACAO Phase 2 E2E Micro-Task Report ({result.get('task_id')})", border_style="cyan")
+    """Renders the Phase 3 Live Multi-Agent Collaboration Report."""
+    table = Table(title=f"MACAO Phase 3 Live Multi-Agent Collaboration Report ({result.get('task_id')})", border_style="cyan")
     table.add_column("Phase / Step", style="bold yellow")
     table.add_column("Details", style="white")
     table.add_column("Status / Result", style="bold green")
@@ -133,11 +133,15 @@ def render_e2e_report(result: Dict[str, Any]) -> None:
     for s in result.get("steps", []):
         step_name = s.get("step", "")
         details = ", ".join(f"{k}={v}" for k, v in s.items() if k != "step")
-        table.add_row(step_name, details, "[green]OK[/green]")
+        status_text = s.get("status", "OK")
+        status_style = "[green]OK[/green]" if status_text == "OK" else f"[red]{status_text}[/red]"
+        table.add_row(step_name, details, status_style)
 
-    archived_count = len(result.get('archived_files', []))
+    archived_files = result.get('archived_files', [])
+    archived_count = result.get('archived_count', len(archived_files))
     archive_status = "[green]PERSISTED[/green]" if archived_count > 0 else "[red]EMPTY[/red]"
-    table.add_row("6. Physical Archive", f"Archived {archived_count} files: {', '.join(result.get('archived_files', []))}", archive_status)
-    table.add_row("7. Final FSM State", f"Final task state: {result.get('final_state')}", f"[bold cyan]{result.get('final_state')}[/bold cyan]")
+    archived_summary = f"Archived {archived_count} files" + (f": {', '.join(archived_files)}" if archived_files else "")
+    table.add_row("8. Physical Archive", archived_summary, archive_status)
+    table.add_row("9. Final FSM State", f"Final task state: {result.get('final_state')}", f"[bold cyan]{result.get('final_state')}[/bold cyan]")
 
     console.print(table)

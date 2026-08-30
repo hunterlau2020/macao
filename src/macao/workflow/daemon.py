@@ -29,53 +29,42 @@ class OrchestratorDaemon:
         task_id = task["task_id"]
         state = task["state"]
 
-        # Check if in WAITING_REVIEW and reviewer deadlines are recorded
+        # Check if in WAITING_REVIEW and reviewer deadlines are exceeded
         if state == AgentState.WAITING_REVIEW.value:
-            events = self.store.get_audit_events(task_id, limit=50)
-            now = time.time()
+            timed_out = self.orchestrator.detect_timed_out_reviewers(task_id)
+            if timed_out:
+                rnd = task.get("review_round", 1)
+                ref = task.get("checkpoint_ref")
 
-            # Find dispatch event
-            dispatch_event = next((e for e in events if e["event_type"] == "REVIEW_DISPATCHED"), None)
-            if dispatch_event:
-                payload = json.loads(dispatch_event["payload"]) if isinstance(dispatch_event["payload"], str) else dispatch_event["payload"]
-                deadline = payload.get("deadline_epoch", 0)
-                reviewers = payload.get("reviewers", [])
+                for r_id in timed_out:
+                    self.store.log_audit_event(task_id, "REVIEWER_TIMEOUT_ABSTAIN", {
+                        "reviewer_id": r_id,
+                        "review_round": rnd,
+                        "checkpoint_ref": ref,
+                        "note": "Reviewer deadline expired; recorded ABSTAIN"
+                    })
 
-                if deadline > 0 and now >= deadline:
-                    # Deadline expired! Check which reviewers haven't submitted .review.yml
-                    artifacts = self.store.list_artifacts(task_id)
-                    submitted_reviewers = {
-                        a["kind"].split(".")[0] for a in artifacts if a["kind"].endswith(".review.yml")
-                    }
-
-                    timed_out_reviewers = [r for r in reviewers if r not in submitted_reviewers]
-                    if timed_out_reviewers:
-                        for r_id in timed_out_reviewers:
-                            self.store.log_audit_event(task_id, "REVIEWER_TIMEOUT_ABSTAIN", {
-                                "reviewer_id": r_id,
-                                "review_round": task.get("review_round", 1),
-                                "checkpoint_ref": task.get("checkpoint_ref")
-                            })
-
-                        # Trigger consensus evaluation to enter HOLD / HUMAN_OVERRIDE
-                        self.orchestrator.collect_and_evaluate_consensus(task_id)
-                        return {
-                            "active_task": task_id,
-                            "action_taken": "TIMEOUT_DEGRADATION",
-                            "timed_out_reviewers": timed_out_reviewers
-                        }
+                # Trigger consensus evaluation with timed_out_reviewers passed
+                self.orchestrator.collect_and_evaluate_consensus(task_id, timed_out_reviewers=timed_out)
+                return {
+                    "active_task": task_id,
+                    "state": self.store.get_task(task_id)["state"],
+                    "action_taken": "TIMEOUT_DEGRADATION",
+                    "timed_out_reviewers": timed_out
+                }
 
         return {"active_task": task_id, "state": state, "action_taken": "NONE"}
 
     def run_loop(self, max_ticks: Optional[int] = None) -> None:
         """Runs the continuous daemon scanning loop."""
+        import sys
         self.is_running = True
         ticks = 0
         while self.is_running:
             try:
                 self.scan_once()
-            except Exception:
-                pass
+            except Exception as e:
+                sys.stderr.write(f"[OrchestratorDaemon ERROR] {e}\n")
 
             ticks += 1
             if max_ticks and ticks >= max_ticks:

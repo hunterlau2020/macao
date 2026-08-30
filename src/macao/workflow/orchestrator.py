@@ -88,8 +88,15 @@ class Orchestrator:
         self.reviewers = reviewer_adapters or []
 
         # Normalized configuration extraction (Single Truth)
-        raw_config = config or {}
+        raw_config = config
+        if raw_config is None and (self.root / "macao.yaml").exists():
+            try:
+                raw_config = yaml.safe_load((self.root / "macao.yaml").read_text(encoding="utf-8")) or {}
+            except Exception:
+                raw_config = {}
+        raw_config = raw_config or {}
         policy = raw_config.get("policy", {})
+
         merge_policy = raw_config.get("merge", {})
         team = raw_config.get("team", {})
         repo = raw_config.get("project", {}).get("repository", {})
@@ -554,12 +561,15 @@ class Orchestrator:
             votes_list = []
             for r in valid_reviews:
                 v_data = r["data"]
-                vote_val = v_data.get("vote") or v_data.get("opinion", {}).get("vote", "YES_APPROVE")
+                vote_val = v_data.get("vote") or v_data.get("opinion", {}).get("vote")
+                if not vote_val:
+                    continue
                 votes_list.append({
                     "reviewer": v_data["reviewer"]["id"],
                     "vote": vote_val,
                     "confidence": float(v_data.get("opinion", {}).get("confidence", 0.9))
                 })
+
 
             # Handle Reviewer Timeouts (REQ-TIMEOUT): Synthesize ABSTAIN votes and idempotent audit
             if timed_out_reviewers:
