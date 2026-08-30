@@ -234,12 +234,26 @@ class Orchestrator:
         tests_passed = quality.get("tests_passed") is True or quality.get("tests_exempt") is True
 
         if dev_rnd == rnd and status == "ready_for_review" and signal == "EXPLICIT" and latest_commit and tests_passed:
-            # 3. Check commit physically exists in git repository if git repo is present (PRD §2.1)
+            # 3. Rework gate & Checkpoint freshness (PRD §2.1:216 / §3.3 E6:839 / P1-NEW-12 / Codex P1-1)
+            if current_st == AgentState.REWORK:
+                prev_ref = task.get("checkpoint_ref")
+                if prev_ref and latest_commit == prev_ref:
+                    return None  # Rework requires a fresh commit different from previous review round
+
+            # Check commit has not already been consumed as a dev_manifest for this task (PRD §2.1:216)
+            consumed_devs = [
+                a for a in self.store.list_artifacts(task_id)
+                if a.get("kind") == "dev_manifest" and a.get("checkpoint_ref") == latest_commit and a.get("consumed")
+            ]
+            if consumed_devs:
+                return None
+
+            # 4. Check commit physically exists in git repository if git repo is present (PRD §2.1)
             if self.git and self.git.is_git_repository():
                 if not self.git.commit_exists(latest_commit):
                     return None
 
-            # 4. Register artifact in StateStore (PRD §11.4 / P1-2)
+            # 5. Register artifact in StateStore (PRD §11.4 / P1-2)
             try:
                 rel_path = str(dev_file.relative_to(self.root))
             except Exception:
@@ -253,7 +267,7 @@ class Orchestrator:
                 path=rel_path
             )
 
-            # 5. Transition to READY_FOR_REVIEW (产物型转移)
+            # 6. Transition to READY_FOR_REVIEW (产物型转移)
             trigger = "E6" if current_st == AgentState.REWORK else "E1_PRODUCED"
             change = self.fsm.transition(
                 task_id,

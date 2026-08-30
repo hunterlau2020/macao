@@ -1508,6 +1508,119 @@ development:
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    def test_rework_unchanged_commit_fails_closed_and_requires_fresh_commit(self):
+        """P1-NEW-12 (Claude) / P1-1 (Codex): Verify E6 requires fresh commit and rejects unchanged/consumed commit in REWORK."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
+            head_r1 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            orch = Orchestrator(project_root=tmpdir, config={"reviewer_ids": ["codex", "opencode"], "require_signoff": False})
+            task = orch.start_task("Rework Freshness Task", "Testing E6 rework commit freshness gate")
+            t_id = task["task_id"]
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            dev_path = Path(tmpdir) / ".macao" / ".dev.yml"
+
+            # Round 1: produce dev.yml and dispatch reviews
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head_r1}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Reviewers both reject in Round 1 -> REWORK (Round 2)
+            rev_codex = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
+            rev_codex.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head_r1,
+                review_round=1,
+                vote="NO_APPROVE",
+                opinion_status="REJECTED",
+                issues=[{"type": "security", "severity": "critical", "issue": "Missing security check"}],
+                confidence=0.99
+            )
+            rev_opencode = MockAgentAdapter(agent_id="opencode", cli_name="opencode", role="reviewer")
+            rev_opencode.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head_r1,
+                review_round=1,
+                vote="NO_APPROVE",
+                opinion_status="REJECTED",
+                issues=[{"type": "security", "severity": "critical", "issue": "Missing security check"}],
+                confidence=0.99
+            )
+
+            change_r1, _ = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2)
+            self.assertEqual(change_r1.to_state, AgentState.REWORK)
+            task_now = orch.store.get_task(t_id)
+            self.assertEqual(task_now["state"], AgentState.REWORK.value)
+            self.assertEqual(task_now["review_round"], 2)
+            self.assertEqual(task_now["checkpoint_ref"], head_r1)
+
+            # Case A: Executor submits Round 2 dev.yml with IDENTICAL commit (no code change)
+            # MUST FAIL (return None, state stays in REWORK)
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 2
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head_r1}"
+""", encoding="utf-8")
+            res_unchanged = orch.check_development_checkpoint(t_id)
+            self.assertIsNone(res_unchanged, "E6 MUST reject unchanged/consumed commit in REWORK")
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.REWORK.value)
+
+            # Case B: Executor makes a new git commit and submits Round 2 dev.yml
+            (Path(tmpdir) / "fix.txt").write_text("fixed security issue\n", encoding="utf-8")
+            subprocess.run(["git", "add", "fix.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "fix: resolve security issue"], cwd=tmpdir, check=True, capture_output=True)
+            head_r2 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+            self.assertNotEqual(head_r1, head_r2)
+
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 2
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head_r2}"
+""", encoding="utf-8")
+            res_fresh = orch.check_development_checkpoint(t_id)
+            self.assertIsNotNone(res_fresh, "E6 MUST accept fresh commit in REWORK")
+            self.assertEqual(res_fresh.to_state, AgentState.READY_FOR_REVIEW)
+            task_updated = orch.store.get_task(t_id)
+            self.assertEqual(task_updated["state"], AgentState.READY_FOR_REVIEW.value)
+            self.assertEqual(task_updated["checkpoint_ref"], head_r2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

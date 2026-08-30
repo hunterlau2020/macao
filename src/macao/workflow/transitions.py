@@ -39,14 +39,14 @@ class TransitionTable:
             "E10": (None, AgentState.CANCELLED),     # From any active non-terminal state to CANCELLED
         }
 
-        # Special handling for E7 & E9 (Human Override from CONSENSUS_CHECK or UNKNOWN, PRD §3.3:841 / P2-NEW-5)
+        # Special handling for E7 & E9 (Human Override from CONSENSUS_CHECK, PRD §3.3:841 / P2-NEW-5 / Codex P2-1)
         if trigger_id == "E7":
             if from_state in (AgentState.CONSENSUS_CHECK, AgentState.UNKNOWN):
                 return to_state in (AgentState.MERGING, AgentState.REWORK, AgentState.WAITING_REVIEW, AgentState.CANCELLED)
             return False
 
         if trigger_id == "E9":
-            if from_state in (AgentState.CONSENSUS_CHECK, AgentState.UNKNOWN):
+            if from_state == AgentState.CONSENSUS_CHECK:
                 return to_state == AgentState.WAITING_REVIEW
             return False
 
