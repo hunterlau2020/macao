@@ -129,16 +129,20 @@ class MockAgentAdapter(AgentAdapter):
         project_root: str,
         checkpoint_ref: str,
         review_round: int = 1,
-        vote: Vote = Vote.YES_APPROVE,
-        opinion_status: OpinionStatus = OpinionStatus.APPROVED,
+        vote: Any = Vote.YES_APPROVE,
+        opinion_status: Any = OpinionStatus.APPROVED,
         issues: Optional[List[Dict[str, Any]]] = None,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
+        confidence: float = 0.95
     ) -> Path:
         """Simulates Reviewer generating .macao/.reviews/<id>.review.yml."""
         out_dir = Path(project_root) / ".macao" / ".reviews"
         out_dir.mkdir(parents=True, exist_ok=True)
         file_name = filename or f"{self.agent_id}.review.yml"
         rev_file = out_dir / file_name
+
+        vote_val = vote.value if hasattr(vote, "value") else str(vote)
+        status_val = opinion_status.value if hasattr(opinion_status, "value") else str(opinion_status)
 
         data: Dict[str, Any] = {
             "version": "1.0",
@@ -150,15 +154,15 @@ class MockAgentAdapter(AgentAdapter):
             "checkpoint_ref": checkpoint_ref,
             "review_round": review_round,
             "opinion": {
-                "status": opinion_status.value,
-                "confidence": 0.95,
+                "status": status_val,
+                "confidence": float(confidence),
                 "summary": "Simulated review feedback",
                 "feedback": {
                     "summary": "Review complete",
                     "categories": issues or []
                 }
             },
-            "vote": vote.value
+            "vote": vote_val
         }
         is_valid, err = validate_review_manifest(data)
         if not is_valid:

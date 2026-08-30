@@ -113,6 +113,19 @@ class TestConfigAndComposition(unittest.TestCase):
         self.assertIsNotNone(v.get_schema("dev_manifest"))
         self.assertIsNotNone(v.get_schema("review_manifest"))
 
+        # Test explicit MACAO_SCHEMAS_DIR override
+        with tempfile.TemporaryDirectory() as custom_dir:
+            old_env = os.environ.get("MACAO_SCHEMAS_DIR")
+            try:
+                os.environ["MACAO_SCHEMAS_DIR"] = custom_dir
+                custom_path = get_schemas_dir()
+                self.assertEqual(custom_path, Path(custom_dir).resolve())
+            finally:
+                if old_env is not None:
+                    os.environ["MACAO_SCHEMAS_DIR"] = old_env
+                else:
+                    os.environ.pop("MACAO_SCHEMAS_DIR", None)
+
     def test_parse_duration_units_and_validation(self):
         """Verify parse_duration accurately handles units and raises on invalid format."""
         from macao.workflow.orchestrator import parse_duration

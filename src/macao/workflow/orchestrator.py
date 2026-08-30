@@ -451,9 +451,18 @@ class Orchestrator:
 
         num_configured = configured_reviewers or len(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"]))
 
-        # Check historical timeout disposition in this round (PRD §3.3 / P1-NEW-7 / P1-Q2)
+        # Check historical timeout disposition in this round (PRD §3.3 / P1-NEW-7 / P1-Q2 / P1-NEW-8)
+        # Scoped to the current review dispatch generation within this round.
+        # Any timeout recorded prior to the latest REVIEW_REQUESTS_DISPATCHED in this round was voided by RETRY_REVIEW (PRD §3.3 E9).
+        dispatches = self.store.get_audit_events_by_type(task_id, "REVIEW_REQUESTS_DISPATCHED", review_round=rnd)
+        latest_dispatch_seq = dispatches[0].get("sequence_id", 0) if dispatches else 0
+
         existing_timeouts = self.store.get_audit_events_by_type(task_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=rnd)
-        historical_timed_out_ids = {a.get("detail", {}).get("reviewer_id") for a in existing_timeouts if "reviewer_id" in a.get("detail", {})}
+        historical_timed_out_ids = {
+            a.get("detail", {}).get("reviewer_id")
+            for a in existing_timeouts
+            if a.get("detail", {}).get("reviewer_id") and a.get("sequence_id", 0) >= latest_dispatch_seq
+        }
 
         # Auto-detect timeouts if not explicitly supplied
         if timed_out_reviewers is None:
@@ -742,12 +751,15 @@ class Orchestrator:
             }
         )
 
-        # 4. Retrieve timed out reviewers from targeted query on audit events (PRD §2.2 / §3.3 / P1-1 / P1-NEW-4)
+        # 4. Retrieve timed out reviewers from targeted query on audit events (PRD §2.2 / §3.3 / P1-1 / P1-NEW-4 / P1-NEW-8)
+        dispatches = self.store.get_audit_events_by_type(task_id, "REVIEW_REQUESTS_DISPATCHED", review_round=rnd)
+        latest_dispatch_seq = dispatches[0].get("sequence_id", 0) if dispatches else 0
+
         timeout_audits = self.store.get_audit_events_by_type(task_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=rnd)
         timed_out_revs = [
             a["detail"]["reviewer_id"]
             for a in timeout_audits
-            if "reviewer_id" in a.get("detail", {})
+            if "reviewer_id" in a.get("detail", {}) and a.get("sequence_id", 0) >= latest_dispatch_seq
         ]
 
         # 5. Generate and write authoritative vote_result.json with human resolution and ABSTAIN votes

@@ -19,6 +19,7 @@ from macao.adapter.claude import ClaudeCodeAdapter
 from macao.adapter.codex import CodexAdapter
 from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
+from macao.utils.ansi import ANSI_ESCAPE_RE
 
 
 CLI_ADAPTER_MAP = {
@@ -106,7 +107,7 @@ def verify_single_cli_pty(cli_key: str, timeout_sec: float = 6.0) -> Dict[str, A
             time.sleep(0.05)
 
         clean_logs = session.get_clean_logs()
-        ansi_stripped_ok = True
+        ansi_stripped_ok = all(not bool(ANSI_ESCAPE_RE.search(line)) for line in clean_logs) if clean_logs else True
 
         # 4. Terminate cleanly
         session.terminate()

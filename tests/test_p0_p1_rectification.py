@@ -949,6 +949,160 @@ merge:
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    def test_retry_review_override_full_recovery_and_consensus(self):
+        """P1-NEW-8 / P1-Q3 / Codex P1-1: Verify RETRY_REVIEW voids prior generation timeouts, allowing full consensus recovery when timely approvals are submitted."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # Initialize git repo
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            orch = Orchestrator(project_root=tmpdir, config={
+                "reviewer_ids": ["codex", "opencode"],
+                "min_effective_votes": 2,
+                "max_rework_rounds": 3,
+                "require_signoff": False
+            })
+
+            task = orch.start_task("E9 Retry Recovery Task", "Testing clean recovery after retry")
+            t_id = task["task_id"]
+
+            # Dispatch generation 1
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+review_round: 1
+development:
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Generation 1: codex approves, opencode times out
+            rev_codex = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
+            rev_codex.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="YES_APPROVE",
+                opinion_status="APPROVED",
+                confidence=0.95
+            )
+
+            # Generation 1 consensus evaluation with timeout -> HOLDS in CONSENSUS_CHECK
+            change1 = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2, timed_out_reviewers=["opencode"])
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+
+            # Admin triggers RETRY_REVIEW (E9)
+            change_retry = orch.resolve_override(t_id, "RETRY_REVIEW", note="Retrying round 1 review with fresh dispatch")
+            self.assertEqual(change_retry.to_state, AgentState.WAITING_REVIEW)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.WAITING_REVIEW.value)
+
+            # Generation 2: Both codex AND opencode submit timely YES_APPROVE manifests
+            rev_codex.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="YES_APPROVE",
+                opinion_status="APPROVED",
+                confidence=0.95
+            )
+            rev_opencode = MockAgentAdapter(agent_id="opencode", cli_name="opencode", role="reviewer")
+            rev_opencode.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="YES_APPROVE",
+                opinion_status="APPROVED",
+                confidence=0.95
+            )
+
+            # Generation 2 consensus evaluation -> MUST NOT ISOLATE OPENCODE, MUST ACHIEVE MERGING
+            change2, vdata2 = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2)
+            self.assertIsNotNone(change2)
+            self.assertEqual(change2.to_state, AgentState.MERGING)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.MERGING.value)
+
+            # Assert vote_result.json is written with 2 YES approvals and 0 ABSTAIN
+            vote_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertTrue(vote_file.exists())
+            with open(vote_file, "r", encoding="utf-8") as f:
+                vdata = json.load(f)
+            self.assertEqual(vdata["decision"], "APPROVED")
+            self.assertEqual(vdata["resolution"], "automatic")
+            self.assertEqual(vdata["vote_breakdown"]["approve"], 2)
+            self.assertEqual(vdata["vote_breakdown"]["abstain"], 0)
+
+            # Assert no LATE_REVIEW_ISOLATED events were logged in Generation 2
+            late_audits = orch.store.get_audit_events_by_type(t_id, "LATE_REVIEW_ISOLATED", review_round=1)
+            self.assertEqual(len(late_audits), 0)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_retry_review_override_repeated_timeout_holds(self):
+        """P1-NEW-8: Verify that if a reviewer times out AGAIN in the new generation after RETRY_REVIEW, the system correctly records the new timeout and HOLDS."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # Initialize git repo
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            orch = Orchestrator(project_root=tmpdir, config={
+                "reviewer_ids": ["codex", "opencode"],
+                "min_effective_votes": 2,
+                "max_rework_rounds": 3,
+                "require_signoff": False
+            })
+
+            task = orch.start_task("E9 Repeated Timeout Task", "Testing repeated timeout detection")
+            t_id = task["task_id"]
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+review_round: 1
+development:
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Gen 1 timeout -> HOLD -> RETRY_REVIEW
+            orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2, timed_out_reviewers=["opencode"])
+            orch.resolve_override(t_id, "RETRY_REVIEW", note="Retrying review")
+
+            # Gen 2: codex approves, opencode times out AGAIN in Generation 2
+            rev_codex = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
+            rev_codex.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="YES_APPROVE",
+                opinion_status="APPROVED",
+                confidence=0.95
+            )
+
+            # Collect consensus with new Generation 2 timeout
+            change_gen2 = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2, timed_out_reviewers=["opencode"])
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            # Assert 2 distinct REVIEWER_TIMEOUT_ABSTAIN events exist in total (one per dispatch generation)
+            all_timeouts = orch.store.get_audit_events_by_type(t_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=1)
+            self.assertEqual(len(all_timeouts), 2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
