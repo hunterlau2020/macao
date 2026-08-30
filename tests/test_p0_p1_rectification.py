@@ -86,9 +86,16 @@ class TestP0P1Rectification(unittest.TestCase):
 
             # Simulate dev manifest & dispatch
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
-            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
 review_round: 1
+executor:
+  id: claude
+  cli: claude
 development:
+  quality_metrics:
+    tests_passed: true
   git:
     latest_commit: "{head}"
 """, encoding="utf-8")
@@ -173,9 +180,16 @@ development:
             t_id = task["task_id"]
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
-            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
 review_round: 1
+executor:
+  id: claude
+  cli: claude
 development:
+  quality_metrics:
+    tests_passed: true
   git:
     latest_commit: "{head}"
 """, encoding="utf-8")
@@ -249,9 +263,16 @@ development:
             t_id = task["task_id"]
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
-            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
 review_round: 1
+executor:
+  id: claude
+  cli: claude
 development:
+  quality_metrics:
+    tests_passed: true
   git:
     latest_commit: "{head}"
 """, encoding="utf-8")
@@ -974,9 +995,16 @@ merge:
 
             # Dispatch generation 1
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
-            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
 review_round: 1
+executor:
+  id: claude
+  cli: claude
 development:
+  quality_metrics:
+    tests_passed: true
   git:
     latest_commit: "{head}"
 """, encoding="utf-8")
@@ -1069,9 +1097,16 @@ development:
             t_id = task["task_id"]
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
-            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""status: ready_for_review
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
 review_round: 1
+executor:
+  id: claude
+  cli: claude
 development:
+  quality_metrics:
+    tests_passed: true
   git:
     latest_commit: "{head}"
 """, encoding="utf-8")
@@ -1100,6 +1135,271 @@ development:
             # Assert 2 distinct REVIEWER_TIMEOUT_ABSTAIN events exist in total (one per dispatch generation)
             all_timeouts = orch.store.get_audit_events_by_type(t_id, "REVIEWER_TIMEOUT_ABSTAIN", review_round=1)
             self.assertEqual(len(all_timeouts), 2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_multi_generation_archiving_preserves_gen1_evidence_immutable(self):
+        """P1-NEW-9: Verify that across E9 RETRY_REVIEW generations, Gen 1 evidence is NOT overwritten or destroyed."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            orch = Orchestrator(project_root=tmpdir, config={"reviewer_ids": ["codex", "opencode"], "require_signoff": False})
+            task = orch.start_task("Multi-Gen Archive Task", "Testing non-destructive archiving")
+            t_id = task["task_id"]
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Gen 1: codex submits NO_APPROVE with dissent, opencode submits YES_APPROVE
+            rev_codex = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
+            rev_codex.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="NO_APPROVE",
+                opinion_status="REJECTED",
+                issues=[{"type": "security", "severity": "critical", "issue": "GEN1-DISSENT"}],
+                confidence=0.99
+            )
+            rev_opencode = MockAgentAdapter(agent_id="opencode", cli_name="opencode", role="reviewer")
+            rev_opencode.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="YES_APPROVE",
+                opinion_status="APPROVED",
+                issues=[],
+                confidence=0.95
+            )
+
+            # Resolve override with RETRY_REVIEW -> archives Gen 1 vote_result & review
+            orch.resolve_override(t_id, "RETRY_REVIEW", note="Retrying review after dissent")
+
+            # Check Gen 1 archived file content
+            archive_dir = Path(tmpdir) / ".macao" / "archive" / head / "r1"
+            gen1_files = list(archive_dir.glob("*.review.yml"))
+            self.assertGreaterEqual(len(gen1_files), 1)
+            gen1_content = (archive_dir / "codex.review.yml").read_text(encoding="utf-8")
+            self.assertIn("GEN1-DISSENT", gen1_content)
+
+            # Gen 2: codex and opencode both submit YES_APPROVE in generation 2
+            rev_codex.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="YES_APPROVE",
+                opinion_status="APPROVED",
+                issues=[],
+                confidence=0.95
+            )
+            rev_opencode.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="YES_APPROVE",
+                opinion_status="APPROVED",
+                issues=[],
+                confidence=0.95
+            )
+
+            # Evaluate consensus -> MERGING -> archives Gen 2
+            orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2)
+
+            # Assert Gen 1 dissent was NOT destroyed or overwritten!
+            all_archived_reviews = list(archive_dir.rglob("*.review.yml"))
+            self.assertGreaterEqual(len(all_archived_reviews), 2)
+            dissent_found = any("GEN1-DISSENT" in f.read_text(encoding="utf-8") for f in all_archived_reviews)
+            self.assertTrue(dissent_found, "Gen 1 dissent review evidence must be preserved on disk")
+
+            # Assert ARTIFACT_ARCHIVED audit events exist for both generations
+            arch_audits = orch.store.get_audit_events_by_type(t_id, "ARTIFACT_ARCHIVED", review_round=1)
+            self.assertGreaterEqual(len(arch_audits), 2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_retry_review_cleans_active_vote_result_file(self):
+        """P2-NEW-4: Verify RETRY_REVIEW removes active .macao/vote_result.json so crash reconcile does not revert state."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            orch = Orchestrator(project_root=tmpdir, config={"reviewer_ids": ["codex", "opencode"], "require_signoff": False})
+            task = orch.start_task("Clean Vote File Task", "Testing active vote_result cleanup")
+            t_id = task["task_id"]
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Override with RETRY_REVIEW
+            orch.resolve_override(t_id, "RETRY_REVIEW", note="Retrying review")
+
+            # Assert .macao/vote_result.json is NOT in active directory
+            active_vote = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertFalse(active_vote.exists())
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_late_review_isolated_audit_is_idempotent(self):
+        """P3-NEW-7: Verify that repeated consensus evaluation with a timed out reviewer logs LATE_REVIEW_ISOLATED idempotently."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            orch = Orchestrator(project_root=tmpdir, config={"reviewer_ids": ["codex", "opencode"], "require_signoff": False})
+            task = orch.start_task("Idempotency Task", "Testing LATE_REVIEW_ISOLATED idempotency")
+            t_id = task["task_id"]
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Opencode times out and is recorded
+            orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2, timed_out_reviewers=["opencode"])
+
+            # Late manifest arrives
+            rev_opencode = MockAgentAdapter(agent_id="opencode", cli_name="opencode", role="reviewer")
+            rev_opencode.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote="YES_APPROVE",
+                opinion_status="APPROVED",
+                confidence=0.95
+            )
+
+            # Poll 20 times repeatedly
+            for _ in range(20):
+                orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2, timed_out_reviewers=["opencode"])
+
+            # Assert exactly 1 LATE_REVIEW_ISOLATED event is recorded (idempotent)
+            isolated_audits = orch.store.get_audit_events_by_type(t_id, "LATE_REVIEW_ISOLATED", review_round=1)
+            self.assertEqual(len(isolated_audits), 1)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_check_development_checkpoint_validation_fail_closed(self):
+        """P1-2 (Kimi): Verify check_development_checkpoint fails closed on missing EXPLICIT signal or failed quality metrics."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
+            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            orch = Orchestrator(project_root=tmpdir)
+            task = orch.start_task("Validation Gate Task", "Testing dev checkpoint validation")
+            t_id = task["task_id"]
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+
+            # Case 1: tests_passed is False and not exempt -> MUST FAIL (return None)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+development:
+  quality_metrics:
+    tests_passed: false
+    tests_exempt: false
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            res1 = orch.check_development_checkpoint(t_id)
+            self.assertIsNone(res1)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CODING.value)
+
+            # Case 2: commit does not exist in git -> MUST FAIL (return None)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "0000000000000000000000000000000000000000"
+""", encoding="utf-8")
+            res2 = orch.check_development_checkpoint(t_id)
+            self.assertIsNone(res2)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CODING.value)
+
+            # Case 3: Valid -> MUST PASS
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            res3 = orch.check_development_checkpoint(t_id)
+            self.assertIsNotNone(res3)
+            self.assertEqual(res3.to_state, AgentState.READY_FOR_REVIEW)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 

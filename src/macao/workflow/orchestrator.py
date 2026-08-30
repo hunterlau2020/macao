@@ -218,13 +218,21 @@ class Orchestrator:
         if not data or not isinstance(data, dict):
             return None
 
-        # Check scope matching (round and status)
+        # Check scope matching and PRD §2.1 checkpoint invariants (P1-2)
         dev_rnd = data.get("review_round", 1)
         status = data.get("status")
+        signal = data.get("signal", "EXPLICIT")
         git_info = data.get("development", {}).get("git", {})
         latest_commit = git_info.get("latest_commit")
+        quality = data.get("development", {}).get("quality_metrics", {})
+        tests_passed = quality.get("tests_passed", True) or quality.get("tests_exempt", False)
 
-        if dev_rnd == rnd and status == "ready_for_review" and latest_commit:
+        if dev_rnd == rnd and status == "ready_for_review" and signal == "EXPLICIT" and latest_commit and tests_passed:
+            # Check commit physically exists in git repository if git repo is present (PRD §2.1)
+            if self.git and self.git.is_git_repository():
+                if not self.git.commit_exists(latest_commit):
+                    return None
+
             # Register artifact in StateStore (PRD §11.4 / P1-2)
             try:
                 rel_path = str(dev_file.relative_to(self.root))
@@ -496,18 +504,25 @@ class Orchestrator:
                     reviewer_id=r["reviewer_id"]
                 )
 
-            # Late Review Isolation (P1-NEW-7 / P1-Q2 / Codex P1-2):
+            # Late Review Isolation (P1-NEW-7 / P1-Q2 / Codex P1-2 / P3-NEW-7):
             # Once a reviewer has timed out, their late submitted manifest must NOT participate in automated consensus.
             valid_reviews = []
             for r in collected_reviews:
                 r_id = r.get("reviewer_id")
                 if timed_out_reviewers and r_id in timed_out_reviewers:
-                    self.store.log_audit_event(task_id, "LATE_REVIEW_ISOLATED", {
-                        "reviewer_id": r_id,
-                        "review_round": rnd,
-                        "checkpoint_ref": ref,
-                        "note": "Late review submitted after timeout disposition; isolated from automated consensus"
-                    })
+                    # Idempotency guard (P3-NEW-7): only log once per reviewer per dispatch generation
+                    existing_isolated = self.store.get_audit_events_by_type(task_id, "LATE_REVIEW_ISOLATED", review_round=rnd)
+                    already_logged = any(
+                        a.get("detail", {}).get("reviewer_id") == r_id and a.get("sequence_id", 0) >= latest_dispatch_seq
+                        for a in existing_isolated
+                    )
+                    if not already_logged:
+                        self.store.log_audit_event(task_id, "LATE_REVIEW_ISOLATED", {
+                            "reviewer_id": r_id,
+                            "review_round": rnd,
+                            "checkpoint_ref": ref,
+                            "note": "Late review submitted after timeout disposition; isolated from automated consensus"
+                        })
                 else:
                     valid_reviews.append(r)
 
@@ -788,7 +803,7 @@ class Orchestrator:
         # 6. Perform FSM transition (archives vote_result.json & reviews to .macao/archive/)
         change = self.fsm.transition(task_id, target_state, trigger_id, vdata)
 
-        # 7. For RETRY_REVIEW (E9), clean obsolete reviews from active directory and re-dispatch fresh requests (PRD §3.3 E9 / P1-NEW-6)
+        # 7. For RETRY_REVIEW (E9), clean obsolete reviews and active vote_result from active directory and re-dispatch fresh requests (PRD §3.3 E9 / P1-NEW-6 / P2-NEW-4)
         if choice_enum == OverrideChoice.RETRY_REVIEW:
             reviews_dir = self.root / ".macao" / ".reviews"
             if reviews_dir.exists():
@@ -797,6 +812,13 @@ class Orchestrator:
                         rev_file.unlink()
                     except Exception:
                         pass
+            # Clean active vote_result.json from .macao/ so crash reconcile does not read stale E9 override (P2-NEW-4)
+            active_vote = self.root / ".macao" / "vote_result.json"
+            if active_vote.exists():
+                try:
+                    active_vote.unlink()
+                except Exception:
+                    pass
             # Re-dispatch review requests to reviewers with fresh deadline
             self.dispatch_review_requests(task_id)
 

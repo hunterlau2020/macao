@@ -1,6 +1,7 @@
 """FSM Orchestration Engine (PRD §3.1 / §3.3)."""
 
 import shutil
+import hashlib
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 
@@ -68,7 +69,7 @@ class WorkflowFSM:
             "detail": detail
         })
 
-        # Archive logic (PRD §3.4 / §11.4)
+        # Archive logic (PRD §3.4 / §11.4 / P1-NEW-9)
         if trigger_id == "E2" and ref:
             self._archive_file(".macao/.dev.yml", ref, rnd, task_id, "dev_manifest")
         elif trigger_id in ("E4", "E5", "E7", "E9", "E10") and ref:
@@ -79,35 +80,87 @@ class WorkflowFSM:
 
         return change
 
+    def _get_generation(self, task_id: str, review_round: int) -> int:
+        try:
+            dispatches = self.store.get_audit_events_by_type(task_id, "REVIEW_REQUESTS_DISPATCHED", review_round=review_round)
+            return len(dispatches) if dispatches else 1
+        except Exception:
+            return 1
+
     def _archive_file(self, rel_path: str, checkpoint_ref: str, review_round: int, task_id: str, kind: str) -> None:
         src = self.root / rel_path
         if src.exists():
+            gen = self._get_generation(task_id, review_round)
             archive_dir = self.root / ".macao" / "archive" / checkpoint_ref / f"r{review_round}"
             archive_dir.mkdir(parents=True, exist_ok=True)
             dst = archive_dir / src.name
+
+            # Non-destructive archiving (P1-NEW-9): preserve distinct generation artifacts
+            if dst.exists():
+                src_hash = hashlib.sha256(src.read_bytes()).hexdigest()
+                dst_hash = hashlib.sha256(dst.read_bytes()).hexdigest()
+                if src_hash != dst_hash:
+                    dst = archive_dir / f"g{gen}_{src.name}"
+
             shutil.copy2(src, dst)
+            archived_rel = str(dst.relative_to(self.root))
             self.store.mark_artifact_consumed(
                 task_id=task_id,
                 kind=kind,
                 checkpoint_ref=checkpoint_ref,
                 review_round=review_round,
-                archived_path=str(dst.relative_to(self.root))
+                archived_path=archived_rel
+            )
+            sha256 = hashlib.sha256(dst.read_bytes()).hexdigest() if dst.exists() else ""
+            self.store.log_audit_event(
+                task_id=task_id,
+                event_type="ARTIFACT_ARCHIVED",
+                detail={
+                    "kind": kind,
+                    "checkpoint_ref": checkpoint_ref,
+                    "review_round": review_round,
+                    "generation": gen,
+                    "archived_path": archived_rel,
+                    "sha256": sha256
+                }
             )
 
     def _archive_reviews(self, checkpoint_ref: str, review_round: int, task_id: str) -> None:
         reviews_dir = self.root / ".macao" / ".reviews"
         if reviews_dir.exists():
+            gen = self._get_generation(task_id, review_round)
             archive_dir = self.root / ".macao" / "archive" / checkpoint_ref / f"r{review_round}"
             archive_dir.mkdir(parents=True, exist_ok=True)
             for rev_file in sorted(reviews_dir.glob("*.review.yml")):
                 dst = archive_dir / rev_file.name
+                if dst.exists():
+                    src_hash = hashlib.sha256(rev_file.read_bytes()).hexdigest()
+                    dst_hash = hashlib.sha256(dst.read_bytes()).hexdigest()
+                    if src_hash != dst_hash:
+                        dst = archive_dir / f"g{gen}_{rev_file.name}"
+
                 shutil.copy2(rev_file, dst)
                 reviewer_id = rev_file.name.replace(".review.yml", "")
+                archived_rel = str(dst.relative_to(self.root))
                 self.store.mark_artifact_consumed(
                     task_id=task_id,
                     kind="review_manifest",
                     checkpoint_ref=checkpoint_ref,
                     review_round=review_round,
-                    archived_path=str(dst.relative_to(self.root)),
+                    archived_path=archived_rel,
                     reviewer_id=reviewer_id
+                )
+                sha256 = hashlib.sha256(dst.read_bytes()).hexdigest() if dst.exists() else ""
+                self.store.log_audit_event(
+                    task_id=task_id,
+                    event_type="ARTIFACT_ARCHIVED",
+                    detail={
+                        "kind": "review_manifest",
+                        "checkpoint_ref": checkpoint_ref,
+                        "review_round": review_round,
+                        "reviewer_id": reviewer_id,
+                        "generation": gen,
+                        "archived_path": archived_rel,
+                        "sha256": sha256
+                    }
                 )
