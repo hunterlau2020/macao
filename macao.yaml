@@ -7,19 +7,28 @@ project:
 
 team:
   executor:
-    id: "cc-ds4"
-    cli: "claude-code"
-    adapter: "claude-hook"
+    id: "opencode-dev"
+    cli: "opencode"
+    adapter: "pty-wrapper"
+    model: "GLM 5.3 max"
   reviewers:
-    - id: "codex"
-      cli: "codex"
-      adapter: "pty-wrapper"
     - id: "opencode"
       cli: "opencode"
       adapter: "pty-wrapper"
+      model: "Qwen3.8 max"
+    - id: "cursor"
+      cli: "agent"
+      adapter: "pty-wrapper"
+      model: "claude-3-5-sonnet"
     - id: "antigravity"
       cli: "agy"
       adapter: "pty-wrapper"
+      model: "gemini-2.0-pro"
+    - id: "codex"
+      cli: "codex"
+      adapter: "pty-wrapper"
+      model: "o3-mini"
+
 
 policy:
   consensus_rule: "2/3_majority"

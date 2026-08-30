@@ -1698,45 +1698,49 @@ hosts:
 
 ---
 
+## 第十七部分：Phase 3 真实多 Agent 调度与输出自愈机制 (Phase 3 Spec)
+
+### 17.1 LiveAgentDispatcher 真实工作区派发
+- **Worktree 动态隔离**：在状态推进至 `WAITING_REVIEW` 时，根据配置的审查者列表在 `.macao/worktrees/<task_id>/<reviewer_id>` 动态创建物理独立的 Git Worktree；
+- **PTY 伪终端会话生命周期**：为每个 CLI 进程分配独立子终端，注入 non-interactive 与 sandboxed 参数，实时捕获终端输出；
+- **原子清理保障**：审查结束或任务终结后，执行 `git worktree remove --force` 原子销毁工作区，杜绝磁盘泄漏。
+
+### 17.2 ReviewExtractor 两级输出自愈器
+- **Level 1 正则与 ANSI 剥离**：自动去除 ANSI 终端颜色转义码，匹配 Markdown 代码栅栏（```yaml ... ```）提取纯净 YAML；
+- **Level 2 Schema 强校验与语义对齐**：使用 Draft-07 `review_manifest.schema.json` 强校验；若仅有 `opinion.status` 则自动对齐 `vote`，自动补齐 `checkpoint_ref` 与 `review_round`。
+
+---
+
+## 第十八部分：后台超时扫描守护进程 (OrchestratorDaemon)
+
+- **轮询驱动**：基于系统时钟定时扫描活跃任务的截止时间（Deadline Epoch）；
+- **超时自动降级**：审查员超时自动记入 `REVIEWER_TIMEOUT_ABSTAIN` 审计事件，并将未提交票置为 `ABSTAIN`；
+- **确定性推进**：自动触发共识仲裁，推动状态机进入 `CONSENSUS_CHECK` (HOLD) 并生成 `HUMAN_OVERRIDE_REQUEST`。
+
+---
+
+## 第十九部分：细粒度模型透传与多元角色矩阵
+
+- **全角色自由组合**：`opencode`, `agy` (Google Antigravity), `agent` (Cursor), `claude-code`, `codex`, `kimi` 均支持作为 `executor` 或 `reviewers`；
+- **模型参数透传**：在 `macao.yaml` 中通过 `model: "<model_id>"` 显式声明具体模型（如 `GLM 5.3 max`, `Qwen3.8 max`, `claude-3-7-sonnet`, `gemini-2.0-pro` 等），底层 PTY 进程自动透传 `-m / --model` 参数。
+
+---
+
+## 第二十部分：智能向导与运行时环境隔离 (Setup Wizard & Isolation)
+
+- **`macao setup` 智能向导**：自动探活系统 PATH 中的 AI CLI 资产、探测 Git 分支与测试命令，生成强合规配置；
+- **`.gitignore` 运行时自动隔离**：自动在被管项目 `.gitignore` 中追加 `.macao/worktrees/` 与 `*.db`，彻底杜绝仓库污染。
+
+---
+
 **版本历史**
 - v1.0: 高阶架构设计（即 `SRSv1.md`，产品暂定名 "A"）
 - v1.5: 专家评审意见反馈（见 `IMPROVEMENT_SUMMARY.md` 第四节）
 - v2.0: 规范化流程 + 标准输出物 + 改进状态识别
 - v2.0.1: 按 `docs/reviews/2026-08-25-review-result-ec60f70-*` 三份评审反馈闭环 P0/P1/P2 问题
-  （状态机唯一化、共识规则引入最低法定人数与决策表、diff 载体统一为 refs、
-   字段命名统一 checkpoint_ref 与 to、AEP 补齐 7 类示例、status↔vote 映射等）
-- v2.1: 按 `docs/reviews/2026-08-26-review-result-47f54f2-codex.md` 复审闭环 P0-1/P0-2 与 P1，
-  并补齐产品完整性章节：
-  - 状态识别改为「当前 FSM 状态 + checkpoint/round」作用域读取，新增产物生命周期与场景推演（§3.2–§3.4）
-  - 统一转移表纳入 AEP 命令与超时来源；§1.2 阶段表与之一致
-  - `code_changes.refs.*` 唯一路径 + `repository` 定位块（解析源 = macao.yaml）
-  - 产物补 `review_round` / `input_artifacts` 字段；Layer 3 图示统一"始终提示、低置信度接管"
-  - 新增第十一～十五部分：系统架构与技术栈、Adapter Contract v1 与能力矩阵、配置规范、用户旅程与运行手册、边界声明与非功能需求
-- v2.1.1: 新增第十六部分《部署形态与协作拓扑》：角色单一写者原则、七阶段流程通道标注、
-  单机同置（场景一，MVP 已覆盖）与跨机分布（场景二，v1.1：Gateway / R1 push 前置校验 / hosts 配置段）
-- v2.2: 按 `docs/reviews/2026-08-26-review-result-684a012-*` 三份评审闭环——
-  - P0：新增 `MERGING` 中间状态承接合并流水线与 CI gate 失败回退（E4/E4a/E4b，§3.3/§14.5）；
-    Reviewer 执行权限边界 `execution_mode` 强制 sandboxed + worktree 隔离（§12.2/12.3/§5.3/§15.3）
-  - P1：repository 路径统一为 review_context 内；Task Schema 与 AEP 分支字段；merge 配置段
-    （ci_gate/signoff/rebase）；State Store DDL 与双写恢复算法（§11.4/11.5）；agmsg DLQ（§11.6）；
-    Reviewer 输出自愈与 PTY 运行规范（§12.5/12.6）；版本化 JSON Schema（docs/schemas/）
-  - P2/P3：pre-merge rebase 策略、usage 粗估兜底、`macao checkpoint create` 命令、
-    3-Reviewer 目标配示例改为异构 CLI、"团队"叙事与单任务串行的期望落差说明
-- v2.3: 按 `docs/reviews/2026-08-26-review-result-8ab9be7-*`（kimi/opencode）闭环——
-  - P0/P1：review_context 收敛为唯一权威结构（§5.2 完整模型 = 两传输块 + 六语义块；
-    §2.4 为最小子集；`files_summary`→`summary`+`files_list`；统一 `quality_snapshot`）；
-    Deadlock 轮裁定结果落盘终局 vote_result（resolution=human_override）、Layer 1c 显式分支；
-    override 枚举统一为 APPROVED/REWORK/RETRY_REVIEW/CANCEL 并新增 E9/E10 转移与 CANCELLED 终态（状态 10 个）；
-    §6.1 触发条件 1 改为 Layer 3/E8 口径并补人工接管超时总则；§1.1 图补 MERGING/REWORK
-  - 摘要文档三处产物示例重写为 Schema 合规；IMPROVEMENT_SUMMARY 计划类 ✅ 改为待验证表述
-  - 新增 docs/schemas/review_context.schema.json 及正反 fixtures；既有 Schema 嵌套细化
-- v2.3.1: 按 `docs/reviews/2026-08-26-review-result-cc77a94-*` 五份独立复审（kimi/opencode/codex/claude/gemini）闭环——
-  - P0-1：评审对象 = 合并对象硬绑定——"rebase 仅改变哈希不重审"豁免废除，MVP 任何新 hash（clean rebase/cherry-pick/amend）→ E4b 增量复审；E4a 增加 push 对象 == checkpoint_ref 硬校验；受控 range-diff 门禁规划于 v1.1（§14.5）
-  - P0-2：Reviewer worktree 强制化——§16.3"可选"改"强制"，Type B/§5.2 示例改注入后 worktree 路径，`supports_worktree` 为准入硬条件（§12.2/§12.3/§16.3）
-  - P1-1：弃权口径裁决——`.review.yml` 移出 ABSTAIN 死枚举，弃权仅由 Orchestrator 超时降级写入 vote_result（§2.2/Schema）
-  - P1-2：artifacts 改 `artifact_id` 自增主键 + `(task_id, kind, ref, round, reviewer_id)` 唯一约束，归档为追加语义（§11.4/§11.5）
-  - P1-3：治理对账——STATUS 补登记 8ab9be7/cc77a94 全部评审，确立"复审前必须先全量对账"规则
-  - Deadlock 入口边（union 方案 B）：E3 伴随动作内联确定性票数判定——Deadlock 即发 HUMAN_OVERRIDE_REQUEST（Type G）并 HOLD、不写 vote_result；§3.4 补场景三（1:1 平票 + CANCEL/RETRY/弃权变体）；E7 CANCEL→E10、E10 触发补 override 路径
-  - P2：Layer 1c 补 max_rework_rounds 守卫；§11.4 DDL 注释改 10 态；§14.2 补 `merge approve`；§16.3"其余全自动"改"merge approve 签字放行，其余自动"；§10 成功标志改验收标准 `[ ]`；vote_result decision 枚举扩 RETRY_REVIEW/CANCELLED + human_override 正例 fixture
-  - P3：版本指针统一 v2.3；§1.1 REVIEWING/REJECTED 措辞；§2.4 消息类型数；§16.1 E1~E10；Schema $id 统一 v2.3；§12.4/README 清单补 review_context；§14.1 章节引用勘误；README L1~L4
-  - schemas/fixtures：新增 `valid/vote_result_human_override.json`
+- v2.1: 按 `docs/reviews/2026-08-26-review-result-47f54f2-codex.md` 复审闭环 P0-1/P0-2 与 P1
+- v2.1.1: 新增第十六部分《部署形态与协作拓扑》
+- v2.2: 新增 MERGING 中间状态与 CI gate、Reviewer sandboxed 执行权限、两级自愈规范
+- v2.3: review_context 权威结构收敛、Deadlock HOLD 方案 B、E9/E10 状态机收敛
+- v2.3.1: 评审对象与合并对象硬绑定、Worktree 强制化、跨平台断言修复、is_ancestor 拓扑校验（达成 L3 SCENARIO-VERIFIED / PG-2 认证）
+- v2.4 (Phase 3): 新增第十七～二十部分——Phase 3 真实 Worktree 调度与 ReviewExtractor 两级自愈、OrchestratorDaemon 后台守护、细粒度模型控制与 Cursor Agent 接入、macao setup 智能向导与 Python 包数据打包（达成 L4 RELEASE-READY / PG-3 规格）
