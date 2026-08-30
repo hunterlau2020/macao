@@ -3,29 +3,27 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-08-31（提交 Phase 3 / PG-3 / L4 RELEASE-READY 评审申请，Commit `3c5ed32`，72 项单元测试 100% PASS，`macao live-run` 真实协同 100% 绿灯）
+- **最新更新时间**：2026-08-31（全量对账 `3c5ed32` 评审结果：收到 Claude, Codex, Grok, Qwen 四份独立报告；所有阻断项 P1-1~P1-4 已在 Commit `23bb07f` 中完成系统性整改与全量加固，75 项单测 100% PASS）
 - **当前申请对象**：[`docs/reviews/2026-08-31-review-request-Phase3-PG3-L4.md`](2026-08-31-review-request-Phase3-PG3-L4.md)（Phase 3 / L4 发布就绪定级申请）
-- **当前定级状态**：**已正式达成 L3 SCENARIO-VERIFIED / PG-2；当前申请定级目标为 L4 RELEASE-READY / PG-3**
-  - **专家委员会上轮终审票型（L3/PG-2 终局）**：
-    - **Claude**：**GRANT（授予 L3 SCENARIO-VERIFIED / PG-1 / PG-2）**；
-    - **Qwen**：**GRANT（授予 L3 SCENARIO-VERIFIED / PG-2）**；
-    - **Kimi**：**GRANT（授予 L3 SCENARIO-VERIFIED / PG-2）**；
-    - **Grok**：**GRANT（授予 L3 SCENARIO-VERIFIED / PG-1 / PG-2）**；
-    - **ZCode**：**GRANT（准予授予 L3 SCENARIO-VERIFIED / PG-2）**；
-    - **Codex**：阻断项 P1-1（E6 拓扑校验）已由 `is_ancestor` 闭环。
-  - **Phase 3 核心交付物**：
-    - **LiveAgentDispatcher & ReviewExtractor**：真实 Git Worktree 隔离派发、PTY 会话驱动、两级自愈输出解析；
-    - **OrchestratorDaemon**：后台超时自动扫描守护、`REVIEWER_TIMEOUT_ABSTAIN` 自动降级与状态机推进；
-    - **智能向导 (macao setup / wizard.py)**：自动探活已安装 CLI、项目分支与测试命令，自动隔离 `.gitignore`；
-    - **Python 包资源内嵌**：6 款 Draft-07 Schema 打包进 `macao.schemas` 模块（彻底解决 pip 安装后路径依赖）；
-    - **模型细粒度控制**：`macao.yaml` 声明各角色具体 `model`（GLM 5.3 max, Qwen3.8 max, Sonnet 3.7 等）并透传 `-m / --model`；
-    - **真实微任务协同**：`macao live-run` 全流程 7 步实机协同测试（Task -> Dev -> Review -> Merge -> Done）100% 成功。
-  - **测试机验结果**：`PYTHONPATH=src python3 -m unittest discover tests -v` **72 ran / 72 PASS (100%)**；`macao test-clis`（6/6 CLI 全部就绪，PTY Spawn、ANSI 清洗、0 僵尸 Clean Kill 通过）；`macao live-run`（7 步全绿，最终状态 DONE）；`python3 -m compileall -q src tests && git diff --check` 100% 洁净，返回码 0。
+- **当前定级状态**：**已正式达成 L3 SCENARIO-VERIFIED / PG-2；当前处于 Phase 3（L4 RELEASE-READY / PG-3）整改复审收敛阶段**
+  - **专家委员会 3c5ed32 评审与整改对账**：
+    - **Claude**：REJECT L4（指出 ReviewExtractor 缺票默认赞成 P1-NEW-13、OrchestratorDaemon 契约错配 P1-NEW-14、live-run 自投票 P1-NEW-15、P2-NEW-7/8/9）；
+    - **Codex**：REJECT L4（指出 live-run 演练真实性 P1-1、daemon 活跃超时降级 P1-2、ReviewExtractor 缺票与上下文绑定 P1-3、CLI 准入 fail-open P1-4）；
+    - **Grok**：REJECT L4（指出 ReviewExtractor 默认赞成 P1-1、LiveAgentDispatcher 未连 API P1-2、OrchestratorDaemon 活跃崩溃 P1-3）；
+    - **Qwen**：REJECT L4（指出 live-run 自投票/自动签字 P1-Q4、OrchestratorDaemon 活任务崩溃 P1-Q5、ReviewExtractor 幻影批准 P1-Q6）；
+    - **维持 L3/PG-2 结论一致**：四方专家一致确认既有 72 项 L3 状态机与共识测试无任何回归，已授予的 L3/PG-2 保持有效。
+  - **Commit `23bb07f` 闭环整改清单**：
+    - **P1-1 / P1-NEW-13 / P1-Q6 闭环**：`ReviewExtractor` 彻底移除 `YES_APPROVE`/`APPROVED` 兜底，缺票/缺状态严格 Fail-Closed（返回 `False`）；强制实施 `checkpoint_ref`、`review_round`、`reviewer.id` 强上下文绑定；`vote.py` 与 `orchestrator.py` 移除软 fallback；
+    - **P1-2 / P1-NEW-14 / P1-Q5 闭环**：`OrchestratorDaemon` 全面复用 `Orchestrator.detect_timed_out_reviewers` 单一事实源，修复 `REVIEW_REQUESTS_DISPATCHED`、`detail` 键名、`review_manifest` kind 契约，自动记入 `REVIEWER_TIMEOUT_ABSTAIN` 并驱动 FSM；`run_loop` 异常可见；
+    - **P1-3 / P1-NEW-15 / P1-Q4 闭环**：`LiveWorkflowRunner` 真实切换 `feature/calc-live` 分支开发提交，严格调用 `ReviewExtractor` 校验；`ui.py` 修复物理归档计算与颜色展示；真实计时与真实操作者签字；
+    - **P1-4 闭环**：`LiveAgentDispatcher.get_adapter_for_reviewer` 对未知 CLI 严格抛出 `ValueError`（Fail-Closed）；
+    - **P2-NEW-8 / 洁净度闭环**：向导单测对 PATH 环境解耦；`git diff --check` 与 `compileall` 100% 洁净（Exit Code 0）。
+  - **测试机验结果**：`PYTHONPATH=src python3 -m unittest discover tests -v` **75 ran / 75 PASS (100%)**；`macao live-run`（7 步全绿，Physical Archive 5 files PERSISTED，Task State: DONE）；`macao daemon --once` 正常扫描；`git diff --check` 0 差异。
 - **历史文档定级**：PRD **v2.3.1**（达到 L1 DOC-ALIGNED / PG-0）
 
 ---
 
-## 评审申请记录全量对账表 (Review Registry - 73 份历史与当前评审报告 + 16 份申请全量对账)
+## 评审申请记录全量对账表 (Review Registry - 77 份历史与当前评审报告 + 16 份申请全量对账)
 
 | 申请日期 | 申请文件 / 历史轮次 | 待审对象 / Commit | 目标等级 | 评审专家与文件清单 | 结论与状态 |
 |---|---|---|---|---|---|
@@ -49,10 +47,10 @@
 | 2026-08-30 | `2026-08-30-review-request-L3-PG2-Unanimous-Final.md` | `7973853` .. `3ea5256` | L3 / PG-2 | `2026-08-30-review-result-3ea5256-qwen.md`<br>`2026-08-30-review-result-3ea5256-kimi.md`<br>`2026-08-30-review-result-3ea5256-claude.md`<br>`2026-08-30-review-result-3ea5256-codex.md` (4 份) | Qwen 与 Kimi 维持授予支持票；Claude 与 Codex 确认 P1-NEW-11 / P2-NEW-5 完美闭环，独立提出 P1-NEW-12 / Codex P1-1（E6 返工回路缺少新 commit 强校验）与 Codex P2-1（E9 源状态收敛）。已在 8296f3c 中全部闭环。 |
 | 2026-08-30 | `2026-08-30-review-request-L3-PG2-Unanimous-Seal.md` | `3ea5256` .. `8296f3c` | L3 / PG-2 | `2026-08-30-review-result-8296f3c-claude.md`<br>`2026-08-30-review-result-8296f3c-codex.md`<br>`2026-08-30-review-result-8296f3c-grok.md`<br>`2026-08-30-review-result-8296f3c-zcode.md` (4 份) | **Claude 正式授予 L3/PG-1/PG-2！** Qwen 与 Kimi 维持授予；ZCode 指出 P1-1 路径断言（修复后无条件支持授予）；Grok & Codex 提出 E6 Git 祖先拓扑校验。已在 4e38ed6 中闭环。 |
 | 2026-08-30 | `2026-08-30-review-request-L3-PG2-Unanimous-Final-Seal.md` | `8296f3c` .. `4e38ed6` | L3 / PG-2 | `2026-08-30-review-result-4e38ed6-zcode.md`<br>`2026-08-30-review-result-4e38ed6-grok.md`<br>`2026-08-30-review-result-4e38ed6-qwen.md` (3 份) | **ZCode、Grok、Qwen 正式投票授予 L3 SCENARIO-VERIFIED / PG-2！** 连同 Claude 与 Kimi，五方专家委员会已全数投票授予 L3/PG-2 终局定级认证。 |
-| 2026-08-31 | `2026-08-31-review-request-Phase3-PG3-L4.md` | `4e38ed6` .. `3c5ed32` | **L4 / PG-3** | 待评审专家（Claude / Qwen / Kimi / Grok / ZCode / Codex）出具报告 | **待审中 (Phase 3 发布就绪)** |
+| 2026-08-31 | `2026-08-31-review-request-Phase3-PG3-L4.md` | `4e38ed6` .. `3c5ed32` | **L4 / PG-3** | `2026-08-31-review-result-3c5ed32-claude.md`<br>`2026-08-31-review-result-3c5ed32-codex.md`<br>`2026-08-31-review-result-3c5ed32-grok.md`<br>`2026-08-31-review-result-3c5ed32-qwen.md` (4 份) | 四方专家复审结论：维持 L3/PG-2；指出提取器缺票默认赞成（P1-1）、守护进程活任务崩溃（P1-2）、live-run 自投票/自动签字（P1-3）、CLI 准入 fail-open（P1-4）。已在 `23bb07f` 中全部闭环修复。 |
 
 ---
 
 ## 下一步行动
 
-专家委员会（Claude / Qwen / Kimi / Grok / ZCode / Codex）对 Commit `3c5ed32` 开展 **Phase 3（PG-3 / L4 RELEASE-READY）** 正式定级审查。
+专家委员会对 Commit `23bb07f` 开展 Phase 3 加固复审。
