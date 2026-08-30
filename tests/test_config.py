@@ -149,21 +149,26 @@ project:
     remote_name: "origin"
     default_branch: "main"
 team:
+  name: "washdb"
   executor:
     id: "opencode-exec"
+    agmsg_member_id: "cc-ds4"
     cli: "opencode"
     adapter: "pty-wrapper"
     model: "GLM 5.3 max"
   reviewers:
     - id: "opencode-rev"
+      agmsg_member_id: "qwen"
       cli: "opencode"
       adapter: "pty-wrapper"
       model: "Qwen3.8 max"
     - id: "cursor-rev"
+      agmsg_member_id: "kimi"
       cli: "agent"
       adapter: "pty-wrapper"
       model: "claude-3-7-sonnet"
     - id: "claude-rev"
+      agmsg_member_id: "cc-glm"
       cli: "claude-code"
       adapter: "claude-hook"
       model: "claude-3-5-sonnet"
@@ -171,6 +176,7 @@ team:
         parsed = yaml.safe_load(custom_yaml)
         is_valid, error = validate_config(parsed)
         self.assertTrue(is_valid, f"Custom model config failed schema validation: {error}")
+
 
     def test_adapter_model_injection_and_role_flexibility(self):
         """Verify all adapters accept model and role configuration in inject_task and capabilities."""

@@ -25,12 +25,14 @@
       "type": "object",
       "required": ["executor", "reviewers"],
       "properties": {
+        "name": { "type": "string" },
         "executor": {
           "type": "object",
           "required": ["id", "cli", "adapter"],
           "properties": {
             "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
-            "model": { "type": "string" }, "host": { "type": "string" }
+            "model": { "type": "string" }, "host": { "type": "string" },
+            "agmsg_member_id": { "type": "string" }
           }
         },
         "reviewers": {
@@ -41,12 +43,14 @@
             "required": ["id", "cli", "adapter"],
             "properties": {
               "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
-              "model": { "type": "string" }, "host": { "type": "string" }
+              "model": { "type": "string" }, "host": { "type": "string" },
+              "agmsg_member_id": { "type": "string" }
             }
           }
         }
       }
     },
+
     "policy": {
       "type": "object",
       "properties": {
