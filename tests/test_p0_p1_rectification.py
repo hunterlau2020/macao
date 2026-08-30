@@ -1193,7 +1193,11 @@ development:
                 confidence=0.95
             )
 
-            # Resolve override with RETRY_REVIEW -> archives Gen 1 vote_result & review
+            # Evaluate consensus -> 1:1 deadlock -> HOLDS in CONSENSUS_CHECK
+            change_hold = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            # Resolve override with RETRY_REVIEW from CONSENSUS_CHECK -> archives Gen 1 vote_result & review
             orch.resolve_override(t_id, "RETRY_REVIEW", note="Retrying review after dissent")
 
             # Check Gen 1 archived file content
@@ -1271,7 +1275,11 @@ development:
             orch.check_development_checkpoint(t_id)
             orch.dispatch_review_requests(t_id)
 
-            # Override with RETRY_REVIEW
+            # Reviewer times out -> collect_and_evaluate_consensus -> HOLDS in CONSENSUS_CHECK
+            orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2, timed_out_reviewers=["opencode"])
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            # Override with RETRY_REVIEW from CONSENSUS_CHECK
             orch.resolve_override(t_id, "RETRY_REVIEW", note="Retrying review")
 
             # Assert .macao/vote_result.json is NOT in active directory
@@ -1338,7 +1346,7 @@ development:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_check_development_checkpoint_validation_fail_closed(self):
-        """P1-2 (Kimi): Verify check_development_checkpoint fails closed on missing EXPLICIT signal or failed quality metrics."""
+        """P1-NEW-11 (Claude) / P1-1 (Codex) / P1-2 (Kimi): Verify check_development_checkpoint strictly validates Schema and fails closed on missing/invalid fields."""
         tmpdir = tempfile.mkdtemp()
         try:
             subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
@@ -1354,12 +1362,85 @@ development:
             t_id = task["task_id"]
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            dev_path = Path(tmpdir) / ".macao" / ".dev.yml"
 
-            # Case 1: tests_passed is False and not exempt -> MUST FAIL (return None)
-            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+            # Case 1: Missing quality_metrics block entirely -> MUST FAIL (return None)
+            dev_path.write_text(f"""version: "1.0"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+            # Case 2: Missing signal field entirely -> MUST FAIL (return None)
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+            # Case 3: signal is IMPLICIT -> MUST FAIL (return None)
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+signal: IMPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+            # Case 4: Missing version field entirely -> MUST FAIL (return None)
+            dev_path.write_text(f"""status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+            # Case 5: Bare minimum (only 4 lines, no schema metadata) -> MUST FAIL (return None)
+            dev_path.write_text(f"""status: ready_for_review
+review_round: 1
+development:
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+            # Case 6: tests_passed is False and not exempt -> MUST FAIL (return None)
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
 development:
   quality_metrics:
     tests_passed: false
@@ -1367,39 +1448,63 @@ development:
   git:
     latest_commit: "{head}"
 """, encoding="utf-8")
-            res1 = orch.check_development_checkpoint(t_id)
-            self.assertIsNone(res1)
-            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CODING.value)
+            self.assertIsNone(orch.check_development_checkpoint(t_id))
 
-            # Case 2: commit does not exist in git -> MUST FAIL (return None)
-            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+            # Case 7: commit does not exist in git -> MUST FAIL (return None)
+            dev_path.write_text(f"""version: "1.0"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
+executor:
+  id: claude
+  cli: claude
 development:
   quality_metrics:
     tests_passed: true
   git:
     latest_commit: "0000000000000000000000000000000000000000"
 """, encoding="utf-8")
-            res2 = orch.check_development_checkpoint(t_id)
-            self.assertIsNone(res2)
-            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CODING.value)
+            self.assertIsNone(orch.check_development_checkpoint(t_id))
 
-            # Case 3: Valid -> MUST PASS
-            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+            # Case 8: Valid manifest with tests_exempt: true -> MUST PASS
+            dev_path.write_text(f"""version: "1.0"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: false
+    tests_exempt: true
+  git:
+    latest_commit: "{head}"
+""", encoding="utf-8")
+            res_exempt = orch.check_development_checkpoint(t_id)
+            self.assertIsNotNone(res_exempt)
+            self.assertEqual(res_exempt.to_state, AgentState.READY_FOR_REVIEW)
+
+            # Reset task state back to CODING for next test
+            orch.store.update_task_state(t_id, AgentState.CODING)
+
+            # Case 9: Fully valid manifest with tests_passed: true -> MUST PASS
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
 development:
   quality_metrics:
     tests_passed: true
   git:
     latest_commit: "{head}"
 """, encoding="utf-8")
-            res3 = orch.check_development_checkpoint(t_id)
-            self.assertIsNotNone(res3)
-            self.assertEqual(res3.to_state, AgentState.READY_FOR_REVIEW)
+            res_valid = orch.check_development_checkpoint(t_id)
+            self.assertIsNotNone(res_valid)
+            self.assertEqual(res_valid.to_state, AgentState.READY_FOR_REVIEW)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 

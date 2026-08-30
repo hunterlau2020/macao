@@ -36,14 +36,18 @@ class TransitionTable:
             "E5": (AgentState.CONSENSUS_CHECK, AgentState.REWORK),
             "E6": (AgentState.REWORK, AgentState.READY_FOR_REVIEW),
             "E8": (None, AgentState.UNKNOWN),         # From any active non-terminal state to UNKNOWN
-            "E9": (None, AgentState.WAITING_REVIEW),  # Retry review round (from CONSENSUS_CHECK or UNKNOWN)
             "E10": (None, AgentState.CANCELLED),     # From any active non-terminal state to CANCELLED
         }
 
-        # Special handling for E7 (Human Override from CONSENSUS_CHECK or UNKNOWN)
+        # Special handling for E7 & E9 (Human Override from CONSENSUS_CHECK or UNKNOWN, PRD §3.3:841 / P2-NEW-5)
         if trigger_id == "E7":
             if from_state in (AgentState.CONSENSUS_CHECK, AgentState.UNKNOWN):
                 return to_state in (AgentState.MERGING, AgentState.REWORK, AgentState.WAITING_REVIEW, AgentState.CANCELLED)
+            return False
+
+        if trigger_id == "E9":
+            if from_state in (AgentState.CONSENSUS_CHECK, AgentState.UNKNOWN):
+                return to_state == AgentState.WAITING_REVIEW
             return False
 
         rule = valid_transitions.get(trigger_id)

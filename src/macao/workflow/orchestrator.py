@@ -28,6 +28,7 @@ from macao.workflow.fsm import WorkflowFSM
 from macao.workflow.transitions import TransitionTable
 from macao.utils.git_utils import GitManager
 from macao.core.config import ConfigManager
+from macao.core.schema import validate_dev_manifest
 
 
 def parse_duration(val: Union[str, int, float], default: Optional[float] = None) -> float:
@@ -218,22 +219,27 @@ class Orchestrator:
         if not data or not isinstance(data, dict):
             return None
 
-        # Check scope matching and PRD §2.1 checkpoint invariants (P1-2)
-        dev_rnd = data.get("review_round", 1)
+        # 1. Full Schema validation (PRD §2.1 / P1-NEW-11 / Codex P1-1)
+        is_valid, err = validate_dev_manifest(data)
+        if not is_valid:
+            return None
+
+        # 2. Strict invariant validation (no permissive fallbacks)
+        dev_rnd = data.get("review_round")
         status = data.get("status")
-        signal = data.get("signal", "EXPLICIT")
+        signal = data.get("signal")
         git_info = data.get("development", {}).get("git", {})
         latest_commit = git_info.get("latest_commit")
         quality = data.get("development", {}).get("quality_metrics", {})
-        tests_passed = quality.get("tests_passed", True) or quality.get("tests_exempt", False)
+        tests_passed = quality.get("tests_passed") is True or quality.get("tests_exempt") is True
 
         if dev_rnd == rnd and status == "ready_for_review" and signal == "EXPLICIT" and latest_commit and tests_passed:
-            # Check commit physically exists in git repository if git repo is present (PRD §2.1)
+            # 3. Check commit physically exists in git repository if git repo is present (PRD §2.1)
             if self.git and self.git.is_git_repository():
                 if not self.git.commit_exists(latest_commit):
                     return None
 
-            # Register artifact in StateStore (PRD §11.4 / P1-2)
+            # 4. Register artifact in StateStore (PRD §11.4 / P1-2)
             try:
                 rel_path = str(dev_file.relative_to(self.root))
             except Exception:
@@ -247,7 +253,7 @@ class Orchestrator:
                 path=rel_path
             )
 
-            # Transition to READY_FOR_REVIEW (产物型转移)
+            # 5. Transition to READY_FOR_REVIEW (产物型转移)
             trigger = "E6" if current_st == AgentState.REWORK else "E1_PRODUCED"
             change = self.fsm.transition(
                 task_id,
