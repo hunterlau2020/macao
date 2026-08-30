@@ -337,23 +337,75 @@ def test_clis(target_cli: str):
         console.print("[bold yellow]! Some CLI tests did not pass or were skipped.[/bold yellow]\n")
 
 
-@cli.command("e2e-run")
-def e2e_run():
-    """Run the complete Phase 2 end-to-end micro-task collaboration cycle."""
-    from macao.workflow.e2e_runner import ControlledE2ERunner
+@cli.command("setup")
+@click.option("--executor", default="opencode", help="Default executor CLI")
+@click.option("--model", default="GLM 5.3 max", help="Executor model name")
+def setup_wizard(executor: str, model: str):
+    """Run interactive setup wizard to auto-detect environment and configure macao.yaml (Phase 3)."""
+    from macao.cli.wizard import probe_available_clis, generate_smart_config, ensure_gitignore_isolation
+    import yaml
+
+    print_banner()
+    console.print("[bold cyan]Running MACAO Smart Setup Wizard...[/bold cyan]\n")
+
+    clis = probe_available_clis()
+    console.print(f"[green]✓ Detected {len(clis)} available AI Agent CLIs on system:[/green]")
+    for c in clis:
+        console.print(f"  • [bold white]{c['cli']}[/bold white] ({c['version']}) -> [dim]{c['binary']}[/dim]")
+
+    project_root = Path(".").resolve()
+    cfg = generate_smart_config(project_root, executor_cli=executor, executor_model=model)
+
+    yaml_str = yaml.safe_dump(cfg, sort_keys=False)
+    Path("macao.yaml").write_text(yaml_str, encoding="utf-8")
+    console.print(f"\n[bold green]✓ Generated valid and tailored macao.yaml configuration![/bold green]")
+
+    isolated = ensure_gitignore_isolation(project_root)
+    if isolated:
+        console.print("[green]✓ Updated .gitignore with .macao/worktrees/ and *.db runtime isolation.[/green]")
+
+    console.print("\n[bold cyan]Setup completed! You can now run 'macao doctor' or 'macao task create' to begin.[/bold cyan]\n")
+
+
+@cli.command("daemon")
+@click.option("--poll-interval", default=2.0, help="Poll interval in seconds")
+@click.option("--once", is_flag=True, help="Run single scan pass and exit")
+def run_daemon(poll_interval: float, once: bool):
+    """Run the background orchestration daemon and deadline scanner (Phase 3)."""
+    from macao.workflow.daemon import OrchestratorDaemon
+
+    print_banner()
+    console.print(f"[bold cyan]Starting MACAO Background Orchestration Daemon (poll={poll_interval}s)...[/bold cyan]\n")
+
+    daemon = OrchestratorDaemon(".", poll_interval_sec=poll_interval)
+    if once:
+        res = daemon.scan_once()
+        console.print(f"[green]✓ Single scan completed: {res}[/green]")
+    else:
+        try:
+            daemon.run_loop()
+        except KeyboardInterrupt:
+            daemon.stop()
+            console.print("[yellow]Daemon stopped by user.[/yellow]")
+
+
+@cli.command("live-run")
+def live_run():
+    """Run the complete Phase 3 live multi-agent collaboration cycle (L4 Ready)."""
+    from macao.workflow.live_runner import LiveWorkflowRunner
     from macao.cli.ui import render_e2e_report
 
     print_banner()
-    console.print("[bold cyan]Starting MACAO Phase 2 End-to-End Micro-Task Collaboration Cycle...[/bold cyan]\n")
+    console.print("[bold cyan]Starting MACAO Phase 3 Live Multi-Agent Collaboration Cycle...[/bold cyan]\n")
 
-    runner = ControlledE2ERunner()
+    runner = LiveWorkflowRunner()
     try:
-        res = runner.run_e2e_cycle()
+        res = runner.run_live_cycle()
         render_e2e_report(res)
         if res.get("status") == "PASS":
-            console.print("[bold green]✓ Phase 2 End-to-End collaboration cycle completed with 100% success (Task State: DONE).[/bold green]\n")
+            console.print("[bold green]✓ Phase 3 Live Multi-Agent collaboration cycle completed with 100% success (Task State: DONE).[/bold green]\n")
         else:
-            console.print("[bold red]✗ Phase 2 End-to-End collaboration cycle failed.[/bold red]\n")
+            console.print("[bold red]✗ Phase 3 Live Multi-Agent collaboration cycle failed.[/bold red]\n")
     finally:
         runner.cleanup()
 

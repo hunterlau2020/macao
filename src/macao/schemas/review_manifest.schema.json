@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://macao.dev/schemas/v2.3/review_manifest.schema.json",
+  "title": "MACAO .review.yml Reviewer Opinion Manifest",
+  "type": "object",
+  "required": ["version", "reviewer", "checkpoint_ref", "review_round", "opinion", "vote"],
+  "properties": {
+    "version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "reviewer": {
+      "type": "object",
+      "required": ["id", "cli"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "role": { "type": "string" },
+        "cli": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" }
+      }
+    },
+    "checkpoint_ref": { "type": "string", "minLength": 1 },
+    "review_round": { "type": "integer", "minimum": 1 },
+    "opinion": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["APPROVED", "CHANGES_REQUESTED", "REJECTED"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "feedback": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "severity_breakdown": {
+              "type": "object",
+              "properties": {
+                "critical": { "type": "integer", "minimum": 0 },
+                "major": { "type": "integer", "minimum": 0 },
+                "minor": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["type", "severity", "issue"],
+                "properties": {
+                  "type": { "type": "string" },
+                  "severity": { "type": "string" },
+                  "location": { "type": "string" },
+                  "issue": { "type": "string", "minLength": 1 },
+                  "suggestion": { "type": "string" }
+                }
+              }
+            },
+            "automated_checks": { "type": "array" }
+          }
+        }
+      }
+    },
+    "vote": { "enum": ["YES_APPROVE", "NO_APPROVE"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "opinion": { "type": "object", "properties": { "status": { "const": "APPROVED" } }, "required": ["status"] } }, "required": ["opinion"] },
+      "then": { "properties": { "vote": { "const": "YES_APPROVE" } } }
+    },
+    {
+      "if": { "properties": { "opinion": { "type": "object", "properties": { "status": { "const": "CHANGES_REQUESTED" } }, "required": ["status"] } }, "required": ["opinion"] },
+      "then": { "properties": { "vote": { "const": "NO_APPROVE" } } }
+    },
+    {
+      "if": { "properties": { "opinion": { "type": "object", "properties": { "status": { "const": "REJECTED" } }, "required": ["status"] } }, "required": ["opinion"] },
+      "then": { "properties": { "vote": { "const": "NO_APPROVE" } } }
+    }
+  ]
+}

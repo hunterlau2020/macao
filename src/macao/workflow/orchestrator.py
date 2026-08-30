@@ -554,9 +554,10 @@ class Orchestrator:
             votes_list = []
             for r in valid_reviews:
                 v_data = r["data"]
+                vote_val = v_data.get("vote") or v_data.get("opinion", {}).get("vote", "YES_APPROVE")
                 votes_list.append({
                     "reviewer": v_data["reviewer"]["id"],
-                    "vote": v_data["vote"],
+                    "vote": vote_val,
                     "confidence": float(v_data.get("opinion", {}).get("confidence", 0.9))
                 })
 

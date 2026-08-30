@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://macao.dev/schemas/v2.3/macao_config.schema.json",
+  "title": "MACAO macao.yaml Configuration",
+  "type": "object",
+  "required": ["project", "team"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["name", "repository"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "repository": {
+          "type": "object",
+          "required": ["workspace_path", "remote_name"],
+          "properties": {
+            "workspace_path": { "type": "string", "minLength": 1 },
+            "remote_name": { "type": "string", "minLength": 1 },
+            "default_branch": { "type": "string" }
+          }
+        }
+      }
+    },
+    "team": {
+      "type": "object",
+      "required": ["executor", "reviewers"],
+      "properties": {
+        "executor": {
+          "type": "object",
+          "required": ["id", "cli", "adapter"],
+          "properties": {
+            "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
+            "model": { "type": "string" }, "host": { "type": "string" }
+          }
+        },
+        "reviewers": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["id", "cli", "adapter"],
+            "properties": {
+              "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
+              "model": { "type": "string" }, "host": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "consensus_rule": { "const": "2/3_majority" },
+        "min_effective_votes": { "type": "integer", "minimum": 1 },
+        "max_rework_rounds": { "type": "integer", "minimum": 1 },
+        "review_strategy": { "type": "string" }
+      }
+    },
+    "merge": {
+      "type": "object",
+      "properties": {
+        "strategy": { "enum": ["ff_only", "no_ff"] },
+        "ci_gate_command": { "type": ["null", "string"] },
+        "require_human_signoff": { "type": "boolean" },
+        "rebase_before_merge": { "type": "boolean" }
+      }
+    },
+    "timeouts": {
+      "type": "object",
+      "properties": {
+        "development": { "type": "string" },
+        "checkpoint_validation": { "type": "string" },
+        "review_request": { "type": "string" },
+        "per_reviewer": { "type": "string" },
+        "consensus_check": { "type": "string" }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "properties": {
+        "layer2_inference_log_only": { "type": "boolean" },
+        "llm_diagnosis_override_below": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "properties": {
+        "usage_metering": { "type": "boolean" },
+        "monthly_budget_usd": { "type": ["null", "number"] }
+      }
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "allowed_clis": { "type": "array", "items": { "type": "string" } },
+        "send_terminal_logs_to_reviewers": { "type": "boolean" },
+        "secrets_masking": { "type": "boolean" }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "properties": { "retention_days": { "type": "integer", "minimum": 1 } }
+    }
+  }
+}

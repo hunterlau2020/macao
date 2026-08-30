@@ -94,7 +94,7 @@ class VoteAggregator:
         for r in valid_reviews:
             data = r["data"]
             rev_id = data["reviewer"]["id"]
-            vote_val = data["vote"]
+            vote_val = data.get("vote") or data.get("opinion", {}).get("vote", "YES_APPROVE")
             op_data = data.get("opinion", {})
             issues_list = op_data.get("feedback", {}).get("categories", [])
 
