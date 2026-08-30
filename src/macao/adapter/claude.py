@@ -10,19 +10,19 @@ from macao.adapter.pty_session import PTYSession
 
 
 class ClaudeCodeAdapter(AgentAdapter):
-    """Adapter for Anthropic Claude Code CLI (Executor)."""
+    """Adapter for Anthropic Claude Code CLI (Executor / Reviewer)."""
 
-    def __init__(self, agent_id: str = "cc-ds4", config: Optional[Dict[str, Any]] = None):
+    def __init__(self, agent_id: str = "claude", config: Optional[Dict[str, Any]] = None):
         super().__init__(agent_id, "claude-code", config)
         self.session: Optional[PTYSession] = None
 
     def capabilities(self) -> CapabilityManifest:
         return CapabilityManifest(
             can_execute=True,
-            can_review=False,
+            can_review=True,
             supports_hook=True,
             supports_noninteractive=True,
-            supports_worktree=False,
+            supports_worktree=True,
             execution_mode=ExecutionMode.FULL,
             cli_version_range=">=1.0.0"
         )
@@ -59,7 +59,14 @@ class ClaudeCodeAdapter(AgentAdapter):
 
     def start(self) -> bool:
         cmd = ["claude", "--dangerously-skip-permissions"]
-        self.session = PTYSession(cmd, cwd=self.config.get("workspace_path", "."))
+
+        # Support model parameter specified by orchestrator
+        model = self.config.get("model")
+        if model:
+            cmd.extend(["--model", str(model)])
+
+        cwd = self.config.get("isolated_worktree_path", self.config.get("workspace_path", "."))
+        self.session = PTYSession(cmd, cwd=cwd)
         self.is_running = self.session.start()
         return self.is_running
 
@@ -73,9 +80,26 @@ class ClaudeCodeAdapter(AgentAdapter):
     def inject_task(self, task_payload: Dict[str, Any]) -> bool:
         if not self.session or not self.is_running:
             return False
-        desc = task_payload.get("task_description", "")
-        criteria = task_payload.get("success_criteria", {})
-        prompt = f"TASK: {desc}\nAcceptance Criteria: {criteria}\nWhen finished, create .macao/.dev.yml manifest."
+
+        # If acting as Executor
+        if self.config.get("role") == "executor" or "task_description" in task_payload:
+            desc = task_payload.get("task_description", "")
+            criteria = task_payload.get("success_criteria", {})
+            prompt = (
+                f"TASK: {desc}\n"
+                f"Acceptance Criteria: {criteria}\n"
+                "When finished, create .macao/.dev.yml manifest."
+            )
+        else:
+            # Acting as Reviewer
+            ref = task_payload.get("checkpoint_ref", "")
+            prompt = (
+                f"REVIEW_REQUEST:\n"
+                f"Review code in worktree {self.config.get('isolated_worktree_path')}.\n"
+                f"Checkpoint ref: {ref}.\n"
+                f"Write review manifest to .macao/.reviews/{self.agent_id}.review.yml."
+            )
+
         return self.session.write_input(prompt)
 
     def ack(self, message_id: str) -> bool:

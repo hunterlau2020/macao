@@ -10,7 +10,7 @@ from macao.adapter.pty_session import PTYSession
 
 
 class AntigravityAdapter(AgentAdapter):
-    """Adapter for Google Antigravity CLI (agy / antigravity)."""
+    """Adapter for Google Antigravity CLI (agy / antigravity) supporting Executor and Reviewer."""
 
     def __init__(self, agent_id: str = "antigravity", config: Optional[Dict[str, Any]] = None):
         super().__init__(agent_id, "agy", config)
@@ -60,6 +60,12 @@ class AntigravityAdapter(AgentAdapter):
 
     def start(self) -> bool:
         cmd = ["agy", "--quiet"]
+
+        # Support model parameter specified by orchestrator
+        model = self.config.get("model")
+        if model:
+            cmd.extend(["--model", str(model)])
+
         cwd = self.config.get("isolated_worktree_path", self.config.get("workspace_path", "."))
         self.session = PTYSession(cmd, cwd=cwd)
         self.is_running = self.session.start()
@@ -75,11 +81,24 @@ class AntigravityAdapter(AgentAdapter):
     def inject_task(self, task_payload: Dict[str, Any]) -> bool:
         if not self.session or not self.is_running:
             return False
-        prompt = (
-            f"Review code in worktree {self.config.get('isolated_worktree_path')}. "
-            f"Checkpoint ref: {task_payload.get('checkpoint_ref')}. "
-            "Write review manifest to .macao/.reviews/antigravity.review.yml."
-        )
+
+        # If acting as Executor
+        if self.config.get("role") == "executor" or "task_description" in task_payload:
+            desc = task_payload.get("task_description", "")
+            criteria = task_payload.get("success_criteria", {})
+            prompt = (
+                f"TASK: {desc}\n"
+                f"Acceptance Criteria: {criteria}\n"
+                "Implement the required changes, ensure tests pass, and create .macao/.dev.yml manifest."
+            )
+        else:
+            # Acting as Reviewer
+            prompt = (
+                f"Review code in worktree {self.config.get('isolated_worktree_path')}. "
+                f"Checkpoint ref: {task_payload.get('checkpoint_ref')}. "
+                f"Write review manifest to .macao/.reviews/{self.agent_id}.review.yml."
+            )
+
         return self.session.write_input(prompt)
 
     def ack(self, message_id: str) -> bool:

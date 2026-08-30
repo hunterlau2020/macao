@@ -30,7 +30,7 @@
           "required": ["id", "cli", "adapter"],
           "properties": {
             "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
-            "host": { "type": "string" }
+            "model": { "type": "string" }, "host": { "type": "string" }
           }
         },
         "reviewers": {
@@ -41,7 +41,7 @@
             "required": ["id", "cli", "adapter"],
             "properties": {
               "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
-              "host": { "type": "string" }
+              "model": { "type": "string" }, "host": { "type": "string" }
             }
           }
         }

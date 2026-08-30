@@ -138,6 +138,62 @@ class TestConfigAndComposition(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_duration("invalid_string")
 
+    def test_opencode_agy_cursor_role_and_model_specification_config(self):
+        """Verify macao.yaml schema allows model specification on executor and reviewers and flexible roles."""
+        from macao.adapter.cursor import CursorAgentAdapter
+        custom_yaml = """
+project:
+  name: "macao-flexible-roles"
+  repository:
+    workspace_path: "."
+    remote_name: "origin"
+    default_branch: "main"
+team:
+  executor:
+    id: "opencode-exec"
+    cli: "opencode"
+    adapter: "pty-wrapper"
+    model: "GLM 5.3 max"
+  reviewers:
+    - id: "opencode-rev"
+      cli: "opencode"
+      adapter: "pty-wrapper"
+      model: "Qwen3.8 max"
+    - id: "cursor-rev"
+      cli: "agent"
+      adapter: "pty-wrapper"
+      model: "claude-3-7-sonnet"
+    - id: "claude-rev"
+      cli: "claude-code"
+      adapter: "claude-hook"
+      model: "claude-3-5-sonnet"
+"""
+        parsed = yaml.safe_load(custom_yaml)
+        is_valid, error = validate_config(parsed)
+        self.assertTrue(is_valid, f"Custom model config failed schema validation: {error}")
+
+    def test_adapter_model_injection_and_role_flexibility(self):
+        """Verify all adapters accept model and role configuration in inject_task and capabilities."""
+        from macao.adapter.cursor import CursorAgentAdapter
+        # 1. OpenCode as Executor with GLM 5.3 max
+        opencode_exec = OpenCodeAdapter("opencode-exec", config={"role": "executor", "model": "GLM 5.3 max"})
+        self.assertTrue(opencode_exec.capabilities().can_execute)
+        self.assertTrue(opencode_exec.capabilities().can_review)
+
+        # 2. OpenCode as Reviewer with Qwen3.8 max
+        opencode_rev = OpenCodeAdapter("opencode-rev", config={"role": "reviewer", "model": "Qwen3.8 max"})
+        self.assertTrue(opencode_rev.capabilities().can_review)
+
+        # 3. Antigravity as Executor
+        agy_exec = AntigravityAdapter("agy-exec", config={"role": "executor", "model": "gemini-2.0-pro"})
+        self.assertTrue(agy_exec.capabilities().can_execute)
+        self.assertTrue(agy_exec.capabilities().can_review)
+
+        # 4. Cursor Agent as Reviewer
+        cursor_adp = CursorAgentAdapter("cursor-rev", config={"role": "reviewer", "model": "claude-3-5-sonnet"})
+        self.assertTrue(cursor_adp.capabilities().can_execute)
+        self.assertTrue(cursor_adp.capabilities().can_review)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-"""OpenCode CLI Adapter Implementation (PRD §12.3)."""
+"""Cursor Agent CLI Adapter Implementation (PRD §12.3 / Agent Integration)."""
 
 import shutil
 import subprocess
@@ -9,11 +9,11 @@ from macao.adapter.base import AgentAdapter
 from macao.adapter.pty_session import PTYSession
 
 
-class OpenCodeAdapter(AgentAdapter):
-    """Adapter for OpenCode CLI (Reviewer / Executor)."""
+class CursorAgentAdapter(AgentAdapter):
+    """Adapter for Cursor Agent CLI (agent / cursor) supporting both Executor and Reviewer."""
 
-    def __init__(self, agent_id: str = "opencode", config: Optional[Dict[str, Any]] = None):
-        super().__init__(agent_id, "opencode", config)
+    def __init__(self, agent_id: str = "cursor", config: Optional[Dict[str, Any]] = None):
+        super().__init__(agent_id, "cursor", config)
         self.session: Optional[PTYSession] = None
 
     def capabilities(self) -> CapabilityManifest:
@@ -24,22 +24,22 @@ class OpenCodeAdapter(AgentAdapter):
             supports_noninteractive=True,
             supports_worktree=True,
             execution_mode=ExecutionMode.SANDBOXED,
-            cli_version_range=">=1.0.0"
+            cli_version_range=">=2025.0.0"
         )
 
     def preflight(self) -> PreflightCheckResult:
-        exe = shutil.which("opencode")
+        exe = shutil.which("agent") or shutil.which("cursor")
         if not exe:
             return PreflightCheckResult(
                 cli_name=self.cli_name,
                 installed=False,
                 execution_mode=self.capabilities().execution_mode,
-                details="OpenCode CLI executable not found in PATH",
-                remediation="Install or configure opencode CLI in PATH."
+                details="Cursor Agent CLI ('agent' or 'cursor') not found in PATH",
+                remediation="Ensure Cursor Agent CLI (agent) is installed in PATH."
             )
         try:
             res = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
-            version = res.stdout.strip() or "1.0.0"
+            version = res.stdout.strip() or "2026.0.0"
             return PreflightCheckResult(
                 cli_name=self.cli_name,
                 installed=True,
@@ -55,16 +55,17 @@ class OpenCodeAdapter(AgentAdapter):
                 installed=True,
                 execution_mode=self.capabilities().execution_mode,
                 details=f"Version probe error: {e}",
-                remediation="Ensure opencode is executable."
+                remediation="Ensure agent CLI is executable."
             )
 
     def start(self) -> bool:
-        cmd = ["opencode", "--quiet"]
+        exe = shutil.which("agent") or shutil.which("cursor") or "agent"
+        cmd = [exe, "--trust", "--sandbox", "enabled", "-p"]
 
         # Support model parameter specified by orchestrator
         model = self.config.get("model")
         if model:
-            cmd.extend(["-m", str(model)])
+            cmd.extend(["--model", str(model)])
 
         cwd = self.config.get("isolated_worktree_path", self.config.get("workspace_path", "."))
         self.session = PTYSession(cmd, cwd=cwd)
@@ -93,9 +94,11 @@ class OpenCodeAdapter(AgentAdapter):
             )
         else:
             # Acting as Reviewer
+            ref = task_payload.get("checkpoint_ref", "")
             prompt = (
-                f"Review code in worktree {self.config.get('isolated_worktree_path')}. "
-                f"Checkpoint ref: {task_payload.get('checkpoint_ref')}. "
+                f"REVIEW_REQUEST:\n"
+                f"Review code in worktree {self.config.get('isolated_worktree_path')}.\n"
+                f"Checkpoint ref: {ref}.\n"
                 f"Write review manifest to .macao/.reviews/{self.agent_id}.review.yml."
             )
 

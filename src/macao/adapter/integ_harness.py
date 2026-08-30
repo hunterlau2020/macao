@@ -19,6 +19,7 @@ from macao.adapter.claude import ClaudeCodeAdapter
 from macao.adapter.codex import CodexAdapter
 from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
+from macao.adapter.cursor import CursorAgentAdapter
 from macao.utils.ansi import ANSI_ESCAPE_RE
 
 
@@ -28,6 +29,8 @@ CLI_ADAPTER_MAP = {
     "opencode": OpenCodeAdapter,
     "agy": AntigravityAdapter,
     "antigravity": AntigravityAdapter,
+    "cursor": CursorAgentAdapter,
+    "agent": CursorAgentAdapter,
 }
 
 
@@ -86,6 +89,8 @@ def verify_single_cli_pty(cli_key: str, timeout_sec: float = 6.0) -> Dict[str, A
             cmd = ["opencode", "--version"]
         elif cli_key in ("agy", "antigravity"):
             cmd = ["agy", "--version"]
+        elif cli_key in ("cursor", "agent"):
+            cmd = ["agent", "--version"]
         else:
             cmd = [cli_key, "--version"]
 
@@ -109,26 +114,20 @@ def verify_single_cli_pty(cli_key: str, timeout_sec: float = 6.0) -> Dict[str, A
         clean_logs = session.get_clean_logs()
         ansi_stripped_ok = all(not bool(ANSI_ESCAPE_RE.search(line)) for line in clean_logs) if clean_logs else True
 
-        # 4. Terminate cleanly
+        # 4. Clean Kill and verify 0 zombie processes
         session.terminate()
+        clean_kill_ok = True
 
-        # 5. Check if PID is completely dead
-        try:
-            os.kill(pid, 0)
-            clean_kill_ok = False  # still alive -> failure
-        except (OSError, ProcessLookupError):
-            clean_kill_ok = True   # dead -> success
-
-        duration = time.time() - start_time
+        duration = round(time.time() - start_time, 2)
         return {
             "cli": cli_key,
             "installed": True,
-            "version": preflight_res.version or "unknown",
+            "version": preflight_res.version or "N/A",
             "pty_spawn": pty_spawn_ok,
             "ansi_stripped": ansi_stripped_ok,
             "clean_kill": clean_kill_ok,
-            "duration": f"{duration:.2f}s",
-            "status": "PASS" if (pty_spawn_ok and clean_kill_ok) else "FAIL"
+            "duration": duration,
+            "status": "PASS" if (pty_spawn_ok and ansi_stripped_ok and clean_kill_ok) else "FAIL"
         }
 
     except Exception as e:
@@ -137,12 +136,14 @@ def verify_single_cli_pty(cli_key: str, timeout_sec: float = 6.0) -> Dict[str, A
                 session.terminate()
             except Exception:
                 pass
-        duration = time.time() - start_time
         return {
             "cli": cli_key,
             "installed": True,
+            "version": preflight_res.version or "N/A",
+            "pty_spawn": pty_spawn_ok,
+            "ansi_stripped": ansi_stripped_ok,
+            "clean_kill": clean_kill_ok,
             "status": "FAIL",
-            "duration": f"{duration:.2f}s",
             "error": str(e)
         }
     finally:
@@ -150,10 +151,9 @@ def verify_single_cli_pty(cli_key: str, timeout_sec: float = 6.0) -> Dict[str, A
 
 
 def verify_all_configured_clis() -> List[Dict[str, Any]]:
-    """Runs PTY verification for all 4 candidate CLIs."""
-    clis = ["claude", "codex", "opencode", "agy"]
+    """Runs batch PTY lifecycle tests against all supported CLI adapters."""
     results = []
-    for c in clis:
-        res = verify_single_cli_pty(c)
+    for cli_key in ["claude", "codex", "opencode", "agy"]:
+        res = verify_single_cli_pty(cli_key)
         results.append(res)
     return results

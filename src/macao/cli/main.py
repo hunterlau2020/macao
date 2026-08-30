@@ -17,6 +17,7 @@ from macao.adapter.claude import ClaudeCodeAdapter
 from macao.adapter.codex import CodexAdapter
 from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
+from macao.adapter.cursor import CursorAgentAdapter
 from macao.adapter.kimi import KimiAdapter
 from macao.adapter.mock import MockAgentAdapter
 from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status
@@ -149,6 +150,7 @@ def preflight():
         CodexAdapter(),
         OpenCodeAdapter(),
         AntigravityAdapter(),
+        CursorAgentAdapter(),
         KimiAdapter(),
         MockAgentAdapter("mock-agent", "mock-cli")
     ]

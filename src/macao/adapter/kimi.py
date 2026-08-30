@@ -9,7 +9,7 @@ from macao.adapter.pty_session import PTYSession
 
 
 class KimiAdapter(AgentAdapter):
-    """Adapter for Kimi Coding CLI (Reviewer)."""
+    """Adapter for Kimi Coding CLI (Executor / Reviewer)."""
 
     def __init__(self, agent_id: str = "kimi", config: Optional[Dict[str, Any]] = None):
         super().__init__(agent_id, "kimi", config)
@@ -17,7 +17,7 @@ class KimiAdapter(AgentAdapter):
 
     def capabilities(self) -> CapabilityManifest:
         return CapabilityManifest(
-            can_execute=False,
+            can_execute=True,
             can_review=True,
             supports_hook=False,
             supports_noninteractive=True,
@@ -47,6 +47,12 @@ class KimiAdapter(AgentAdapter):
 
     def start(self) -> bool:
         cmd = ["kimi", "--non-interactive"]
+
+        # Support model parameter specified by orchestrator
+        model = self.config.get("model")
+        if model:
+            cmd.extend(["--model", str(model)])
+
         cwd = self.config.get("isolated_worktree_path", self.config.get("workspace_path", "."))
         self.session = PTYSession(cmd, cwd=cwd)
         self.is_running = self.session.start()
@@ -62,7 +68,26 @@ class KimiAdapter(AgentAdapter):
     def inject_task(self, task_payload: Dict[str, Any]) -> bool:
         if not self.session or not self.is_running:
             return False
-        prompt = f"REVIEW_REQUEST:\nPlease perform code review and write .macao/.reviews/{self.agent_id}.review.yml."
+
+        # If acting as Executor
+        if self.config.get("role") == "executor" or "task_description" in task_payload:
+            desc = task_payload.get("task_description", "")
+            criteria = task_payload.get("success_criteria", {})
+            prompt = (
+                f"TASK: {desc}\n"
+                f"Acceptance Criteria: {criteria}\n"
+                "Implement the required changes, ensure tests pass, and create .macao/.dev.yml manifest."
+            )
+        else:
+            # Acting as Reviewer
+            ref = task_payload.get("checkpoint_ref", "")
+            prompt = (
+                f"REVIEW_REQUEST:\n"
+                f"Review code in worktree {self.config.get('isolated_worktree_path')}.\n"
+                f"Checkpoint ref: {ref}.\n"
+                f"Write review manifest to .macao/.reviews/{self.agent_id}.review.yml."
+            )
+
         return self.session.write_input(prompt)
 
     def ack(self, message_id: str) -> bool:
