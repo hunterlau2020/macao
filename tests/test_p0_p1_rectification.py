@@ -468,7 +468,7 @@ development:
             for a in artifacts:
                 self.assertEqual(a["consumed"], 1, f"Artifact {a['kind']} {a.get('reviewer_id')} consumed != 1")
                 self.assertIsNotNone(a["archived_path"], f"Artifact {a['kind']} {a.get('reviewer_id')} archived_path is None")
-                self.assertTrue(a["archived_path"].startswith(".macao/archive/"), f"Invalid archived path: {a['archived_path']}")
+                self.assertTrue(Path(a["archived_path"]).as_posix().startswith(".macao/archive/"), f"Invalid archived path: {a['archived_path']}")
                 self.assertNotEqual(a["sha256"], "", f"Artifact {a['kind']} {a.get('reviewer_id')} sha256 is empty")
                 self.assertEqual(len(a["sha256"]), 64, f"Invalid SHA256 length: {a['sha256']}")
         finally:
@@ -1518,7 +1518,13 @@ development:
             (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
             subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
+            head_r0 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            (Path(tmpdir) / "r1.txt").write_text("round 1 code\n", encoding="utf-8")
+            subprocess.run(["git", "add", "r1.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "feat: round 1 code"], cwd=tmpdir, check=True, capture_output=True)
             head_r1 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+            self.assertNotEqual(head_r0, head_r1)
 
             orch = Orchestrator(project_root=tmpdir, config={"reviewer_ids": ["codex", "opencode"], "require_signoff": False})
             task = orch.start_task("Rework Freshness Task", "Testing E6 rework commit freshness gate")
@@ -1592,7 +1598,48 @@ development:
             self.assertIsNone(res_unchanged, "E6 MUST reject unchanged/consumed commit in REWORK")
             self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.REWORK.value)
 
-            # Case B: Executor makes a new git commit and submits Round 2 dev.yml
+            # Case B: Executor submits an ancestor commit (rollback attempt, Grok P1-1 / Codex P1-1)
+            # MUST FAIL (return None, state stays in REWORK)
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 2
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head_r0}"
+""", encoding="utf-8")
+            res_ancestor = orch.check_development_checkpoint(t_id)
+            self.assertIsNone(res_ancestor, "E6 MUST reject ancestor commit rollback in REWORK")
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.REWORK.value)
+
+            # Case C: Executor submits an orphan commit from an unrelated branch/tree (Grok P1-1 / Codex P1-1)
+            # MUST FAIL (return None, state stays in REWORK)
+            tree_sha = subprocess.run(["git", "write-tree"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+            head_orphan = subprocess.run(["git", "commit-tree", tree_sha, "-m", "orphan commit"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            dev_path.write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 2
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head_orphan}"
+""", encoding="utf-8")
+            res_orphan = orch.check_development_checkpoint(t_id)
+            self.assertIsNone(res_orphan, "E6 MUST reject unrelated orphan commit in REWORK")
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.REWORK.value)
+
+            # Case D: Executor makes a valid descendant git commit and submits Round 2 dev.yml
             (Path(tmpdir) / "fix.txt").write_text("fixed security issue\n", encoding="utf-8")
             subprocess.run(["git", "add", "fix.txt"], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "fix: resolve security issue"], cwd=tmpdir, check=True, capture_output=True)
@@ -1613,7 +1660,7 @@ development:
     latest_commit: "{head_r2}"
 """, encoding="utf-8")
             res_fresh = orch.check_development_checkpoint(t_id)
-            self.assertIsNotNone(res_fresh, "E6 MUST accept fresh commit in REWORK")
+            self.assertIsNotNone(res_fresh, "E6 MUST accept fresh descendant commit in REWORK")
             self.assertEqual(res_fresh.to_state, AgentState.READY_FOR_REVIEW)
             task_updated = orch.store.get_task(t_id)
             self.assertEqual(task_updated["state"], AgentState.READY_FOR_REVIEW.value)

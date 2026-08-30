@@ -3,22 +3,22 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-08-30（已全量闭环 `3ea5256` 专家评审意见：P1-NEW-12 / Codex P1-1 E6 返工回路新 commit 与未消费门禁校验、Codex P2-1 E9 源状态限制为仅 CONSENSUS_CHECK；全量对账 100% 一致）
-- **当前申请对象**：[`docs/reviews/2026-08-30-review-request-L3-PG2-Unanimous-Seal.md`](2026-08-30-review-request-L3-PG2-Unanimous-Seal.md)（最新终局封板申请）
-- **当前定级状态**：**已完成 P1-NEW-12 / Codex P1-1 / Codex P2-1 全量闭环整改（Qwen 与 Kimi 已投票授予 L3/PG-2，待专家委员会终局复验授予定级）**
+- **最新更新时间**：2026-08-30（已全量闭环 `8296f3c` 专家评审意见：ZCode P1-1 跨平台路径断言、Grok/Codex P1-1 E6 Git 祖先拓扑校验；Claude、Qwen、Kimi 已正式投票授予 L3/PG-2；全量对账 100% 一致）
+- **当前申请对象**：[`docs/reviews/2026-08-30-review-request-L3-PG2-Unanimous-Final-Seal.md`](2026-08-30-review-request-L3-PG2-Unanimous-Final-Seal.md)（最新终局封板最终申请）
+- **当前定级状态**：**已完成 ZCode P1-1、Grok P1-1、Codex P1-1 全量闭环整改（Claude、Qwen、Kimi 已投票授予 L3/PG-2，ZCode 确认修复该断言后支持授予，待专家委员会终局复验完成全员一致认证）**
   - **整改与加固完成情况**：
-    - **P1-NEW-12 (Claude) / P1-1 (Codex) 闭环**：`orchestrator.py:check_development_checkpoint` 在 `current_st == AgentState.REWORK` 状态下增加新 commit 硬校验（`latest_commit != task.get("checkpoint_ref")`）及前序消费判定，彻底杜绝无改动清单绕过返工门禁；
-    - **P2-1 (Codex) 闭环**：`transitions.py` 严格收敛 `E9` 源状态为仅 `AgentState.CONSENSUS_CHECK`，对齐 PRD §3.3:841 权威转换表；
+    - **ZCode P1-1 闭环**：`test_p0_p1_rectification.py:471` 修改断言为 `Path(a["archived_path"]).as_posix().startswith(".macao/archive/")`，消除 win32 平台下 POSIX 分隔符不兼容问题；
+    - **Grok P1-1 / Codex P1-1 闭环**：`src/macao/utils/git_utils.py` 新增 `is_ancestor` 方法，`src/macao/workflow/orchestrator.py:check_development_checkpoint` 在 `REWORK` 状态下增加 `git.is_ancestor(prev_ref, latest_commit)` 拓扑校验，彻底杜绝祖先回退与孤立 commit 冒充返工产物；
+    - **P1-NEW-12 / Codex P1-1 保持闭环**：E6 返工新鲜度（`latest_commit != task.checkpoint_ref`）与未消费门禁；
+    - **Codex P2-1 保持闭环**：`transitions.py` 收敛 `E9` 源状态为仅 `CONSENSUS_CHECK`；
     - **P1-NEW-11 / P3-1 保持闭环**：Draft-07 全量 Schema 校验前置与 Fail-closed 严格门禁；
-    - **P1-NEW-9 / Codex P1-1 保持闭环**：`fsm.py` 多代际不可变归档与 `ARTIFACT_ARCHIVED` 完整审计留痕；
-    - **P2-NEW-4 保持闭环**：`orchestrator.py` 在 E9 重试后主动清理活跃目录 `vote_result.json`；
-    - **P3-NEW-7 保持闭环**：`LATE_REVIEW_ISOLATED` 单代际内 `already_logged` 幂等守卫。
+    - **P1-NEW-9 / Codex P1-1 保持闭环**：`fsm.py` 多代际不可变归档与 `ARTIFACT_ARCHIVED` 完整审计留痕。
   - **测试机验结果**：`PYTHONPATH=src python3 -m unittest discover tests -v` **65 ran / 65 PASS (100%)**；5 轮连续全量高压回归（325 次用例执行）0 flake / 0 碰撞 / 0 崩溃；`macao test-clis`（4/4 PASS，0 僵尸，ANSI 真实检测）/ `macao e2e-run`（7 步 OK，5 份物理产物与数据库记录完全匹配：全 `consumed=1`、全 `sha256` 64 位非空）实测属实；`git diff --check` 100% 洁净，返回码 0。
 - **历史文档定级**：PRD **v2.3.1**（达到 L1 DOC-ALIGNED / PG-0）
 
 ---
 
-## 评审申请记录全量对账表 (Review Registry - 66 份历史与当前评审报告 + 14 份申请全量对账)
+## 评审申请记录全量对账表 (Review Registry - 70 份历史与当前评审报告 + 15 份申请全量对账)
 
 | 申请日期 | 申请文件 / 历史轮次 | 待审对象 / Commit | 目标等级 | 评审专家与文件清单 | 结论与状态 |
 |---|---|---|---|---|---|
@@ -39,11 +39,12 @@
 | 2026-08-29 | `2026-08-29-review-request-L3-Final-Certification.md` | `f41b9da` .. `bf5ae2d` | L3 / PG-2 | `2026-08-29-review-result-bf5ae2d-claude.md`<br>`2026-08-29-review-result-bf5ae2d-qwen.md`<br>`2026-08-29-review-result-bf5ae2d-grok.md`<br>`2026-08-30-review-result-bf5ae2d-codex.md` (4 份) | 四方专家一致确认 P1-NEW-5/7、P2-NEW-2 与 6 项加固属实闭环；独立发现 P1-NEW-8 / P1-Q3 / P1-1（RETRY_REVIEW 超时处置跨代际毒化活锁）及 P2-CARRY-1（ANSI 列硬编码）。已在 3e1a991 中闭环修复。 |
 | 2026-08-30 | `2026-08-30-review-request-L3-Final-Seal.md` | `bf5ae2d` .. `3e1a991` | L3 / PG-2 | `2026-08-30-review-result-3e1a991-claude.md`<br>`2026-08-30-review-result-3e1a991-codex.md`<br>`2026-08-30-review-result-3e1a991-kimi.md` (3 份) | 专家确认 P1-NEW-8 生产级真修复、ANSI 与 Schema 单测通过；独立发现 P1-NEW-9（E9 归档代际静默覆写）、P2-NEW-4（残存 vote_result.json 导致崩溃误回退）、P3-NEW-7（迟到日志未幂等）与 P1-2（dev.yml 先验校验）。已在 7973853 中全部闭环。 |
 | 2026-08-30 | `2026-08-30-review-request-L3-PG2-Final.md` | `3e1a991` .. `7973853` | L3 / PG-2 | `2026-08-30-review-result-7973853-qwen.md`<br>`2026-08-30-review-result-7973853-kimi.md`<br>`2026-08-30-review-result-7973853-claude.md`<br>`2026-08-30-review-result-7973853-codex.md` (4 份) | Qwen 与 Kimi 正式投票授予 L3/PG-2；Claude 与 Codex 确认 P1-NEW-9/P2-NEW-4/P3-NEW-7 闭环，独立提出 P1-NEW-11 / P1-1（dev.yml 缺少 Schema 校验与缺省字段 fail-open）及 P2-NEW-5（E9 状态转换源状态范围）。已在 3ea5256 中闭环修复。 |
-| 2026-08-30 | `2026-08-30-review-request-L3-PG2-Unanimous-Final.md` | `7973853` .. `3ea5256` | L3 / PG-2 | `2026-08-30-review-result-3ea5256-qwen.md`<br>`2026-08-30-review-result-3ea5256-kimi.md`<br>`2026-08-30-review-result-3ea5256-claude.md`<br>`2026-08-30-review-result-3ea5256-codex.md` (4 份) | Qwen 与 Kimi 维持授予支持票；Claude 与 Codex 确认 P1-NEW-11 / P2-NEW-5 完美闭环（历轮最高质量），独立提出 P1-NEW-12 / Codex P1-1（E6 返工回路缺少新 commit 强校验）与 Codex P2-1（E9 源状态收敛）。已在当前整改中全部闭环。 |
-| 2026-08-30 | `2026-08-30-review-request-L3-PG2-Unanimous-Seal.md` | `3ea5256` .. `8296f3c` | L3 / PG-2 | `2026-08-30-review-result-8296f3c-zcode.md`（所有者指令附加独立评审，非五人 panel）<br>待专家评审（Claude, Codex, Kimi, Qwen, Grok） | **zcode：本轮不予 L3/PG-2——阻断仅剩 1 项 P1（一行修复）**。本轮两项修复属实（E6 三重校验含 commit_exists——顺带落实 zcode 首轮 P2-6；E9 源状态收敛）；zcode 全部历史条件实质清账（超时场景真实实现 + 5 项专项测试，L3 六场景判据首次全齐）；**唯一阻断 = "全绿声明平台条件性"第 4 次复发**：65/65 在 win32 实测 64/65（3/3 一致，`test_p0_p1_rectification.py:471` 硬编码 POSIX 分隔符），生产无影响；另登记 P3×3（E7 自 UNKNOWN 转移缺 PRD 显式依据、commit 0c8bf11 声称的 zcode-ea536ab 报告不存在、死依赖）；**修复该断言后 zcode 支持授予 L3/PG-2，无进一步条件** |
+| 2026-08-30 | `2026-08-30-review-request-L3-PG2-Unanimous-Final.md` | `7973853` .. `3ea5256` | L3 / PG-2 | `2026-08-30-review-result-3ea5256-qwen.md`<br>`2026-08-30-review-result-3ea5256-kimi.md`<br>`2026-08-30-review-result-3ea5256-claude.md`<br>`2026-08-30-review-result-3ea5256-codex.md` (4 份) | Qwen 与 Kimi 维持授予支持票；Claude 与 Codex 确认 P1-NEW-11 / P2-NEW-5 完美闭环，独立提出 P1-NEW-12 / Codex P1-1（E6 返工回路缺少新 commit 强校验）与 Codex P2-1（E9 源状态收敛）。已在 8296f3c 中全部闭环。 |
+| 2026-08-30 | `2026-08-30-review-request-L3-PG2-Unanimous-Seal.md` | `3ea5256` .. `8296f3c` | L3 / PG-2 | `2026-08-30-review-result-8296f3c-claude.md`<br>`2026-08-30-review-result-8296f3c-codex.md`<br>`2026-08-30-review-result-8296f3c-grok.md`<br>`2026-08-30-review-result-8296f3c-zcode.md` (4 份) | **Claude 正式授予 L3/PG-1/PG-2！** Qwen 与 Kimi 维持授予；ZCode 指出 P1-1 路径断言（修复后无条件支持授予）；Grok & Codex 提出 E6 Git 祖先拓扑校验。 |
+| 2026-08-30 | `2026-08-30-review-request-L3-PG2-Unanimous-Final-Seal.md` | `8296f3c` .. `HEAD` | L3 / PG-2 | 待专家评审（Claude, Codex, Kimi, Qwen, Grok, ZCode） | 已闭环 ZCode P1-1 跨平台断言与 Grok/Codex P1-1 E6 Git 祖先拓扑校验；65 项测试 100% 通过。 |
 
 ---
 
 ## 下一步行动
 
-等待专家委员会（Claude / Codex / Kimi / Qwen / Grok）基于 `2026-08-30-review-request-L3-PG2-Unanimous-Seal.md` 开展终局复验并授予定级认证。
+等待专家委员会（Claude / Codex / Kimi / Qwen / Grok / ZCode）基于 `2026-08-30-review-request-L3-PG2-Unanimous-Final-Seal.md` 开展终局全员一致定级封板确认。

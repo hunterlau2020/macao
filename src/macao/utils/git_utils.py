@@ -50,6 +50,11 @@ class GitManager:
         code, stdout, _ = self._run("merge-base", commit1, commit2)
         return stdout if code == 0 else ""
 
+    def is_ancestor(self, ancestor_ref: str, descendant_ref: str) -> bool:
+        """Returns True if ancestor_ref is an ancestor of descendant_ref."""
+        code, _, _ = self._run("merge-base", "--is-ancestor", ancestor_ref, descendant_ref)
+        return code == 0
+
     def get_diff_summary(self, base_commit: str, head_commit: str) -> Tuple[int, int, int]:
         """Returns (files_changed, insertions, deletions)."""
         code, stdout, _ = self._run("diff", "--shortstat", f"{base_commit}..{head_commit}")

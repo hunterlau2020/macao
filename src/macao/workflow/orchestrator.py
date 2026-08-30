@@ -234,11 +234,21 @@ class Orchestrator:
         tests_passed = quality.get("tests_passed") is True or quality.get("tests_exempt") is True
 
         if dev_rnd == rnd and status == "ready_for_review" and signal == "EXPLICIT" and latest_commit and tests_passed:
-            # 3. Rework gate & Checkpoint freshness (PRD §2.1:216 / §3.3 E6:839 / P1-NEW-12 / Codex P1-1)
+            # 3. Check commit physically exists in git repository if git repo is present (PRD §2.1)
+            if self.git and self.git.is_git_repository():
+                if not self.git.commit_exists(latest_commit):
+                    return None
+
+            # 4. Rework gate & Checkpoint freshness & topology (PRD §2.1:216 / §3.3 E6:839 / Grok P1-1 / Codex P1-1)
             if current_st == AgentState.REWORK:
                 prev_ref = task.get("checkpoint_ref")
-                if prev_ref and latest_commit == prev_ref:
-                    return None  # Rework requires a fresh commit different from previous review round
+                if prev_ref:
+                    if latest_commit == prev_ref:
+                        return None  # Rework requires a fresh commit different from previous review round
+                    if self.git and self.git.is_git_repository():
+                        # Previous review checkpoint must be an ancestor of the new rework commit (strict topological progress)
+                        if not self.git.is_ancestor(prev_ref, latest_commit):
+                            return None
 
             # Check commit has not already been consumed as a dev_manifest for this task (PRD §2.1:216)
             consumed_devs = [
@@ -247,11 +257,6 @@ class Orchestrator:
             ]
             if consumed_devs:
                 return None
-
-            # 4. Check commit physically exists in git repository if git repo is present (PRD §2.1)
-            if self.git and self.git.is_git_repository():
-                if not self.git.commit_exists(latest_commit):
-                    return None
 
             # 5. Register artifact in StateStore (PRD §11.4 / P1-2)
             try:
