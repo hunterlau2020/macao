@@ -3,6 +3,7 @@
 - **位置**：`docs/usercases/`（由 `docs/usecases/` 合并而来；新稿只落本目录）
 - **权威基准**：`docs/MACAO_PRD_v2.md`；评审方法：`docs/MACAO_REVIEW_GUIDELINES.md` + `docs/reference/*.md`
 - **横切约定**：FAQ [Q5](../FAQ.md#q5-编排器-macao-本身接入了哪个大模型)–[Q16](../FAQ.md#q16-评审方法留痕和人工接管分别在哪)（编排器无模型、任务 FSM 单一事实源、yml=摘要、全文=`docs/reviews/`、agmsg=通知、加权计票、init 歧义问管理员）
+- **原文账本**：已裁定结论见 [PRODUCT-FACTS.md](PRODUCT-FACTS.md)（陈述句 fact + 原话陈述片段作锚点）
 
 状态：`设计稿` = 正文已写、待 Schema/测试对账；`目录` = 仅本索引中的范围定义，正文未写。
 

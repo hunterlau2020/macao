@@ -4,7 +4,7 @@
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
 - **关联**：PRD v2.4 §3.3（E5/E6）、§15.2（返工策略）；FAQ Q13/Q15；UC-5 `issues_index`（唯一上游）；UC-3 g（返工轮入口）。
-- **边界声明**：**哪些意见采纳、哪些不采纳，是执行者的内容工作**（FAQ Q13）。编排器只检测采纳清单是否按 Schema 出现、引用的 `id` 是否存在于 `issues_index`；不评判筛选质量、不代答"这条要不要改"。
+- **边界声明**：**汇总与采纳是执行者的内容工作**（FAQ Q13 / Q15、PRODUCT-FACTS F-13）：归并「同一问题被哪些专家发现」、写标题清单与正文索引、标是否采纳。执行者不写、不改 `vote_result.decision`。编排器只检测汇总段 Schema、引用 `id` ∈ `issues_index`、机器段哈希未变；不评判归并质量，不代写采纳取值。
 
 ---
 
@@ -22,9 +22,9 @@
 
 a1 读 `vote_result.json` 的 `issues_index`（目录）；a2 对每条 `id` 按需读对应全文（`full_document.path` + sha256 校验）；a3 **读全文**——目录的一行摘要不足以定位修复方案（FAQ Q14：全文在 docs/reviews/）。
 
-### b. 执行者写采纳清单
+### b. 执行者写汇总段（`vote_result.issues_summary`）
 
-随下一轮申请（`.dev.yml` 引用的全文内专章，或独立 `adoption.yml`，见遗留③）：
+机器段（`votes` / `decision` / `issues_index`）已由 UC-5 落盘且只读。执行者在此之后写入汇总段（归并「相同问题」、`found_by[]`、正文索引、是否采纳）；不得改机器段。独立 `adoption.yml` 仅作过渡，见遗留③：
 
 ```yaml
 adoption:
