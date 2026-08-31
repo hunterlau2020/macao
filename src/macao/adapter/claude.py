@@ -93,12 +93,18 @@ class ClaudeCodeAdapter(AgentAdapter):
         else:
             # Acting as Reviewer
             ref = task_payload.get("checkpoint_ref", "")
+            rnd = task_payload.get("review_round", 1)
+            diff = task_payload.get("diff", "")
+            diff_section = f"\nDiff Context:\n{diff}\n" if diff else ""
             prompt = (
                 f"REVIEW_REQUEST:\n"
                 f"Review code in worktree {self.config.get('isolated_worktree_path')}.\n"
-                f"Checkpoint ref: {ref}.\n"
-                f"Write review manifest to .macao/.reviews/{self.agent_id}.review.yml."
+                f"Checkpoint ref: {ref}, review round: {rnd}.\n"
+                f"{diff_section}"
+                f"Output valid YAML review manifest with vote ('YES_APPROVE' | 'NO_APPROVE' | 'ABSTAIN') "
+                f"and write to .macao/.reviews/{self.agent_id}.review.yml."
             )
+
 
         return self.session.write_input(prompt)
 

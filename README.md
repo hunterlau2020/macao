@@ -2,10 +2,11 @@
 
 > **标准化流程 + 显式产物信号驱动的生产级多 AI CLI 编排框架**
 
-[![CI Status](https://img.shields.io/badge/tests-72%2F72%20PASS-brightgreen.svg)](https://github.com/hunterlau2020/macao)
+[![CI Status](https://img.shields.io/badge/tests-75%2F75%20PASS-brightgreen.svg)](https://github.com/hunterlau2020/macao)
 [![Schema](https://img.shields.io/badge/schema-Draft--07%20Strict-blue.svg)](https://github.com/hunterlau2020/macao)
-[![Gate Status](https://img.shields.io/badge/status-L4%20RELEASE--READY-orange.svg)](docs/reviews/STATUS.md)
+[![Gate Status](https://img.shields.io/badge/status-L3%20SCENARIO--VERIFIED%20%2F%20PG--2-brightgreen.svg)](docs/reviews/STATUS.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 
 ---
 

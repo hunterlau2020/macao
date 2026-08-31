@@ -42,6 +42,8 @@ class OpinionStatus(str, Enum):
     APPROVED = "APPROVED"
     CHANGES_REQUESTED = "CHANGES_REQUESTED"
     REJECTED = "REJECTED"
+    ABSTAINED = "ABSTAINED"
+
 
 
 class Decision(str, Enum):

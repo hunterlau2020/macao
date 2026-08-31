@@ -60,6 +60,8 @@ class ReviewExtractor:
         if not candidates:
             candidates.append(clean_text.strip())
 
+        valid_candidates = []
+
         for cand in candidates:
             try:
                 parsed = yaml.safe_load(cand)
@@ -77,50 +79,85 @@ class ReviewExtractor:
                     opinion = {}
                     parsed["opinion"] = opinion
 
-                status = opinion.get("status")
-                vote = top_vote or opinion.get("vote")
+                raw_status = str(opinion.get("status", "")).strip() if opinion.get("status") is not None else None
+                raw_vote = str(top_vote if top_vote is not None else opinion.get("vote", "")).strip() if (top_vote is not None or opinion.get("vote") is not None) else None
 
-                if not status and not vote:
+                if not raw_status and not raw_vote:
                     # Neither status nor vote is present: Reject (do not fabricate approval)
                     continue
 
+                # Check for explicit contradictions between status and vote (Fail-Closed)
+                if raw_status and raw_vote:
+                    if raw_status == "APPROVED" and raw_vote != "YES_APPROVE":
+                        continue
+                    elif raw_status in ("CHANGES_REQUESTED", "REJECTED") and raw_vote != "NO_APPROVE":
+                        continue
+                    elif raw_status in ("ABSTAINED", "ABSTAIN") and raw_vote != "ABSTAIN":
+                        continue
+                    elif raw_vote == "YES_APPROVE" and raw_status != "APPROVED":
+                        continue
+                    elif raw_vote == "NO_APPROVE" and raw_status not in ("CHANGES_REQUESTED", "REJECTED"):
+                        continue
+                    elif raw_vote == "ABSTAIN" and raw_status not in ("ABSTAINED", "ABSTAIN"):
+                        continue
+
                 # Harmonize explicit status and vote
-                if status == "APPROVED":
-                    vote = "YES_APPROVE"
-                elif status in ("CHANGES_REQUESTED", "REJECTED"):
-                    vote = "NO_APPROVE"
-                elif vote == "YES_APPROVE":
-                    status = "APPROVED"
-                elif vote in ("NO_APPROVE", "ABSTAIN"):
-                    status = "CHANGES_REQUESTED"
-                else:
-                    # Unknown status/vote values
-                    continue
+                if raw_status:
+                    if raw_status == "APPROVED":
+                        vote = "YES_APPROVE"
+                        status = "APPROVED"
+                    elif raw_status in ("CHANGES_REQUESTED", "REJECTED"):
+                        vote = "NO_APPROVE"
+                        status = raw_status
+                    elif raw_status in ("ABSTAINED", "ABSTAIN"):
+                        vote = "ABSTAIN"
+                        status = "ABSTAINED"
+                    else:
+                        continue
+                elif raw_vote:
+                    if raw_vote == "YES_APPROVE":
+                        vote = "YES_APPROVE"
+                        status = "APPROVED"
+                    elif raw_vote == "NO_APPROVE":
+                        vote = "NO_APPROVE"
+                        status = "CHANGES_REQUESTED"
+                    elif raw_vote == "ABSTAIN":
+                        vote = "ABSTAIN"
+                        status = "ABSTAINED"
+                    else:
+                        continue
 
                 # Strict Context Binding: If YAML already contains metadata, it MUST match the dispatch context
                 rev_info = parsed.get("reviewer")
-                if isinstance(rev_info, dict) and rev_info.get("id") and rev_info.get("id") != agent_id:
+                if isinstance(rev_info, dict) and rev_info.get("id") and str(rev_info.get("id")).strip() != agent_id:
                     continue
-                if parsed.get("checkpoint_ref") and parsed.get("checkpoint_ref") != checkpoint_ref:
-                    continue
-                if parsed.get("review_round") is not None and parsed.get("review_round") != review_round:
+                if parsed.get("checkpoint_ref"):
+                    ref_str = str(parsed.get("checkpoint_ref")).strip()
+                    if ref_str != checkpoint_ref and not checkpoint_ref.startswith(ref_str) and not ref_str.startswith(checkpoint_ref):
+                        continue
+                if parsed.get("review_round") is not None and int(parsed.get("review_round")) != review_round:
                     continue
 
                 # Bind validated context and schema requirements
                 parsed["version"] = parsed.get("version") or "1.0"
                 parsed["review_round"] = review_round
                 parsed["checkpoint_ref"] = checkpoint_ref
-                parsed["reviewer"] = {"id": agent_id, "cli": agent_id}
+                rev_cli = rev_info.get("cli") if isinstance(rev_info, dict) and rev_info.get("cli") else agent_id
+                parsed["reviewer"] = {"id": agent_id, "cli": rev_cli}
                 parsed["vote"] = vote
                 opinion["status"] = status
                 opinion.setdefault("feedback", {"summary": "Review extracted from CLI session"})
 
                 is_valid, err = validate_review_manifest(parsed)
                 if is_valid:
-                    return True, parsed, None
+                    valid_candidates.append(parsed)
 
             except Exception:
                 continue
+
+        if valid_candidates:
+            # Chronologically return the LAST valid manifest block in the session
+            return True, valid_candidates[-1], None
 
         return False, None, "Failed to extract schema-valid YAML review manifest with explicit vote/status from terminal logs"
 
@@ -139,7 +176,10 @@ class LiveAgentDispatcher:
         if not adapter_cls:
             raise ValueError(f"Unsupported or unconfigured reviewer CLI '{cli_type}'. Allowed: {list(CLI_ADAPTER_REGISTRY.keys())}")
         agent_id = reviewer_cfg.get("id", cli_type)
+        if adapter_cls == MockAgentAdapter:
+            return MockAgentAdapter(agent_id=agent_id, cli_name=cli_type, config=reviewer_cfg)
         return adapter_cls(agent_id=agent_id, config=reviewer_cfg)
+
 
     def dispatch_review_in_worktree(
         self,

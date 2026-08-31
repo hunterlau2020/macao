@@ -20,7 +20,7 @@ class MockAgentAdapter(AgentAdapter):
     def __init__(
         self,
         agent_id: str,
-        cli_name: str,
+        cli_name: str = "mock-cli",
         role: str = "reviewer", # executor | reviewer
         config: Optional[Dict[str, Any]] = None,
         behavior_fn: Optional[Callable[["MockAgentAdapter", Dict[str, Any]], None]] = None
@@ -67,7 +67,41 @@ class MockAgentAdapter(AgentAdapter):
         self.injected_tasks.append(task_payload)
         if self.behavior_fn:
             self.behavior_fn(self, task_payload)
+        else:
+            ref = task_payload.get("checkpoint_ref", "HEAD")
+            rnd = task_payload.get("review_round", 1)
+            cfg_dict = self.config or {}
+            vote_val = cfg_dict.get("mock_vote", "YES_APPROVE")
+            status_val = cfg_dict.get("mock_status", "APPROVED" if vote_val == "YES_APPROVE" else "CHANGES_REQUESTED")
+
+            manifest_data = {
+                "version": "1.0",
+                "checkpoint_ref": ref,
+                "review_round": rnd,
+                "reviewer": {
+                    "id": self.agent_id,
+                    "cli": self.cli_name
+                },
+                "vote": vote_val,
+                "opinion": {
+                    "status": status_val,
+                    "confidence": 0.95,
+                    "feedback": {
+                        "summary": "Mock reviewer validated code changes."
+                    }
+                }
+            }
+            manifest_yaml = yaml.safe_dump(manifest_data)
+            self.logs.append(f"```yaml\n{manifest_yaml}\n```")
+
+            wt_path = cfg_dict.get("isolated_worktree_path")
+            if wt_path and Path(wt_path).exists():
+                rev_dir = Path(wt_path) / ".macao" / ".reviews"
+                rev_dir.mkdir(parents=True, exist_ok=True)
+                (rev_dir / f"{self.agent_id}.review.yml").write_text(manifest_yaml, encoding="utf-8")
+
         return True
+
 
     def ack(self, message_id: str) -> bool:
         """AEP message acknowledgment."""

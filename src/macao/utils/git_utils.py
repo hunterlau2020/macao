@@ -55,7 +55,13 @@ class GitManager:
         code, _, _ = self._run("merge-base", "--is-ancestor", ancestor_ref, descendant_ref)
         return code == 0
 
+    def get_diff(self, base_commit: str, head_commit: str) -> str:
+        """Returns unified git diff between two commits/refs."""
+        code, stdout, _ = self._run("diff", f"{base_commit}..{head_commit}")
+        return stdout if code == 0 else ""
+
     def get_diff_summary(self, base_commit: str, head_commit: str) -> Tuple[int, int, int]:
+
         """Returns (files_changed, insertions, deletions)."""
         code, stdout, _ = self._run("diff", "--shortstat", f"{base_commit}..{head_commit}")
         if code != 0 or not stdout:

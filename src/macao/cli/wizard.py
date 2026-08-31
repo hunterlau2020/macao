@@ -74,18 +74,38 @@ def detect_ci_command(project_root: Path) -> Optional[str]:
     return None
 
 
-def ensure_gitignore_isolation(project_root: Path) -> bool:
-    """Ensures .macao/worktrees/ and *.db are safely added to .gitignore."""
-    gi_path = project_root / ".gitignore"
-    entry = "\n# MACAO Runtime Worktrees & State Store (Auto-added)\n.macao/worktrees/\n.macao/.reviews/\n.macao/.dev.yml\n.macao/vote_result.json\n.macao/archive/\n.macao/*.db\n.macao/*.db-journal\n.macao/*.db-wal\n.macao/*.db-shm\n"
+import math
 
+
+def ensure_gitignore_isolation(project_root: Path) -> bool:
+    """Ensures all MACAO runtime worktree, review, archive and DB paths are in .gitignore."""
+    gi_path = project_root / ".gitignore"
+    required_rules = [
+        ".macao/worktrees/",
+        ".macao/.reviews/",
+        ".macao/.dev.yml",
+        ".macao/vote_result.json",
+        ".macao/archive/",
+        ".macao/*.db",
+        ".macao/*.db-journal",
+        ".macao/*.db-wal",
+        ".macao/*.db-shm",
+    ]
     content = gi_path.read_text(encoding="utf-8") if gi_path.exists() else ""
-    if ".macao/worktrees/" not in content:
-        with open(gi_path, "a", encoding="utf-8") as f:
-            f.write(entry)
+    lines = [line.strip() for line in content.splitlines()]
+    missing_rules = [r for r in required_rules if r not in lines]
+
+    if missing_rules:
+        new_content = content
+        if new_content and not new_content.endswith("\n"):
+            new_content += "\n"
+        if "# MACAO Runtime Worktrees & State Store (Auto-added)" not in new_content:
+            new_content += "\n# MACAO Runtime Worktrees & State Store (Auto-added)\n"
+        for r in missing_rules:
+            new_content += f"{r}\n"
+        gi_path.write_text(new_content, encoding="utf-8")
         return True
     return False
-
 
 
 def generate_smart_config(
@@ -115,6 +135,9 @@ def generate_smart_config(
     if executor_model:
         executor_dict["model"] = executor_model
 
+    rev_count = len(reviewers)
+    quorum_votes = math.ceil(2 * rev_count / 3) if rev_count > 0 else 1
+
     config_data = {
         "project": {
             "name": proj_name,
@@ -130,10 +153,11 @@ def generate_smart_config(
         },
         "policy": {
             "consensus_rule": "2/3_majority",
-            "min_effective_votes": len(reviewers),
+            "min_effective_votes": quorum_votes,
             "max_rework_rounds": 3,
             "review_strategy": "delta_plus_focus"
         },
+
         "merge": {
             "strategy": "ff_only",
             "ci_gate_command": ci_cmd,

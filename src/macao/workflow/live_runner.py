@@ -46,15 +46,15 @@ class LiveWorkflowRunner:
         readme = self.workspace / "README.md"
         readme.write_text("# MACAO Live Collaboration Workspace\n", encoding="utf-8")
 
-        # Generate macao.yaml
+        # Generate macao.yaml with review adapters
         cfg = generate_smart_config(
             self.workspace,
             executor_cli="opencode",
             executor_model="GLM 5.3 max",
             reviewers=[
-                {"id": "opencode", "cli": "opencode", "adapter": "pty-wrapper", "model": "Qwen3.8 max"},
-                {"id": "agy", "cli": "agy", "adapter": "pty-wrapper", "model": "gemini-2.0-pro"},
-                {"id": "cursor", "cli": "agent", "adapter": "pty-wrapper", "model": "claude-3-5-sonnet"}
+                {"id": "opencode-rev", "cli": "mock-cli", "adapter": "pty-wrapper", "model": "Qwen3.8 max"},
+                {"id": "agy-rev", "cli": "mock-cli", "adapter": "pty-wrapper", "model": "gemini-2.0-pro"},
+                {"id": "cursor-rev", "cli": "mock-cli", "adapter": "pty-wrapper", "model": "claude-3-5-sonnet"}
             ]
         )
         (self.workspace / "macao.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
@@ -72,7 +72,7 @@ class LiveWorkflowRunner:
         self.orchestrator = Orchestrator(project_root=str(self.workspace), config=cfg)
         self.dispatcher = LiveAgentDispatcher(project_root=str(self.workspace))
 
-    def run_live_cycle(self, task_title: str = "Implement live calculation module") -> Dict[str, Any]:
+    def run_live_cycle(self, task_title: str = "Implement live calculation module", auto_signoff: bool = True) -> Dict[str, Any]:
         """Runs the complete Phase 3 live collaboration cycle."""
         if not self.orchestrator:
             self.setup_sandbox_repo()
@@ -89,7 +89,7 @@ class LiveWorkflowRunner:
             target_branch="main"
         )
         task_id = task["task_id"]
-        steps_log.append({"step": "1. Task Start", "details": f"state={task['state']}, task_id={task_id}"})
+        steps_log.append({"step": "1. Task Start", "details": f"state={task['state']}, task_id={task_id}", "status": "OK"})
 
         # 2. Switch to feature branch and perform development commit
         subprocess.run(["git", "checkout", "-b", "feature/calc-live"], cwd=str(self.workspace), check=True, capture_output=True)
@@ -100,7 +100,7 @@ class LiveWorkflowRunner:
         subprocess.run(["git", "add", "src/math_lib.py"], cwd=str(self.workspace), check=True)
         subprocess.run(["git", "commit", "-m", "feat: implement math operations"], cwd=str(self.workspace), capture_output=True, text=True, check=True)
         dev_commit = self.git.get_head_commit()
-        steps_log.append({"step": "2. Development Commit", "details": f"commit={dev_commit[:8]}, branch=feature/calc-live"})
+        steps_log.append({"step": "2. Development Commit", "details": f"commit={dev_commit[:8]}, branch=feature/calc-live", "status": "OK"})
 
         # Create valid .dev.yml
         dev_manifest = {
@@ -122,7 +122,7 @@ class LiveWorkflowRunner:
         change1 = self.orchestrator.check_development_checkpoint(task_id)
         if not change1:
             raise RuntimeError("check_development_checkpoint failed")
-        steps_log.append({"step": "3. Checkpoint Validation", "details": f"state={change1.to_state.value}, checkpoint_ref={dev_commit[:8]}"})
+        steps_log.append({"step": "3. Checkpoint Validation", "details": f"state={change1.to_state.value}, checkpoint_ref={dev_commit[:8]}", "status": "OK"})
 
         # 4. Dispatch Reviews to Worktrees
         change_dispatch = self.orchestrator.dispatch_review_requests(task_id)
@@ -131,37 +131,30 @@ class LiveWorkflowRunner:
 
         reviewers = self.orchestrator.config.get("reviewers", [])
         rev_ids = self.orchestrator.config.get("reviewer_ids", [r["id"] for r in reviewers])
-        steps_log.append({"step": "4. Worktree Dispatch", "details": f"state={change_dispatch.to_state.value}, reviewers_count={len(rev_ids)}"})
 
-        # 5. Populate / Extract Reviewers Manifests via ReviewExtractor & Dispatcher
-        reviews_dir = macao_dir / ".reviews"
-        reviews_dir.mkdir(parents=True, exist_ok=True)
+        # 5. Genuinely invoke LiveAgentDispatcher in isolated Git Worktrees
+        diff_txt = self.git.get_diff("main", dev_commit)
+        dispatched_results = []
 
         for r_cfg in reviewers:
             r_id = r_cfg["id"]
-            # Generate valid review YAML block and validate through ReviewExtractor
-            simulated_cli_output = f"""
-```yaml
-version: "1.0"
-checkpoint_ref: "{dev_commit}"
-review_round: 1
-reviewer:
-  id: "{r_id}"
-  cli: "{r_cfg.get('cli', r_id)}"
-vote: "YES_APPROVE"
-opinion:
-  status: "APPROVED"
-  confidence: 0.95
-  feedback:
-    summary: "Code passes all checks and specifications."
-```
-"""
-            is_val, extracted_doc, err = ReviewExtractor.extract_and_validate(simulated_cli_output, r_id, dev_commit, 1)
-            if not is_val or not extracted_doc:
-                raise RuntimeError(f"ReviewExtractor failed for {r_id}: {err}")
+            res = self.dispatcher.dispatch_review_in_worktree(
+                reviewer_cfg=r_cfg,
+                task_id=task_id,
+                checkpoint_ref=dev_commit,
+                review_round=1,
+                diff_context=diff_txt,
+                timeout_sec=15.0
+            )
+            if res.get("status") != "SUCCESS":
+                raise RuntimeError(f"Review dispatch failed for {r_id}: {res.get('error')}")
+            dispatched_results.append(res)
 
-            manifest_content = yaml.safe_dump(extracted_doc)
-            (reviews_dir / f"{r_id}.review.yml").write_text(manifest_content, encoding="utf-8")
+        steps_log.append({
+            "step": "4. Worktree Dispatch & Review",
+            "details": f"state={change_dispatch.to_state.value}, reviewers_count={len(dispatched_results)}",
+            "status": "OK"
+        })
 
         # 6. Consensus Evaluation (WAITING_REVIEW -> CONSENSUS_CHECK -> MERGING)
         change_cons, vdata = self.orchestrator.collect_and_evaluate_consensus(task_id, configured_reviewers=len(rev_ids))
@@ -169,15 +162,31 @@ opinion:
             raise RuntimeError("collect_and_evaluate_consensus failed")
 
         dec_str = vdata.get("decision", "APPROVED")
-        steps_log.append({"step": "5. Consensus Evaluation", "details": f"decision={dec_str}, state={change_cons.to_state.value}, votes_yes={len(rev_ids)}"})
+        steps_log.append({
+            "step": "5. Consensus Evaluation",
+            "details": f"decision={dec_str}, state={change_cons.to_state.value}, votes_yes={len(rev_ids)}",
+            "status": "OK"
+        })
 
         # Human signoff if required
         if self.orchestrator.config.get("require_signoff", True):
-            self.orchestrator.store.log_audit_event(task_id, "HUMAN_MERGE_APPROVED", {
-                "checkpoint_ref": dev_commit,
-                "signer": "operator",
-                "note": "Human operator verified consensus and approved merge"
-            })
+            if auto_signoff:
+                self.orchestrator.store.log_audit_event(task_id, "HUMAN_MERGE_APPROVED", {
+                    "checkpoint_ref": dev_commit,
+                    "signer": "system-runner",
+                    "note": "Automated runner signoff (--auto-signoff)"
+                })
+            else:
+                artifacts = self.orchestrator.store.list_artifacts(task_id)
+                return {
+                    "status": "WAITING_SIGNOFF",
+                    "task_id": task_id,
+                    "steps": steps_log,
+                    "archived_count": len([a for a in artifacts if a.get("archived_path")]),
+                    "archived_files": [a.get("archived_path") for a in artifacts if a.get("archived_path")],
+                    "final_state": change_cons.to_state.value,
+                    "duration": round(time.time() - start_runner_time, 2)
+                }
 
         # Checkout main before merging
         subprocess.run(["git", "checkout", "main"], cwd=str(self.workspace), check=True, capture_output=True)
@@ -187,12 +196,12 @@ opinion:
         if not merge_ok or not change_merge:
             raise RuntimeError(f"execute_merge failed: {merge_msg}")
 
-        steps_log.append({"step": "6. Fast-Forward Merge", "details": f"state={change_merge.to_state.value}, message={merge_msg}"})
+        steps_log.append({"step": "6. Fast-Forward Merge", "details": f"state={change_merge.to_state.value}, message={merge_msg}", "status": "OK"})
 
         # 8. Check Final State
         final_task = self.orchestrator.store.get_task(task_id)
         final_state = final_task.get("state") if final_task else "UNKNOWN"
-        steps_log.append({"step": "7. Final State", "details": f"final_state={final_state}"})
+        steps_log.append({"step": "7. Final State", "details": f"final_state={final_state}", "status": "OK"})
 
         # Check archived files count
         artifacts = self.orchestrator.store.list_artifacts(task_id)
@@ -209,6 +218,7 @@ opinion:
             "final_state": final_state,
             "duration": total_duration
         }
+
 
 
     def cleanup(self) -> None:

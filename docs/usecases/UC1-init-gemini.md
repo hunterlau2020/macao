@@ -1,9 +1,10 @@
 # 用例规格说明书：MACAO 项目智能初始化 (UC-INIT-01)
 
-> **文档标识**：`docs/usecases/UC1-init-gemini.md`  
-> **版本**：v1.0 (2026-08-31)  
-> **状态**：Draft / Specification  
+> **文档标识**：`docs/usecases/UC1-init-gemini.md`
+> **版本**：v1.0 (2026-08-31)
+> **状态**：Draft / Specification
 > **适用范围**：MACAO CLI (`macao init` / `macao setup`)、`wizard.py` 智能向导模块、`agmsg` 团队感知与拓扑映射模块
+
 
 ---
 

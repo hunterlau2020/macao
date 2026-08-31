@@ -212,6 +212,233 @@ timeouts:
             audits = daemon.store.get_audit_events_by_type(t_id, "REVIEWER_TIMEOUT_ABSTAIN")
             self.assertEqual(len(audits), 2)
 
+    def test_review_extractor_last_valid_block_wins(self):
+        """Verify ReviewExtractor takes the last valid manifest block when multiple blocks appear in session logs."""
+        raw_output = """
+Draft thought:
+```yaml
+version: "1.0"
+checkpoint_ref: "abc1234"
+review_round: 1
+reviewer:
+  id: "codex"
+  cli: "codex"
+vote: "YES_APPROVE"
+opinion:
+  status: "APPROVED"
+```
+
+After reviewing the unit tests, I found a bug. Here is my final review:
+```yaml
+version: "1.0"
+checkpoint_ref: "abc1234"
+review_round: 1
+reviewer:
+  id: "codex"
+  cli: "codex"
+vote: "NO_APPROVE"
+opinion:
+  status: "CHANGES_REQUESTED"
+  feedback:
+    summary: "Found regression in math calculation"
+```
+"""
+        is_val, manifest, err = ReviewExtractor.extract_and_validate(raw_output, "codex", "abc1234", 1)
+        self.assertTrue(is_val, f"Extraction failed: {err}")
+        self.assertIsNotNone(manifest)
+        self.assertEqual(manifest["vote"], "NO_APPROVE")
+        self.assertEqual(manifest["opinion"]["status"], "CHANGES_REQUESTED")
+
+    def test_review_extractor_rejects_contradictory_vote_and_status(self):
+        """Verify ReviewExtractor rejects manifests with contradictory vote and status (Fail-Closed)."""
+        contradictory_samples = [
+            """
+```yaml
+vote: "NO_APPROVE"
+opinion:
+  status: "APPROVED"
+```
+""",
+            """
+```yaml
+vote: "YES_APPROVE"
+opinion:
+  status: "REJECTED"
+```
+""",
+            """
+```yaml
+vote: "ABSTAIN"
+opinion:
+  status: "APPROVED"
+```
+"""
+        ]
+        for sample in contradictory_samples:
+            is_val, manifest, err = ReviewExtractor.extract_and_validate(sample, "opencode", "abc1234", 1)
+            self.assertFalse(is_val, f"Expected contradictory sample to be rejected: {sample}")
+            self.assertIsNone(manifest)
+
+    def test_review_extractor_supports_abstain(self):
+        """Verify ReviewExtractor cleanly extracts and validates explicit ABSTAIN votes."""
+        raw_output = """
+```yaml
+version: "1.0"
+checkpoint_ref: "abc1234"
+review_round: 1
+reviewer:
+  id: "opencode"
+  cli: "opencode"
+vote: "ABSTAIN"
+opinion:
+  status: "ABSTAINED"
+  feedback:
+    summary: "No domain knowledge on this file."
+```
+"""
+        is_val, manifest, err = ReviewExtractor.extract_and_validate(raw_output, "opencode", "abc1234", 1)
+        self.assertTrue(is_val, f"ABSTAIN extraction failed: {err}")
+        self.assertIsNotNone(manifest)
+        self.assertEqual(manifest["vote"], "ABSTAIN")
+        self.assertEqual(manifest["opinion"]["status"], "ABSTAINED")
+
+    def test_wizard_gitignore_isolation_upgrade(self):
+        """Verify .gitignore upgrade correctly appends missing rules to legacy files without duplicates."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir)
+            gi = proj / ".gitignore"
+            gi.write_text(".macao/worktrees/\n*.pyc\n", encoding="utf-8")
+
+            added = ensure_gitignore_isolation(proj)
+            self.assertTrue(added)
+
+            content = gi.read_text(encoding="utf-8")
+            self.assertEqual(content.count(".macao/worktrees/"), 1)
+            self.assertIn(".macao/.reviews/", content)
+            self.assertIn(".macao/*.db", content)
+            self.assertIn(".macao/*.db-journal", content)
+            self.assertIn(".macao/*.db-wal", content)
+            self.assertIn(".macao/*.db-shm", content)
+
+    def test_live_dispatcher_worktree_mock_execution(self):
+        """Verify LiveAgentDispatcher creates isolated worktree, extracts review, and removes worktree."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir)
+            subprocess.run(["git", "init", "-b", "main"], cwd=str(proj), check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=str(proj), check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(proj), check=True)
+            (proj / "README.md").write_text("initial", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=str(proj), check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=str(proj), check=True, capture_output=True)
+            commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(proj), text=True).strip()
+
+            dispatcher = LiveAgentDispatcher(str(proj))
+            r_cfg = {"id": "test-mock-rev", "cli": "mock-cli", "mock_vote": "YES_APPROVE"}
+
+            res = dispatcher.dispatch_review_in_worktree(
+                reviewer_cfg=r_cfg,
+                task_id="task-test-01",
+                checkpoint_ref=commit,
+                review_round=1,
+                diff_context="+ def hello(): pass",
+                timeout_sec=5.0
+            )
+            self.assertEqual(res["status"], "SUCCESS")
+            self.assertEqual(res["vote"], "YES_APPROVE")
+            manifest_file = Path(res["manifest_path"])
+            self.assertTrue(manifest_file.exists())
+
+            # Verify isolated worktree was cleaned up
+            wt_path = proj / ".macao" / "worktrees" / "test-mock-rev" / "task-test-01" / "r1"
+            self.assertFalse(wt_path.exists())
+
+    def test_manual_override_resolution(self):
+        """Verify manual override can unblock a task in CONSENSUS_CHECK to allow merge."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir)
+            subprocess.run(["git", "init", "-b", "main"], cwd=str(proj), check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=str(proj), check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(proj), check=True)
+            (proj / "README.md").write_text("initial", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=str(proj), check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=str(proj), check=True, capture_output=True)
+
+            cfg = generate_smart_config(proj)
+            cfg["project"]["repository"]["remote_name"] = ""
+            from macao.workflow.orchestrator import Orchestrator
+            orch = Orchestrator(str(proj), config=cfg)
+
+
+            task = orch.start_task("Override Test", "Testing manual override", source_branch="feat/test")
+            t_id = task["task_id"]
+
+            subprocess.run(["git", "checkout", "-b", "feat/test"], cwd=str(proj), check=True, capture_output=True)
+            (proj / "file.txt").write_text("new content", encoding="utf-8")
+            subprocess.run(["git", "add", "file.txt"], cwd=str(proj), check=True)
+            subprocess.run(["git", "commit", "-m", "feat: file"], cwd=str(proj), check=True, capture_output=True)
+            dev_commit = orch.git.get_head_commit()
+
+            (proj / ".macao").mkdir(parents=True, exist_ok=True)
+            (proj / ".macao" / ".dev.yml").write_text(yaml.safe_dump({
+                "version": "1.0", "status": "ready_for_review", "signal": "EXPLICIT",
+                "review_round": 1, "executor": {"id": "dev", "cli": "opencode"},
+                "development": {"git": {"latest_commit": dev_commit}, "quality_metrics": {"tests_passed": True}}
+            }), encoding="utf-8")
+
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Force transition to CONSENSUS_CHECK with DEADLOCK (1 YES, 1 NO, 1 Timeout ABSTAIN)
+            reviews_dir = proj / ".macao" / ".reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            (reviews_dir / "cursor-rev.review.yml").write_text(yaml.safe_dump({
+                "version": "1.0", "checkpoint_ref": dev_commit, "review_round": 1,
+                "reviewer": {"id": "cursor-rev", "cli": "agent"},
+                "vote": "YES_APPROVE", "opinion": {"status": "APPROVED", "feedback": {"summary": "Approved"}}
+            }), encoding="utf-8")
+            (reviews_dir / "claude-rev.review.yml").write_text(yaml.safe_dump({
+                "version": "1.0", "checkpoint_ref": dev_commit, "review_round": 1,
+                "reviewer": {"id": "claude-rev", "cli": "claude-code"},
+                "vote": "NO_APPROVE", "opinion": {"status": "CHANGES_REQUESTED", "feedback": {"summary": "Need changes"}}
+            }), encoding="utf-8")
+
+            change_cons, vdata = orch.collect_and_evaluate_consensus(
+                t_id,
+                configured_reviewers=3,
+                timed_out_reviewers=["agy-rev"]
+            )
+            # DEADLOCK holds in CONSENSUS_CHECK without auto-transition
+            self.assertIsNone(change_cons)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            # Manual human override approval from CONSENSUS_CHECK HOLD
+            override_change = orch.resolve_override(
+                task_id=t_id,
+                choice="APPROVED",
+                note="Manual architectural override approved."
+            )
+            self.assertIsNotNone(override_change)
+            self.assertEqual(override_change.to_state, AgentState.MERGING)
+
+
+
+
+            # Operator signs off merge
+            orch.store.log_audit_event(t_id, "HUMAN_MERGE_APPROVED", {
+                "checkpoint_ref": dev_commit,
+                "signer": "lead-architect",
+                "note": "Architect signoff"
+            })
+
+            # Merge and complete
+            subprocess.run(["git", "checkout", "main"], cwd=str(proj), check=True, capture_output=True)
+            merge_ok, merge_msg, final_change = orch.execute_merge(t_id)
+            self.assertTrue(merge_ok, f"Merge failed: {merge_msg}")
+            self.assertEqual(final_change.to_state, AgentState.DONE)
+
+
     def test_live_workflow_runner_end_to_end_cycle(self):
         """Verify Phase 3 LiveWorkflowRunner executes complete lifecycle cleanly."""
         runner = LiveWorkflowRunner()

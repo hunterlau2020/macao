@@ -41,7 +41,7 @@
 2. **全流程 7 步微任务端到端闭环（一键运行）**：
    ```bash
    # 体验从任务创建 -> Checkpoint 门禁 -> Worktree 派发 -> 3方评审 -> Fast-Forward 合并 -> 产物归档
-   PYTHONPATH=src python3 -m macao.cli.main e2e-run
+   PYTHONPATH=src python3 -m macao.cli.main live-run
    ```
 3. **真实多 Agent 协作实操分步流程**：
    - 初始化配置：`macao init`
@@ -92,7 +92,8 @@ MACAO 采用 **PTY-Wrapper（伪终端封装模式）**：
 * **零侵入优势**：只要系统 `PATH` 中安装了原版 CLI，MACAO 开箱即用。
 * **输出自愈保障**：即使 LLM 输出夹带客套话或 Markdown 代码栅栏，MACAO 内置 **两级自愈机制（Two-Level Self-Healing）**：
   1. *Extractor 正则提取*：自动剥离 ANSI 颜色码与客套话，提取纯净 YAML；
-  2. *Draft-07 Schema 先验校验 & 会话内 Re-prompt 纠错*，确保落盘产物 100% 格式合规。
+  2. *Draft-07 Schema 先验校验与上下文对齐*，确保落盘产物 100% 格式合规。
+
 
 ---
 

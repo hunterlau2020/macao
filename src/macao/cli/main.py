@@ -340,10 +340,13 @@ def test_clis(target_cli: str):
 @cli.command("setup")
 @click.option("--executor", default="opencode", help="Default executor CLI")
 @click.option("--model", default="GLM 5.3 max", help="Executor model name")
-def setup_wizard(executor: str, model: str):
-    """Run interactive setup wizard to auto-detect environment and configure macao.yaml (Phase 3)."""
+@click.option("--force", is_flag=True, help="Force overwrite existing configuration")
+def setup_wizard(executor: str, model: str, force: bool):
+    """Run interactive setup wizard to auto-detect environment and configure macao.yaml."""
     from macao.cli.wizard import probe_available_clis, generate_smart_config, ensure_gitignore_isolation
     import yaml
+    import shutil
+    import time
 
     print_banner()
     console.print("[bold cyan]Running MACAO Smart Setup Wizard...[/bold cyan]\n")
@@ -354,10 +357,16 @@ def setup_wizard(executor: str, model: str):
         console.print(f"  • [bold white]{c['cli']}[/bold white] ({c['version']}) -> [dim]{c['binary']}[/dim]")
 
     project_root = Path(".").resolve()
+    cfg_file = project_root / "macao.yaml"
+    if cfg_file.exists() and not force:
+        backup_file = project_root / f"macao.yaml.bak.{int(time.time())}"
+        shutil.copy(cfg_file, backup_file)
+        console.print(f"[yellow]Notice: Existing macao.yaml backed up to {backup_file.name}[/yellow]")
+
     cfg = generate_smart_config(project_root, executor_cli=executor, executor_model=model)
 
     yaml_str = yaml.safe_dump(cfg, sort_keys=False)
-    Path("macao.yaml").write_text(yaml_str, encoding="utf-8")
+    cfg_file.write_text(yaml_str, encoding="utf-8")
     console.print(f"\n[bold green]✓ Generated valid and tailored macao.yaml configuration![/bold green]")
 
     isolated = ensure_gitignore_isolation(project_root)
@@ -390,24 +399,28 @@ def run_daemon(poll_interval: float, once: bool):
 
 
 @cli.command("live-run")
-def live_run():
-    """Run the complete Phase 3 live multi-agent collaboration cycle (L4 Ready)."""
+@click.option("--auto-signoff/--no-auto-signoff", default=True, help="Automatically record test signoff on approval")
+def live_run(auto_signoff: bool):
+    """Run the Phase 3 end-to-end multi-agent workflow collaboration cycle."""
     from macao.workflow.live_runner import LiveWorkflowRunner
     from macao.cli.ui import render_e2e_report
 
     print_banner()
-    console.print("[bold cyan]Starting MACAO Phase 3 Live Multi-Agent Collaboration Cycle...[/bold cyan]\n")
+    console.print("[bold cyan]Starting MACAO Phase 3 Multi-Agent Collaboration Cycle...[/bold cyan]\n")
 
     runner = LiveWorkflowRunner()
     try:
-        res = runner.run_live_cycle()
+        res = runner.run_live_cycle(auto_signoff=auto_signoff)
         render_e2e_report(res)
         if res.get("status") == "PASS":
-            console.print("[bold green]✓ Phase 3 Live Multi-Agent collaboration cycle completed with 100% success (Task State: DONE).[/bold green]\n")
+            console.print("[bold green]✓ Phase 3 Multi-Agent collaboration cycle completed with 100% success (Task State: DONE).[/bold green]\n")
+        elif res.get("status") == "WAITING_SIGNOFF":
+            console.print(f"[yellow]Task {res.get('task_id')} reached MERGING; awaiting manual operator signoff (macao merge approve).[/yellow]\n")
         else:
-            console.print("[bold red]✗ Phase 3 Live Multi-Agent collaboration cycle failed.[/bold red]\n")
+            console.print("[bold red]✗ Phase 3 Multi-Agent collaboration cycle failed.[/bold red]\n")
     finally:
         runner.cleanup()
+
 
 
 if __name__ == "__main__":
