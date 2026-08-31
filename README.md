@@ -173,6 +173,7 @@ stateDiagram-v2
 ## 📚 延伸文档 (Documentation)
 
 * **常见问题与架构设计指南**：[`docs/FAQ.md`](docs/FAQ.md)
+* **用例目录（UC-1–UC-10）**：[`docs/usercases/README.md`](docs/usercases/README.md)
 * **产品需求与规格说明书**：[`docs/MACAO_PRD_v2.md`](docs/MACAO_PRD_v2.md)
 * **评审专家委员会门禁状态**：[`docs/reviews/STATUS.md`](docs/reviews/STATUS.md)
 * **评审规范与方法论**：[`docs/MACAO_REVIEW_GUIDELINES.md`](docs/MACAO_REVIEW_GUIDELINES.md)
