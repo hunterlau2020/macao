@@ -363,7 +363,7 @@ def setup_wizard(executor: str, model: str, force: bool):
         shutil.copy(cfg_file, backup_file)
         console.print(f"[yellow]Notice: Existing macao.yaml backed up to {backup_file.name}[/yellow]")
 
-    cfg = generate_smart_config(project_root, executor_cli=executor, executor_model=model)
+    cfg = generate_smart_config(project_root, executor_cli=executor, executor_model=model, detected_clis=clis)
 
     yaml_str = yaml.safe_dump(cfg, sort_keys=False)
     cfg_file.write_text(yaml_str, encoding="utf-8")
@@ -378,15 +378,12 @@ def setup_wizard(executor: str, model: str, force: bool):
 
 @cli.command("daemon")
 @click.option("--poll-interval", default=2.0, help="Poll interval in seconds")
-@click.option("--once", is_flag=True, help="Run single scan pass and exit")
-def run_daemon(poll_interval: float, once: bool):
-    """Run the background orchestration daemon and deadline scanner (Phase 3)."""
+@click.option("--once", is_flag=True, help="Scan active tasks once and exit")
+def daemon_cmd(poll_interval: float, once: bool):
+    """Run background daemon scanner for timeout handling and automated transitions."""
     from macao.workflow.daemon import OrchestratorDaemon
 
-    print_banner()
-    console.print(f"[bold cyan]Starting MACAO Background Orchestration Daemon (poll={poll_interval}s)...[/bold cyan]\n")
-
-    daemon = OrchestratorDaemon(".", poll_interval_sec=poll_interval)
+    daemon = OrchestratorDaemon(project_root=".", poll_interval=poll_interval)
     if once:
         res = daemon.scan_once()
         console.print(f"[green]✓ Single scan completed: {res}[/green]")
@@ -413,7 +410,7 @@ def live_run(auto_signoff: bool):
         res = runner.run_live_cycle(auto_signoff=auto_signoff)
         render_e2e_report(res)
         if res.get("status") == "PASS":
-            console.print("[bold green]✓ Phase 3 Multi-Agent collaboration cycle completed with 100% success (Task State: DONE).[/bold green]\n")
+            console.print("[bold green]✓ Phase 3 Multi-Agent collaboration cycle completed (Task State: DONE).[/bold green]\n")
         elif res.get("status") == "WAITING_SIGNOFF":
             console.print(f"[yellow]Task {res.get('task_id')} reached MERGING; awaiting manual operator signoff (macao merge approve).[/yellow]\n")
         else:

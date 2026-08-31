@@ -13,12 +13,13 @@ from macao.workflow.orchestrator import Orchestrator
 class OrchestratorDaemon:
     """Monitors active task deadlines, handles background timeout degradation, and logs audit events."""
 
-    def __init__(self, project_root: str = ".", poll_interval_sec: float = 2.0):
+    def __init__(self, project_root: str = ".", poll_interval_sec: float = 2.0, poll_interval: Optional[float] = None):
         self.project_root = Path(project_root).resolve()
         self.store = StateStore(str(self.project_root / ".macao" / "state.db"))
         self.orchestrator = Orchestrator(str(self.project_root))
-        self.poll_interval = poll_interval_sec
+        self.poll_interval = poll_interval if poll_interval is not None else poll_interval_sec
         self.is_running = False
+
 
     def scan_once(self) -> Dict[str, Any]:
         """Executes a single pass over active tasks and evaluates timeout degradations."""

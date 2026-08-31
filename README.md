@@ -2,10 +2,12 @@
 
 > **标准化流程 + 显式产物信号驱动的生产级多 AI CLI 编排框架**
 
-[![CI Status](https://img.shields.io/badge/tests-75%2F75%20PASS-brightgreen.svg)](https://github.com/hunterlau2020/macao)
+[![CI Status](https://img.shields.io/badge/tests-84%2F84%20PASS-brightgreen.svg)](https://github.com/hunterlau2020/macao)
+
 [![Schema](https://img.shields.io/badge/schema-Draft--07%20Strict-blue.svg)](https://github.com/hunterlau2020/macao)
 [![Gate Status](https://img.shields.io/badge/status-L3%20SCENARIO--VERIFIED%20%2F%20PG--2-brightgreen.svg)](docs/reviews/STATUS.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 
 
 ---
@@ -69,11 +71,12 @@ macao live-run
 | `macao daemon` | 启动后台超时自动扫描守护进程（`--once` 支持单次扫描） |
 | `macao override resolve`| 当出现死锁、超时或未知异常时，人工一键裁决（`APPROVED` / `REWORK` / `RETRY_REVIEW` / `CANCEL`） |
 | `macao merge approve` | 最终合入主干前的人工签字放行确认（安全保守默认开启） |
-| `macao live-run` | 运行 Phase 3 生产级多 Agent 真实协同微任务全闭环演练 |
+| `macao live-run` | 运行 Phase 3 多 Agent 协同与工作区隔离全流程演练 |
 
 ---
 
 ## ⚙️ 配置文件规范 (`macao.yaml`)
+
 
 ```yaml
 project:
@@ -172,7 +175,8 @@ stateDiagram-v2
 * **常见问题与架构设计指南**：[`docs/FAQ.md`](docs/FAQ.md)
 * **产品需求与规格说明书**：[`docs/MACAO_PRD_v2.md`](docs/MACAO_PRD_v2.md)
 * **评审专家委员会门禁状态**：[`docs/reviews/STATUS.md`](docs/reviews/STATUS.md)
-* **评审规范与方法论**：[`docs/reference/MACAO_REVIEW_GUIDELINES.md`](docs/reference/MACAO_REVIEW_GUIDELINES.md)
+* **评审规范与方法论**：[`docs/MACAO_REVIEW_GUIDELINES.md`](docs/MACAO_REVIEW_GUIDELINES.md)
+
 
 ---
 

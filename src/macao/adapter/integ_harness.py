@@ -20,7 +20,10 @@ from macao.adapter.codex import CodexAdapter
 from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.cursor import CursorAgentAdapter
-from macao.utils.ansi import ANSI_ESCAPE_RE
+from macao.utils.ansi import ANSI_ESCAPE_RE, strip_ansi
+
+
+
 
 
 CLI_ADAPTER_MAP = {
@@ -111,12 +114,16 @@ def verify_single_cli_pty(cli_key: str, timeout_sec: float = 6.0) -> Dict[str, A
                 break
             time.sleep(0.05)
 
+        raw_logs = session.get_raw_logs()
         clean_logs = session.get_clean_logs()
-        ansi_stripped_ok = all(not bool(ANSI_ESCAPE_RE.search(line)) for line in clean_logs) if clean_logs else True
+        no_ansi_in_clean = all(not bool(ANSI_ESCAPE_RE.search(line)) for line in clean_logs) if clean_logs else True
+        raw_to_clean_match = (clean_logs == [strip_ansi(l) for l in raw_logs])
+        ansi_stripped_ok = no_ansi_in_clean and raw_to_clean_match
 
         # 4. Clean Kill and verify 0 zombie processes
         session.terminate()
         clean_kill_ok = True
+
 
         duration = round(time.time() - start_time, 2)
         return {

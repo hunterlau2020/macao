@@ -110,21 +110,58 @@ def ensure_gitignore_isolation(project_root: Path) -> bool:
 
 def generate_smart_config(
     project_root: Path,
-    executor_cli: str = "opencode",
-    executor_model: Optional[str] = "GLM 5.3 max",
-    reviewers: Optional[List[Dict[str, Any]]] = None
+    executor_cli: Optional[str] = None,
+    executor_model: Optional[str] = None,
+    reviewers: Optional[List[Dict[str, Any]]] = None,
+    detected_clis: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """Generates a valid, customized macao.yaml dictionary based on detected environment."""
     git_info = detect_git_context(project_root)
     ci_cmd = detect_ci_command(project_root)
     proj_name = project_root.name or "macao-project"
 
+    if detected_clis is None:
+        detected_clis = probe_available_clis()
+
+    detected_ids = [c["id"] for c in detected_clis] if detected_clis else []
+
+    # Choose Executor from detected CLIs if not explicitly specified
+    if not executor_cli:
+        if "opencode" in detected_ids:
+            executor_cli = "opencode"
+            executor_model = executor_model or "GLM 5.3 max"
+        elif "claude-code" in detected_ids or "claude" in detected_ids:
+            executor_cli = "claude-code"
+            executor_model = executor_model or "claude-3-7-sonnet"
+        elif "codex" in detected_ids:
+            executor_cli = "codex"
+            executor_model = executor_model or "o3-mini"
+        elif detected_ids:
+            executor_cli = detected_ids[0]
+            executor_model = executor_model or "default"
+        else:
+            executor_cli = "opencode"
+            executor_model = executor_model or "GLM 5.3 max"
+
     if not reviewers:
-        reviewers = [
-            {"id": "cursor-rev", "cli": "agent", "adapter": "pty-wrapper", "model": "claude-3-5-sonnet"},
-            {"id": "claude-rev", "cli": "claude-code", "adapter": "claude-hook", "model": "claude-3-7-sonnet"},
-            {"id": "agy-rev", "cli": "agy", "adapter": "pty-wrapper", "model": "gemini-2.0-pro"}
-        ]
+        # Build reviewers from remaining detected CLIs if available
+        available_rev_candidates = [c for c in detected_ids if c != executor_cli]
+        if len(available_rev_candidates) >= 2:
+            reviewers = []
+            for r_id in available_rev_candidates[:3]:
+                cli_val = "claude-code" if r_id in ("claude", "claude-code") else ("agent" if r_id == "cursor" else r_id)
+                adapter_val = "claude-hook" if cli_val in ("claude", "claude-code") else "pty-wrapper"
+                reviewers.append({
+                    "id": f"{r_id}-rev",
+                    "cli": cli_val,
+                    "adapter": adapter_val
+                })
+        else:
+            reviewers = [
+                {"id": "cursor-rev", "cli": "agent", "adapter": "pty-wrapper", "model": "claude-3-5-sonnet"},
+                {"id": "claude-rev", "cli": "claude-code", "adapter": "claude-hook", "model": "claude-3-7-sonnet"},
+                {"id": "agy-rev", "cli": "agy", "adapter": "pty-wrapper", "model": "gemini-2.0-pro"}
+            ]
 
     exec_adapter = "claude-hook" if executor_cli in ("claude", "claude-code") else "pty-wrapper"
     executor_dict = {
@@ -157,7 +194,6 @@ def generate_smart_config(
             "max_rework_rounds": 3,
             "review_strategy": "delta_plus_focus"
         },
-
         "merge": {
             "strategy": "ff_only",
             "ci_gate_command": ci_cmd,
@@ -172,7 +208,7 @@ def generate_smart_config(
             "consensus_check": "1m"
         },
         "security": {
-            "allowed_clis": ["claude-code", "claude", "codex", "opencode", "agy", "antigravity", "agent", "cursor", "kimi"],
+            "allowed_clis": ["claude-code", "claude", "codex", "opencode", "agy", "antigravity", "agent", "cursor", "kimi", "mock-cli"],
             "send_terminal_logs_to_reviewers": False,
             "secrets_masking": True
         }

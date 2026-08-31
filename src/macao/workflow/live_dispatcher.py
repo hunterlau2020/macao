@@ -75,6 +75,17 @@ class ReviewExtractor:
                 if not isinstance(opinion, dict) and not top_vote:
                     continue
 
+                # Ensure candidate has review-like context (reviewer, opinion, or version/manifest structure)
+                has_review_ctx = (
+                    isinstance(parsed.get("reviewer"), dict) or
+                    isinstance(opinion, dict) or
+                    "version" in parsed or
+                    "review_round" in parsed or
+                    "checkpoint_ref" in parsed
+                )
+                if not has_review_ctx:
+                    continue
+
                 if not isinstance(opinion, dict):
                     opinion = {}
                     parsed["opinion"] = opinion
@@ -87,19 +98,24 @@ class ReviewExtractor:
                     continue
 
                 # Check for explicit contradictions between status and vote (Fail-Closed)
+                has_contradiction = False
                 if raw_status and raw_vote:
                     if raw_status == "APPROVED" and raw_vote != "YES_APPROVE":
-                        continue
+                        has_contradiction = True
                     elif raw_status in ("CHANGES_REQUESTED", "REJECTED") and raw_vote != "NO_APPROVE":
-                        continue
+                        has_contradiction = True
                     elif raw_status in ("ABSTAINED", "ABSTAIN") and raw_vote != "ABSTAIN":
-                        continue
+                        has_contradiction = True
                     elif raw_vote == "YES_APPROVE" and raw_status != "APPROVED":
-                        continue
+                        has_contradiction = True
                     elif raw_vote == "NO_APPROVE" and raw_status not in ("CHANGES_REQUESTED", "REJECTED"):
-                        continue
+                        has_contradiction = True
                     elif raw_vote == "ABSTAIN" and raw_status not in ("ABSTAINED", "ABSTAIN"):
-                        continue
+                        has_contradiction = True
+
+                if has_contradiction:
+                    # Contradictory vote and status must fail-closed immediately (P1-4 / Codex)
+                    return False, None, f"Contradictory vote ('{raw_vote}') and status ('{raw_status}') detected (Fail-closed)"
 
                 # Harmonize explicit status and vote
                 if raw_status:
@@ -133,7 +149,8 @@ class ReviewExtractor:
                     continue
                 if parsed.get("checkpoint_ref"):
                     ref_str = str(parsed.get("checkpoint_ref")).strip()
-                    if ref_str != checkpoint_ref and not checkpoint_ref.startswith(ref_str) and not ref_str.startswith(checkpoint_ref):
+                    # Enforce minimum SHA prefix length of 7 chars (git short SHA) and single-direction match
+                    if len(ref_str) < 7 or not checkpoint_ref.startswith(ref_str):
                         continue
                 if parsed.get("review_round") is not None and int(parsed.get("review_round")) != review_round:
                     continue
@@ -168,18 +185,39 @@ class LiveAgentDispatcher:
     def __init__(self, project_root: str = "."):
         self.project_root = Path(project_root).resolve()
         self.git = GitManager(str(self.project_root))
-        self.active_sessions: Dict[str, Any] = {}
 
-    def get_adapter_for_reviewer(self, reviewer_cfg: Dict[str, Any]) -> AgentAdapter:
-        cli_type = reviewer_cfg.get("cli", "").lower()
-        adapter_cls = CLI_ADAPTER_REGISTRY.get(cli_type)
-        if not adapter_cls:
-            raise ValueError(f"Unsupported or unconfigured reviewer CLI '{cli_type}'. Allowed: {list(CLI_ADAPTER_REGISTRY.keys())}")
-        agent_id = reviewer_cfg.get("id", cli_type)
-        if adapter_cls == MockAgentAdapter:
-            return MockAgentAdapter(agent_id=agent_id, cli_name=cli_type, config=reviewer_cfg)
-        return adapter_cls(agent_id=agent_id, config=reviewer_cfg)
+    def get_adapter_for_reviewer(self, reviewer_cfg: Dict[str, Any]) -> Any:
+        """Instantiates appropriate agent adapter based on reviewer configuration."""
+        cli_type = reviewer_cfg.get("cli") or reviewer_cfg.get("id") or ""
+        adapter_type = reviewer_cfg.get("adapter", "pty-wrapper")
+        worktree_path = reviewer_cfg.get("isolated_worktree_path", str(self.project_root))
+        agent_id = reviewer_cfg.get("id", "reviewer")
+        model = reviewer_cfg.get("model")
 
+        if cli_type == "mock-cli":
+            from macao.adapter.mock import MockAgentAdapter
+            return MockAgentAdapter(agent_id=agent_id, cli_name="mock-cli", role="reviewer", project_root=worktree_path)
+
+        if cli_type in ("claude", "claude-code"):
+            from macao.adapter.claude import ClaudeCodeAdapter
+            return ClaudeCodeAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+        elif cli_type == "codex":
+            from macao.adapter.codex import CodexAdapter
+            return CodexAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+        elif cli_type == "opencode":
+            from macao.adapter.opencode import OpenCodeAdapter
+            return OpenCodeAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+        elif cli_type in ("agy", "antigravity"):
+            from macao.adapter.antigravity import AntigravityAdapter
+            return AntigravityAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+        elif cli_type in ("cursor", "agent"):
+            from macao.adapter.cursor import CursorAdapter
+            return CursorAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+        elif cli_type == "kimi":
+            from macao.adapter.kimi import KimiAdapter
+            return KimiAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+        else:
+            raise ValueError(f"Unknown or unsupported CLI reviewer type: '{cli_type}' (Fail-closed)")
 
     def dispatch_review_in_worktree(
         self,
@@ -191,11 +229,11 @@ class LiveAgentDispatcher:
         timeout_sec: float = 300.0
     ) -> Dict[str, Any]:
         """
-        1. Creates isolated Git Worktree at .macao/worktrees/<agent_id>/<task_id>/r<round>
+        1. Reuses or creates isolated Git Worktree at .macao/worktrees/<agent_id>/<task_id>/r<round>
         2. Spawns real CLI session in isolated worktree
         3. Injects review prompt
         4. Extracts and validates .review.yml
-        5. Atomically removes worktree
+        5. Atomically cleans up created worktree
         """
         agent_id = reviewer_cfg.get("id", "reviewer")
         worktree_path = self.project_root / ".macao" / "worktrees" / agent_id / task_id / f"r{review_round}"
@@ -209,10 +247,14 @@ class LiveAgentDispatcher:
         start_time = time.time()
 
         try:
-            # 1. Create worktree
-            worktree_dir = self.git.create_isolated_worktree(agent_id, task_id, review_round, checkpoint_ref)
-            created_worktree = True
-            worktree_path = worktree_dir
+            # 1. Reuse existing worktree from Orchestrator transactional dispatch or create fresh
+            if not worktree_path.exists():
+                worktree_dir = self.git.create_isolated_worktree(agent_id, task_id, review_round, checkpoint_ref)
+                created_worktree = True
+                worktree_path = worktree_dir
+            else:
+                created_worktree = False
+
 
             # 2. Prepare review prompt and payload
             payload = {

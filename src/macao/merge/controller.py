@@ -126,17 +126,20 @@ class MergeController:
                     self.git._run("reset", "--hard", pre_merge_head)
                 return False, f"Git push to {remote_name}/{target_branch} failed: {err or out}", None
 
-            # Verify remote SHA equals checkpoint_ref (Fail-closed)
-            code_ls, out_ls, err_ls = self.git._run("ls-remote", remote_name, f"refs/heads/{target_branch}")
-            if code_ls != 0 or not out_ls.strip():
-                if pre_merge_head:
-                    self.git._run("reset", "--hard", pre_merge_head)
-                return False, f"Failed to verify remote ref via ls-remote: {err_ls or 'empty output'} (Fail-closed)", None
+            # Verify remote SHA equals checkpoint_ref with bounded retries (Fail-closed)
+            verified_remote = False
+            remote_sha = ""
+            for _ in range(3):
+                code_ls, out_ls, err_ls = self.git._run("ls-remote", remote_name, f"refs/heads/{target_branch}")
+                if code_ls == 0 and out_ls.strip():
+                    remote_sha = out_ls.strip().split()[0]
+                    if remote_sha == full_checkpoint_ref:
+                        verified_remote = True
+                        break
+                time.sleep(0.2)
 
-            remote_sha = out_ls.strip().split()[0]
-            if remote_sha != full_checkpoint_ref:
-                if pre_merge_head:
-                    self.git._run("reset", "--hard", pre_merge_head)
-                return False, f"Remote SHA mismatch: remote {remote_sha} != local {full_checkpoint_ref}", None
+            if not verified_remote:
+                # Do NOT perform destructive local reset since push already succeeded on remote
+                return False, f"Remote SHA verification failed after push (remote: '{remote_sha}', expected: '{full_checkpoint_ref}'). Manual reconciliation required.", None
 
         return True, "Merge pipeline completed successfully", head_commit

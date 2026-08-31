@@ -23,10 +23,13 @@ class MockAgentAdapter(AgentAdapter):
         cli_name: str = "mock-cli",
         role: str = "reviewer", # executor | reviewer
         config: Optional[Dict[str, Any]] = None,
-        behavior_fn: Optional[Callable[["MockAgentAdapter", Dict[str, Any]], None]] = None
+        behavior_fn: Optional[Callable[["MockAgentAdapter", Dict[str, Any]], None]] = None,
+        project_root: Optional[str] = None
     ):
         super().__init__(agent_id, cli_name, config)
         self.role = role
+        self.project_root = project_root
+
         self.behavior_fn = behavior_fn
         self.injected_tasks: List[Dict[str, Any]] = []
         self.logs: List[str] = []

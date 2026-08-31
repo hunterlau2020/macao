@@ -1,10 +1,13 @@
 """Unit and Integration tests for Phase 3 Components (LiveDispatcher, Daemon, Wizard, LiveRunner)."""
 
 import os
+import shutil
+import subprocess
 import unittest
 import tempfile
 import yaml
 from pathlib import Path
+
 
 from macao.core.types import AgentState, Decision, Vote
 from macao.core.schema import SchemaValidator, validate_review_manifest
@@ -438,7 +441,6 @@ opinion:
             self.assertTrue(merge_ok, f"Merge failed: {merge_msg}")
             self.assertEqual(final_change.to_state, AgentState.DONE)
 
-
     def test_live_workflow_runner_end_to_end_cycle(self):
         """Verify Phase 3 LiveWorkflowRunner executes complete lifecycle cleanly."""
         runner = LiveWorkflowRunner()
@@ -450,6 +452,235 @@ opinion:
             self.assertGreater(res["archived_count"], 0)
         finally:
             runner.cleanup()
+
+    def test_review_extractor_rejects_contradictory_final_block_even_if_first_valid(self):
+
+        """Codex P1-4: Verify ReviewExtractor strictly fails closed if the final block has a contradiction, even if an earlier block was valid."""
+        log_with_valid_then_contradictory = """
+Here is an initial draft:
+```yaml
+version: "1.0"
+review_round: 1
+checkpoint_ref: "365185eb24650b7a1c2d3e4f5a6b7c8d9e0f1a2b"
+reviewer:
+  id: "claude-rev"
+vote: "YES_APPROVE"
+opinion:
+  status: "APPROVED"
+```
+
+Wait, after checking the test failures, here is my final decision:
+```yaml
+version: "1.0"
+review_round: 1
+checkpoint_ref: "365185eb24650b7a1c2d3e4f5a6b7c8d9e0f1a2b"
+reviewer:
+  id: "claude-rev"
+vote: "NO_APPROVE"
+opinion:
+  status: "APPROVED"
+```
+"""
+        ok, res, err = ReviewExtractor.extract_and_validate(
+            log_with_valid_then_contradictory,
+            agent_id="claude-rev",
+            checkpoint_ref="365185eb24650b7a1c2d3e4f5a6b7c8d9e0f1a2b",
+            review_round=1
+        )
+        self.assertFalse(ok)
+        self.assertIsNone(res)
+        self.assertIn("Contradictory vote", str(err))
+
+    def test_review_extractor_rejects_short_and_invalid_checkpoint_prefix(self):
+        """Claude P2-F-1: Verify ReviewExtractor rejects short (<7 chars) or non-matching checkpoint prefix."""
+        full_ref = "365185eb24650b7a1c2d3e4f5a6b7c8d9e0f1a2b"
+
+        # 1 char prefix: Rejected
+        log_1_char = f'vote: YES_APPROVE\nopinion:\n  status: APPROVED\ncheckpoint_ref: "3"\n'
+        ok, _, _ = ReviewExtractor.extract_and_validate(log_1_char, "claude-rev", full_ref, 1)
+        self.assertFalse(ok)
+
+        # 2 char prefix: Rejected
+        log_2_char = f'vote: YES_APPROVE\nopinion:\n  status: APPROVED\ncheckpoint_ref: "36"\n'
+        ok, _, _ = ReviewExtractor.extract_and_validate(log_2_char, "claude-rev", full_ref, 1)
+        self.assertFalse(ok)
+
+        # Mismatched prefix: Rejected
+        log_mismatch = f'vote: YES_APPROVE\nopinion:\n  status: APPROVED\ncheckpoint_ref: "deadbeef"\n'
+        ok, _, _ = ReviewExtractor.extract_and_validate(log_mismatch, "claude-rev", full_ref, 1)
+        self.assertFalse(ok)
+
+        # Valid 8-char Git short SHA prefix: Accepted
+        log_valid_short = f'vote: YES_APPROVE\nopinion:\n  status: APPROVED\ncheckpoint_ref: "365185eb"\n'
+        ok, doc, _ = ReviewExtractor.extract_and_validate(log_valid_short, "claude-rev", full_ref, 1)
+        self.assertTrue(ok)
+        self.assertEqual(doc["checkpoint_ref"], full_ref)
+
+    def test_cli_manual_takeover_ops_walkthrough(self):
+        """Claude §六 R1 / Grok P1-1: Verify full CLI blackbox manual takeover walkthrough via subprocess."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # 1. Initialize git repository
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Tester"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@macao.dev"], cwd=tmpdir, check=True)
+            (Path(tmpdir) / "README.md").write_text("# OPS Test\n")
+            subprocess.run(["git", "add", "README.md"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            # 2. Write valid macao.yaml with 0s reviewer timeout
+            cfg_content = f"""project:
+  name: ops-project
+  repository:
+    workspace_path: .
+    remote_name: origin
+    default_branch: main
+team:
+
+
+  executor:
+    id: opencode-dev
+    cli: opencode
+    adapter: pty-wrapper
+  reviewers:
+    - id: rev-1
+      cli: mock-cli
+      adapter: pty-wrapper
+    - id: rev-2
+      cli: mock-cli
+      adapter: pty-wrapper
+    - id: rev-3
+      cli: mock-cli
+      adapter: pty-wrapper
+
+policy:
+  consensus_rule: 2/3_majority
+  min_effective_votes: 2
+  max_rework_rounds: 3
+merge:
+  strategy: ff_only
+  require_human_signoff: true
+timeouts:
+  development: 2h
+  checkpoint_validation: 1m
+  review_request: 30m
+  per_reviewer: 0s
+  consensus_check: 1m
+security:
+  allowed_clis:
+    - opencode
+    - mock-cli
+"""
+            (Path(tmpdir) / "macao.yaml").write_text(cfg_content, encoding="utf-8")
+
+            # 3. Create task via Orchestrator / state store in repo
+            from macao.workflow.orchestrator import Orchestrator
+            orch = Orchestrator(tmpdir)
+            task = orch.start_task("OPS Task", "Testing manual takeover CLI walkthrough")
+            t_id = task["task_id"]
+
+            # Development commit on branch
+            subprocess.run(["git", "checkout", "-b", "feature/ops"], cwd=tmpdir, check=True, capture_output=True)
+            (Path(tmpdir) / "ops.txt").write_text("ops data\n")
+            subprocess.run(["git", "add", "ops.txt"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "feat: ops commit"], cwd=tmpdir, check=True)
+            dev_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
+
+            (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
+            (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: opencode-dev
+  cli: opencode
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{dev_commit}"
+""", encoding="utf-8")
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Submit 1 approval and 1 rejection; reviewer 3 does not submit (times out)
+            rev_dir = Path(tmpdir) / ".macao" / ".reviews"
+            rev_dir.mkdir(parents=True, exist_ok=True)
+            (rev_dir / "rev-1.review.yml").write_text(f"""version: "1.0"
+review_round: 1
+checkpoint_ref: "{dev_commit}"
+reviewer:
+  id: rev-1
+vote: YES_APPROVE
+opinion:
+  status: APPROVED
+""", encoding="utf-8")
+
+            (rev_dir / "rev-2.review.yml").write_text(f"""version: "1.0"
+review_round: 1
+checkpoint_ref: "{dev_commit}"
+reviewer:
+  id: rev-2
+vote: NO_APPROVE
+opinion:
+  status: CHANGES_REQUESTED
+""", encoding="utf-8")
+
+            env = dict(os.environ)
+            src_dir = str(Path(__file__).resolve().parent.parent / "src")
+            env["PYTHONPATH"] = src_dir + (f":{env['PYTHONPATH']}" if "PYTHONPATH" in env else "")
+
+
+            # 4. CLI: Run daemon --once (Detects timeout, evaluates 1 Yes + 1 No + 1 Timeout Abstain -> DEADLOCK HOLD in CONSENSUS_CHECK)
+            res_daemon = subprocess.run(
+                ["python3", "-m", "macao.cli.main", "daemon", "--once"],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                env=env
+            )
+            self.assertEqual(res_daemon.returncode, 0, f"daemon --once failed: {res_daemon.stderr}")
+
+            # 5. CLI: Check status shows CONSENSUS_CHECK
+            res_status = subprocess.run(
+                ["python3", "-m", "macao.cli.main", "status"],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                env=env
+            )
+            self.assertEqual(res_status.returncode, 0)
+            self.assertIn("CONSENSUS_CHECK", res_status.stdout)
+
+            # 6. CLI: Run override resolve --choice APPROVED
+            res_override = subprocess.run(
+                ["python3", "-m", "macao.cli.main", "override", "resolve", "--choice", "APPROVED", "--note", "Resolved by lead operator"],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                env=env
+            )
+            self.assertEqual(res_override.returncode, 0, f"override resolve failed: {res_override.stderr}")
+            self.assertIn("Override resolved successfully", res_override.stdout)
+
+            # 7. CLI: Run merge approve
+            res_approve = subprocess.run(
+                ["python3", "-m", "macao.cli.main", "merge", "approve", "--note", "Lead operator signed off merge"],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                env=env
+            )
+            self.assertEqual(res_approve.returncode, 0, f"merge approve failed: {res_approve.stderr}")
+            self.assertIn("Merge signoff recorded", res_approve.stdout)
+
+            # 8. Verify final state transitioned cleanly
+            final_task = orch.store.get_task(t_id)
+            self.assertEqual(final_task["state"], AgentState.MERGING.value)
+
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == "__main__":

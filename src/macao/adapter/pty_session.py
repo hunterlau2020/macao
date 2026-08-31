@@ -28,6 +28,7 @@ class PTYSession:
         self.process: Optional[subprocess.Popen] = None
         self.master_fd: Optional[int] = None
         self.logs: List[str] = []
+        self.raw_logs: List[str] = []
         self._reader_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -86,14 +87,20 @@ class PTYSession:
                     lines = buffer.split("\n")
                     buffer = lines[-1]
                     for line in lines[:-1]:
-                        clean_line = strip_ansi(line.strip("\r"))
+                        raw_line = line.strip("\r")
+                        if raw_line:
+                            self.raw_logs.append(raw_line)
+                        clean_line = strip_ansi(raw_line)
                         if clean_line:
                             self.logs.append(clean_line)
             except (OSError, ValueError):
                 break
 
         if buffer:
-            clean_line = strip_ansi(buffer.strip("\r"))
+            raw_line = buffer.strip("\r")
+            if raw_line:
+                self.raw_logs.append(raw_line)
+            clean_line = strip_ansi(raw_line)
             if clean_line:
                 self.logs.append(clean_line)
 
@@ -117,6 +124,13 @@ class PTYSession:
         if tail_lines is not None and tail_lines > 0:
             return list(self.logs)[-tail_lines:]
         return list(self.logs)
+
+    def get_raw_logs(self, tail_lines: Optional[int] = None) -> List[str]:
+        """Returns captured raw output logs, optionally tailed."""
+        if tail_lines is not None and tail_lines > 0:
+            return list(self.raw_logs)[-tail_lines:]
+        return list(self.raw_logs)
+
 
     def terminate(self, timeout_sec: float = 3.0) -> None:
         """Terminates process group cleanly using SIGTERM then SIGKILL (PRD §12.6)."""
