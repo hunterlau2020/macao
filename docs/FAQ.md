@@ -286,29 +286,30 @@ team:
 
 编排器只核 yml Schema 与 sha256 是否对得上文件字节，不解析 markdown。对不上 → 该票无效。
 
-### Q15: `vote_result.json` 要不要收录各模型的修改意见？计票如何加权？
+### Q15: `vote_result.json` 要不要收录各模型的修改意见？计票如何加权？意见采纳如何流转？
 
-**答**：要。一份评审结论 = **结论**（是否通过）+ **证据**（问题/建议列表），见 GUIDELINES。`vote_result` 收的是摘录与索引，不是全文。
+**答**：要收录索引，但机器裁决与内容处置彻底物理分离。
 
-作者拆开（PRODUCT-FACTS F-13：执行者汇总，不写 `decision`）：
+一份评审结论 = **结论**（是否通过机器票）+ **证据**（问题/建议列表），见 GUIDELINES。
 
-| 段 | 谁写 | 内容 | 编排器只做 |
+在 MACAO v2.5 规范下，**机器裁决与内容处置分属两个独立的不可变产物**，彻底解决并发写与双真源问题：
+
+| 产物 | 谁写 | 内容 | 编排器（Orchestrator）行为 |
 |---|---|---|---|
-| **机器段** `votes` + `decision` | 票从各 `.review.yml` **原样摘录**；`decision` 由加权公式算出 | 各专家是否通过、权重、总体是否通过 | 摘录、验齐、跑公式、落盘。**禁止**执行者手填或改 `decision` |
-| **原始目录** `issues_index` | 编排器从各信封问题索引 **原样拼接**（`id` 带 `reviewer_id`） | 审计用：谁写了哪条、一行标题、正文 path+sha256 | 不合并「相同问题」 |
-| **汇总段** `issues_summary` | **执行者** | 标题清单、正文索引、该问题被哪些专家发现、严重性、**是否采纳** | 只核：引用的 `id` 都在 `issues_index` 里、每条有采纳取值、未改机器段 |
+| **机器裁决** `.macao/vote_result.json` | **Orchestrator** 单一写入 | 策略快照 `policy_snapshot`、票面 `votes`、纯整数加权 `vote_breakdown`、原始问题索引 `issues_index`、机器决策 `decision`、`requires_disposition: boolean` | 校验 manifest、原样提取票面与问题、执行纯整数公式、即时落盘并归档。**禁止**人工或执行者篡改此文件 |
+| **意见处置** `.macao/.dispositions/r<round>/executor.disposition.yml` + `docs/reviews/*-disposition-*.md` | **执行者（Executor）** 单一写入 | 针对本轮全部 issue 的逐项处置（`ADOPTED` / `DEFERRED` / `REJECTED` / `NEEDS_ADMIN` / `EXEMPTED_BY_ADMIN`）、显式 `requires_new_checkpoint: boolean`、理由锚点与全文哈希 | 校验：精确覆盖全部 issue 一项不漏、必填布尔值；全为 false 进 `MERGING`（E4），任一为 true 进 `REWORK`（E5a） |
 
-「该问题有哪几个专家发现」是语义归并，必须由接模型的执行者做，不能让编排器猜是不是同一问题。
+**加权共识机制（`weighted_2/3_v1`）**：
+- 权重来自 `macao.yaml` 中管理员预先配置的 `vote_weight`（默认 1），严禁系统根据字数、问题数或模型自信度自动调权；
+- 纯整数五重安全门禁：
+  1. **配置期独裁帽**：$\forall i, 3 \times w_i < 2 \times W$（单席位达 2/3 拒绝启动）；
+  2. **席位法定人数**：$E_N \ge \lceil 2N/3 \rceil$；
+  3. **权重法定人数**：$E_W \ge \lceil 2W/3 \rceil$（分母为配置总权重 $W$）；
+  4. **胜方权重阈值**：$3 \times W_{win} \ge 2 \times E_W$；
+  5. **胜方最少席位**：胜方席位数 $\ge 2$（禁止单席位独裁裁决）。
+- 任何未达标情况均安全进入 `DEADLOCK` 并 HOLD，请求管理员 `macao override resolve` 裁决。
 
-任务流水线的「是否通过」= 信封 `vote`（`YES_APPROVE` / `NO_APPROVE` / `ABSTAIN`），不是 GUIDELINES 的 L1–L4（L1–L4 是对本仓库认证申请的级别，写入评审全文，不参与加权公式）。
-
-权重解决「细致程度不同、一票一刀切太粗」，但必须是 `macao.yaml` 里管理员写死的 `vote_weight`（默认 1）。禁止按字数/问题条数自动加权。
-
-加权仍是确定性函数：有效权重 = 未弃权席位权重之和；赞成或反对加权占比 ≥ 2/3 才出 `APPROVED` / `REWORK_REQUIRED`，否则问管理员。另有两道闸：**席位法定人数** `⌈2N/3⌉` 仍保留；**独裁帽**——任一席位权重 / 总权重必须 &lt; 2/3，否则拒绝启动。权重只作用在总票上，单条改不改仍是执行者汇总段的工作。
-
-现 Schema 中由编排器填写的 `next_step.issues_to_fix` 正文应废止；采纳字段改挂执行者汇总段（实现前须回写 PRD / Schema）。
-
-管理员原话（fact + 锚点）见 [`docs/usercases/PRODUCT-FACTS.md`](usercases/PRODUCT-FACTS.md)。
+管理员事实锚点见 [`docs/usercases/PRODUCT-FACTS.md`](usercases/PRODUCT-FACTS.md)（F-1 ～ F-22）。
 
 ### Q16: 评审方法、留痕和人工接管分别在哪？
 

@@ -4,16 +4,18 @@
 >
 > 文中产品暂定名 "A" 已正式定名为 **MACAO（Multi-Agent CLI Agent Orchestrator）**。本文档为 v1.0 高阶架构设计，以下内容已在 v2.0（`MACAO_PRD_v2.md`，权威基准）中更新：
 >
-> | 本文档（v1.0） | v2.0 调整 |
-> |---|---|
-> | 状态识别第一层 = Hook/API 事件 | 改为 `.dev.yml` / `.review.yml` 显式产物信号；Layer 2/3 仅作辅助与诊断 |
-> | 第一阶段 4 CLI（含 OpenCode），架构含远程 Agent | MVP 收敛为单机 3 CLI：Claude Code（Executor）+ Codex / Kimi（Reviewers） |
-> | AEP 消息：`TASK_ASSIGN` / `REVIEW_RESULT` 等 | 统一为 7 种消息类型：`DEVELOPMENT_STARTED` / `REVIEW_RESPONSE` 等（见 PRD §2.4） |
-> | LLM Judge 输入 last 200 logs | 扩展为最后 300 行 Terminal Log + 全部 .yml 产物（见 PRD §3.1） |
-> | 投票规则未明确 | 明确 2/3 多数投票 + `vote_result.json` 记录（见 PRD §2.3） |
-> | 人工接管仅提概念 | 明确 6 个 HUMAN_OVERRIDE 触发条件（见 PRD §6.1） |
+> | 本文档（v1.0） | v2.5 调整（`MACAO_PRD_v2.md` 权威基准） |
+|---|---|
+| 状态识别第一层 = Hook/API 事件 | 改为 `.dev.yml` / `.review.yml` / `review_disposition` 显式产物信号；Layer 2/3 仅作辅助与诊断，角色状态为 `role_view` 只读投影 |
+| 第一阶段 4 CLI（含 OpenCode），架构含远程 Agent | MVP 收敛为单机 CLI 编排；支持多 CLI 异构审查与加权配置 |
+| AEP 消息：`TASK_ASSIGN` / `REVIEW_RESULT` 等（正文内联） | 升级为 AEP/1.1 共 8 种消息类型（增 `DISPOSITION_REQUIRED`），定义 16 KiB 字节预算，长正文全部改为 `path + sha256` 引用传递（见 PRD §2.4） |
+| LLM Judge 输入 last 200 logs 参与状态决策 | AI 仅在进程外生成 `diagnostic_only` 诊断分析，无状态写接口；状态推进与动态接管由确定性证据或管理员确认（见 PRD §3.1 / §14） |
+| 投票规则未明确 | 升级为 `weighted_2/3_v1` 加权共识五重纯整数门禁与防单席位独裁规则，不可变 `vote_result.json` 由 Orchestrator 单一写入（见 PRD §2.3） |
+| 意见采纳与返工未定义 | 增加独立 `review_disposition` 产物（Executor 单一写入），支持 `BLOCKING / ADVISORY` 分级与显式 `requires_new_checkpoint` 布尔守卫 |
+| 评审产物随源码提交 | 建立独立 Git Evidence Ref（`refs/macao/evidence/...`），实现 source HEAD 与评审证据分离（见 PRD §5.4） |
+| 人工接管仅提概念 | 明确 DEADLOCK、超时、门禁失败、`NEEDS_ADMIN` 与 E7 豁免等完整接管闭环（见 PRD §6.1） |
 >
-> **文档体系**：本文档（v1.0 基线）→ `MACAO_PRD_v2.md`（v2.0 主文档）→ `EXECUTIVE_SUMMARY.md`（执行摘要）/ `IMPROVEMENT_SUMMARY.md`（改进对比）
+> **文档体系**：本文档（v1.0 历史基线）→ `MACAO_PRD_v2.md`（**v2.5 权威基准**）→ `EXECUTIVE_SUMMARY.md`（执行摘要）/ `IMPROVEMENT_SUMMARY.md`（改进对比）
 
 ## 1. 产品定位
 

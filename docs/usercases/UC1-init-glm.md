@@ -93,15 +93,14 @@
 
 编排器只校验 yml Schema 与 sha256 是否对得上文件字节，**不解析 md 语义**。sha256 对不上 → 该 manifest 无效票（fail-closed）。
 
-**（2）`vote_result.json`：总票 + 问题目录 + 执行者汇总段（编排器不写「采纳」，采纳由执行者写入本文件汇总段）**
+**（2）`vote_result.json` 与独立 `review_disposition`（机器裁决与内容处置物理分离）**
 
 一份评审结论 = 一张总票 + 若干问题点；不同模型的问题点**默认视为不同条目**（id 必须带 `reviewer_id` 前缀，禁止编排器做语义去重）。
 
-`vote_result` 建议三段：
+在 v2.5 规范下，机器裁决与内容处置分为两个独立产物：
 
-1. **计票**（编排器算）：各席位 `vote`、`weight`、加权合计、`decision`
-2. **问题目录 `issues_index`**（编排器**复制**自各 `.review.yml` 的 `issues[]`，不改写 description）：`{id, reviewer, severity, summary, full_document, sha256}`。这回答「要不要体现在 vote_result」——**要目录，不要正文、不要合并**；编排器**不标采纳**
-3. **汇总段 `issues_summary`**（**执行者写**，PRODUCT-FACTS F-13/F-16）：归并「同一问题被哪些专家发现」（`found_by[]`）、标题清单、正文索引、**是否采纳**——写入本文件，不是另立文件；执行者不写、不改 `decision` 与机器段（见 UC-6 b）
+1. **机器裁决 `vote_result.json`**（编排器单写、不可变）：各席位 `vote`、`weight`、纯整数加权 `vote_breakdown`、原始目录 `issues_index`（原样复制自各 `.review.yml`）、`decision` 与 `requires_disposition: boolean`。编排器**不标采纳**。
+2. **意见处置 `review_disposition`**（**执行者写**，独立按 round 保存于 `.macao/.dispositions/r<round>/executor.disposition.yml` 与 `docs/reviews/`）：逐项给出采纳决定（`ADOPTED / DEFERRED / REJECTED / NEEDS_ADMIN / EXEMPTED_BY_ADMIN`）、必填布尔 `requires_new_checkpoint`、理由锚点与全文哈希。执行者不写、不改 `vote_result.json`（见 UC-6 b）。
 
 现行 `summary.critical_issues` 若保留，只能是各 manifest 里已声明计数的**求和**，禁止编排器读全文再统计。
 
@@ -109,13 +108,13 @@
 
 细致程度因模型而异，用票数一刀切确实粗。但权重必须是 **`macao.yaml` 里管理员写死的政策**（`team.reviewers[].vote_weight`，默认 1），**禁止**编排器根据字数/问题条数自动加权重——那就是在评判内容。
 
-加权规则（仍是确定性函数，无模型）：
+加权规则（纯整数五重门禁，无模型）：
 
 - 有效权重 = 未弃权席位的 `vote_weight` 之和（弃权仍不进分母）
-- 赞成加权占比 ≥ 2/3 且满足法定人数 → `APPROVED`；反对同理 → `REWORK_REQUIRED`；否则 Deadlock → **管理员**（不是执行者）
-- **双门槛**：席位法定人数 `⌈2N/3⌉` **仍然保留**（防一票权重大户单独过门）
-- **独裁帽**：任一席位 `vote_weight / Σweight < 2/3`，配置校验失败则拒绝启动
-- 权重只作用于总票 `YES/NO`，不作用于单条问题是否成立——单条是否改代码仍是执行者内容工作
+- 赞成加权占比 ≥ 2/3 且满足胜方席位数（≥2）→ `APPROVED`；反对同理 → `REWORK_REQUIRED`；否则 Deadlock → **管理员**（不是执行者）
+- **双门槛**：席位法定人数 `⌈2N/3⌉` 与权重法定人数 `⌈2W/3⌉` **同时满足**
+- **独裁帽**：任一席位 $3 \times w_i < 2 \times W$，配置校验失败则拒绝启动
+- 权重只作用于总票 `YES/NO`，不作用于单条问题是否成立——单条是否改代码仍是执行者通过 `requires_new_checkpoint` 显式声明
 
 2 人且权重 1:1 时行为与现决策表相同；3 人可把更细的模型配成 2、其余为 1，但仍不能单人 ≥ 2/3。
 
@@ -123,16 +122,18 @@
 
 只读复用 `recognize_agent_state` 的作用域规则（当前 `state` + `checkpoint_ref` / `review_round`；无活跃任务则视为 `IDLE`）。**禁止**把 Layer 2/3 推断当成转移。`next_action` 只表示「通知谁 / 等哪份产物」，**不是**编排器去写那份产物。
 
-| `task_state` | `next_action` | 实际由谁做事 |
+| `task_state` 与条件 | `next_action` | 实际由谁做事 |
 |---|---|---|
-| `IDLE`（无任务） | `PROMPT_TASK_CREATE` | **管理员/执行者** 创建任务；编排器只收表单 |
-| `CODING` / `REWORK` | `WAIT_OR_NOTIFY_EXECUTOR` | 执行者编码；返工时由执行者筛选上轮意见 |
-| `READY_FOR_REVIEW` | `ROUTE_REVIEW` | 执行者**已经写好** `.dev.yml`；编排器校验信封并 ping 专家（不改摘要） |
-| `WAITING_REVIEW` | `WAIT_OR_NOTIFY_REVIEWERS` | 专家写 `.review.yml` + `docs/reviews/`；编排器只催票/收票 |
-| `CONSENSUS_CHECK` | `TALLY_OR_ASK_ADMIN` | 编排器跑决策表；僵局问**管理员**（不是问执行者自裁） |
-| `MERGING` | `SIGNOFF_OR_MERGE` | 规则合并 + 管理员签字；编排器不总结评审 |
-| `UNKNOWN` 或无法唯一推出 | `ASK_ADMIN` | 问管理员（init）；见 h5 |
-| `DONE` / `CANCELLED` | `PROMPT_TASK_CREATE` | 同 IDLE：等人开下一单 |
+| `IDLE`（无任务） | `WAIT_TASK_INPUT` | **管理员/执行者** 创建任务；编排器只收表单 |
+| `CODING` / `REWORK` | `EXECUTOR_DEVELOPING` | 执行者编码；返工时由执行者按上轮 disposition 修改 |
+| `READY_FOR_REVIEW` | `DISPATCH_REVIEWS` | 执行者**已经写好** `.dev.yml`；编排器校验信封并 ping 专家（不改摘要） |
+| `WAITING_REVIEW` | `AWAIT_REVIEW_SUBMISSIONS` | 专家写 `.review.yml` + `docs/reviews/`；编排器只催票/收票 |
+| `CONSENSUS_CHECK`（尚无 vote_result） | `TALLY_CONSENSUS` | 编排器跑纯整数加权决策表 |
+| `CONSENSUS_CHECK`（`requires_disposition` 且无 FINAL） | **`NOTIFY_EXECUTOR_DISPOSE`** | 编排器发 `DISPOSITION_REQUIRED`；**执行者写 disposition** |
+| `CONSENSUS_CHECK`（HOLD: DEADLOCK/超时/NEEDS_ADMIN） | `ASK_ADMIN` | 问管理员（`override resolve`；不是问执行者自裁） |
+| `MERGING` | `PERFORM_MERGE_AND_PUSH` | 规则合并 + Pre-merge/Post-merge 验证；编排器不总结评审 |
+| `UNKNOWN` 或无法唯一推出 | `RUN_DOCTOR_OR_ASK_ADMIN` | 问管理员（init）；见 h5 |
+| `DONE` / `CANCELLED` | `TASK_COMPLETED` | 同 IDLE：等人开下一单 |
 
 这张表回答「通知谁」。Layer 1 唯一时不问人；不唯一时不要猜，走 h5。编排器**从不**因「需要懂项目」而调用模型。
 
@@ -140,13 +141,16 @@
 
 任务只有一个 `state`。各角色的「状态」是该态在席位上的投影 + 本席位 Layer 1 产物是否已交（PRD §1.2 Reviewer 侧 `REVIEWING` 即此）。
 
-| 任务态 | Executor `role_view` | Reviewer `role_view`（每席位独立看产物） |
+| 任务态与条件 | Executor `role_view` | Reviewer `role_view`（每席位独立看产物） |
 |---|---|---|
 | `IDLE` / 无任务 | `AWAIT_TASK`（规划并提交任务的是人或执行者） | `AWAIT_TASK` |
-| `CODING` / `REWORK` | `SHOULD_CODE`（`REWORK` 含阅读意见并筛选采纳） | `IDLE_WAIT_DISPATCH` |
+| `CODING` / `REWORK` | `SHOULD_CODE` | `IDLE_WAIT_DISPATCH` |
 | `READY_FOR_REVIEW` | `CHECKPOINT_SUBMITTED`（评审申请=已落盘的 `.dev.yml`） | `IDLE_WAIT_DISPATCH` |
-| `WAITING_REVIEW` | `AWAIT_REVIEWS` | 无本轮合法 `.review.yml` → `SHOULD_REVIEW`（即 `REVIEWING`）；已交 → `REVIEW_SUBMITTED` |
-| `CONSENSUS_CHECK` | `AWAIT_DECISION` | `AWAIT_DECISION` |
+| `WAITING_REVIEW`（未交票且有效） | `AWAIT_REVIEWS` | `SHOULD_REVIEW`（即 `REVIEWING`） |
+| `WAITING_REVIEW`（已交有效产物） | `AWAIT_REVIEWS` | `REVIEW_SUBMITTED` |
+| `CONSENSUS_CHECK`（尚无 vote_result） | `AWAIT_DECISION` | `AWAIT_DECISION` |
+| `CONSENSUS_CHECK`（`requires_disposition` 且无 FINAL） | **`SHOULD_DISPOSE`** | `AWAIT_DECISION` |
+| `CONSENSUS_CHECK`（HOLD: DEADLOCK/超时/NEEDS_ADMIN） | `AWAIT_HUMAN` | `AWAIT_HUMAN` |
 | `MERGING` | `AWAIT_MERGE` | `AWAIT_MERGE` |
 | `UNKNOWN` | `AWAIT_HUMAN`（先 h5 问管理员） | `AWAIT_HUMAN` |
 | `DONE` / `CANCELLED` | `AWAIT_TASK` | `AWAIT_TASK` |

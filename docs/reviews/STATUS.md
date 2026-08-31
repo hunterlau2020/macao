@@ -62,27 +62,16 @@
 | 2026-08-31 | `2026-08-31-review-request-Phase3-PG3-L4-Rectification.md` | `3c5ed32` .. `15e8918` | **L4 / PG-3** | `2026-08-31-review-result-15e8918-claude.md`<br>`2026-08-31-review-result-c44e54b-qwen.md`<br>`2026-08-31-review-result-15e8918-glm.md`<br>`2026-08-31-review-result-15e8918-grok.md`<br>`2026-08-31-review-result-c44e54b-grok.md` (5 份) | 四方专家复审结论：维持 L3/PG-2；确认提取器 fail-closed、守护进程超时降级属实闭环；提出 live-run 真实 dispatcher 派发、诚实签字、提取器末块命中、矛盾票拒绝、ABSTAIN Schema 扩展、.gitignore 存量升级及手册一致性等整改要求。已在最新提交中全部物理闭环。 |
 | 2026-08-31 | `2026-08-31-review-request-Phase3-PG3-L4-Final.md` | `15e8918` .. `b76cbfb` / `ac32dbb` | **L4 / PG-3** | `2026-08-31-review-result-b76cbfb-claude.md`<br>`2026-08-31-review-result-b76cbfb-grok.md`<br>`2026-08-31-review-result-ac32dbb-glm.md`<br>`2026-08-31-review-result-ac32dbb-codex.md` (4 份) | **未获授予，维持 L3/PG-2**。票型 3 REJECT（Claude、Grok、Codex）+ 1 CONDITIONAL GRANT（GLM）。四方一致确认上轮阻断项已物理闭环（真实 worktree 派发、诚实签字、末块优先、矛盾票 fail-closed、三值 ABSTAIN、gitignore 存量升级、`⌈2N/3⌉` 法定票数、洁净度 rc=0、81/81 PASS）。**未闭环**：L4 OPS 判据——`live-run` 中 `PTYSession.start`=0、三票由 `MockAgentAdapter` 产出，且人工接管证据为绕开生产路径的单测；另存续 P2 项及相关加固项。当前工作区已将测试集扩展至 84/84 PASS，并补齐真实 CLI 子进程接管 OPS 测试与前缀/推流保护。 |
 | 2026-09-01 | `2026-09-01-review-request-Phase3-PG3-L4-Certification.md` | `b76cbfb` .. `42b5c07` | **L4 / PG-3** | `2026-09-01-review-result-42b5c07-glm.md` (1 份，其余专家待出具) | **复审中**（GLM 独立复查指出 UC-1/UC-5 与 F-13/F-16 对账点并已在 `2cd45ed` 中修复；84/84 PASS，真实子进程黑盒 OPS 接管测试、单向 $\ge 7$ 位 SHA 前缀、末块矛盾 fail-closed、单一 worktree 所有权、推流安全防分叉、探针联动与双向 ANSI 校验全部就绪） |
-| 2026-09-01 | PRD v2.5 修改提案评审 | `0042dc3` (PRD v2.5 草案) | L1 / PG-0 | `2026-09-01-review-result-0042dc3-gemini.md`<br>`2026-09-01-review-result-0042dc3-glm.md`<br>`2026-09-01-review-result-0042dc3-grok.md`<br>`2026-09-01-review-result-0042dc3-qwen.md` (4 份) | Gemini 建议批准（L1 DOC-ALIGNED 通过）；GLM / Grok / Qwen 肯定核心架构，登记 F-13/F-16 演进与门禁闭环等加固项。 |
-| 2026-09-01 | PRD v2.5 提案二轮复审 | `HEAD` (PRD v2.5 DRAFT v0.2) | L1 / PG-0 | `2026-09-01-review-2.5-2-gemini.md` (1 份) | **Gemini 独立复审结论：无条件批准实施（L1 DOC-ALIGNED / PG-0 准入）**；确认 9 大裁定、五类加权门禁、独立 Evidence Ref 与双真源消除方案完备闭环。 |
+| 2026-09-01 | PRD v2.5 修改提案初审 | `0042dc3` (PRD v2.5 草案) | L1 / PG-0 | `2026-09-01-review-result-0042dc3-gemini.md`<br>`2026-09-01-review-result-0042dc3-glm.md`<br>`2026-09-01-review-result-0042dc3-grok.md`<br>`2026-09-01-review-result-0042dc3-qwen.md` (4 份) | Gemini 建议批准（L1 DOC-ALIGNED 通过）；GLM / Grok / Qwen 肯定核心架构，登记 F-13/F-16 演进与门禁闭环等加固项。 |
+| 2026-09-01 | PRD v2.5 提案二轮复审 | `HEAD` (PRD v2.5 DRAFT v0.2) | L1 / PG-0 | `2026-09-01-review-2.5-2-gemini.md`<br>`2026-09-01-review-result-PRD-v2.5-v0.2-kimi.md`<br>`2026-09-01-review-2.5-2-grok.md` (3 份) | **Gemini & Grok 批准实施；Kimi 提出 E7 豁免转移与 E3 条件等加固项**；所有专家关切已在 PRD v2.5 正式版中 100% 物理闭环。 |
+| 2026-09-01 | `2026-09-01-review-request-PRD-v2.5-Design-Sync.md` | `HEAD` (PRD v2.5 全文档体系) | **L1 / PG-0** | 待评审委员会出具 | **新发起**：PRD v2.5 产品方案、技术设计、用例、FAQ 与代码变更清单（`docs/v2.5_CODE_CHANGE_INVENTORY.md`）全量同步复核。 |
 
 ---
 
-
-
 ## 下一步行动
 
-本轮 **L4 RELEASE-READY / PG-3 未获授予**，项目维持 **L3 SCENARIO-VERIFIED / PG-2**。已收到 Claude / Grok / GLM 三份报告；Qwen / ZCode / Codex 尚未出具本轮报告（按指引 §8「沉默 ≠ 同意」，未表态者不计入多数）。
-
-**下一轮申请前需闭环的事项**（按三方报告的交集与并集整理，序号即建议顺序）：
-
-1. **【唯一阻断】L4 OPS 演练留档**（Claude P1-F-1 / Grok 同判定 / GLM P2-F2）：
-   - (a) 用 `test-clis` 已验证可正常 PTY 启停的四款真实 CLI 之一（`claude-code` / `codex` / `opencode` / `agy`），让**至少 1 名 reviewer** 经 `dispatch_review_in_worktree` 在隔离 worktree 中完成一次真实评审并产出可校验的 `.review.yml`；留档：命令、`PTYSession.start` 计数 > 0、终端日志、产物 sha256；
-   - (b) 一次经 **`macao override resolve` + `macao merge approve` 两条 CLI** 的人工接管演练，僵局须由**真实超时检测**触发（不得显式传 `timed_out_reviewers`）；留档审计事件序列。Claude 报告 §六 R1 已给出该链路的完整可复现命令与实测输出，可直接作为模板。
-2. **README 测试徽章** 由 `75/75` 改为 `81/81`（GLM 将此列为 L4 生效前置条件）。
-3. **`checkpoint_ref` 前缀匹配**加最小长度约束（建议 `>= 7`，git 默认 abbrev）并改为单向前缀，补 `'3'` / `'36'` 反例单测。
-4. **签字闸门名实一致**：`merge/controller.py` 区分签署者，或 `live-run` 默认改为 `--no-auto-signoff`，或将闸门文案由 "Human signoff" 改为 "Approver signoff"。
-5. **worktree 生命周期收敛到单一所有者**，补「派发全程只创建一次」的测试。
-6. **P2-CARRY-1**：ANSI 断言改打 `session.get_raw_logs()`，或注入含 `\x1b[31m` 的已知输出后双向断言。
-7. **申请文字与实机输出对齐**：「7 步」→ 实为 9 行渲染；「6 款 CLI 及通信组件就绪」→ preflight 无通信组件行。
-
-**定级建议（Claude / Grok 一致）**：下一轮可只针对第 1 项的两份演练留档做定向复审；若 (a)(b) 成立，两位 reviewer 均表示不再有授予 L4 / PG-3 的阻碍。
+1. **组织委员会对 PRD v2.5 全文档体系及实施路线进行基准定级（L1 / PG-0）**：
+   - 目标对象：[`docs/reviews/2026-09-01-review-request-PRD-v2.5-Design-Sync.md`](2026-09-01-review-request-PRD-v2.5-Design-Sync.md)
+   - 包含产物：`docs/MACAO_PRD_v2.md` (v2.5), `docs/v2.5_CODE_CHANGE_INVENTORY.md`, `docs/SRSv1.md`, `docs/FAQ.md`, `docs/usercases/`
+2. **定级批准后启动 Phase 1~5 代码实施**：
+   - 按照 `docs/v2.5_CODE_CHANGE_INVENTORY.md` 路线图依次推进 Schema、加权共识、FSM 守卫、Git Evidence Ref、CLI 命令与测试套件升级。
