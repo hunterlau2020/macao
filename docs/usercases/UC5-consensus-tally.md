@@ -4,7 +4,7 @@
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
 - **关联**：PRD v2.4 §2.3（vote_result）、§3.3（E3/E4/E5）；FAQ Q15；UC-1 h0(2)(3)（问题目录 + 加权规则）；`VoteAggregator`/`ConsensusEngine`；GUIDELINES §2.1（L1–L4 判据外部评审用，本用例只算票）。
-- **边界声明**：编排器**无模型**：计票是确定性函数（加权 2/3 + 席位法定人数 + 独裁帽）；`issues_index` **原样拼接**各信封索引，不合并同类项、不标采纳；僵局 HOLD 问**管理员**（UC-7），不问执行者。
+- **边界声明**：编排器**无模型**：从各 `.review.yml` **原样摘录** `vote`，加权 2/3 + 席位法定人数 + 独裁帽写出 `decision`（执行者不写此字段，只做后续汇总，见 UC-6 / FAQ Q15 / PRODUCT-FACTS F-13）；`issues_index` **原样拼接**各信封索引，不合并同类项、不标采纳；僵局 HOLD 问**管理员**（UC-7），不问执行者。
 
 ---
 
@@ -38,12 +38,12 @@ E3 产物型转移 `WAITING_REVIEW → CONSENSUS_CHECK`；收集本轮全部合�
 | `REWORK_REQUIRED` | 反对双门槛达标 | → E5（round < max）或 E7 |
 | `DEADLOCK` | 其余一切（含 1:1、全弃权） | → HOLD，不写盘，发 `HUMAN_OVERRIDE_REQUEST` → UC-7 |
 
-### c. 生成 `vote_result.json`（三段式，UC-1 h0(2)）
+### c. 生成 `vote_result.json`（四段式，UC-1 h0(2)）
 
 1. **计票段**（编排器算）：各席位 `reviewer/vote/weight`、加权合计、`decision`、`decision_confidence`
 2. **`issues_index`**（编排器**复制**）：逐信封拼接 `{id, reviewer, severity, summary, full_document{path,sha256}}`；id 保留 reviewer 前缀；**不合并、不改写、不排序去重**
-3. **不写采纳**：`next_step.issues_to_fix.description/suggestion` 由编排器代写的旧字段**废止**（UC-1 h0 决议）；采纳清单是 UC-6 执行者产物
-   `summary.critical/major/minor_issues` 仅允许对信封已声明 severity 计数求和。
+3. **不写采纳（机器段）**：`next_step.issues_to_fix.description/suggestion` 由编排器代写的旧字段**废止**（UC-1 h0 决议）；**采纳由执行者写入本文件汇总段 `issues_summary`（PRODUCT-FACTS F-13/F-16，见 UC-6 b）**——机器段落盘后只读，汇总段初始为空/缺省
+4. `summary.critical/major/minor_issues` 仅允许对信封已声明 severity 计数求和。
 
 ### d. 落盘与转移
 
@@ -79,7 +79,7 @@ agmsg ping：E4 → 管理员（`SIGNOFF_OR_MERGE`）+ 全员结果通告（deci
 ## 6. 验收标准（可测）
 
 1. 决策表全场景：全同意、1:1、1 赞 1 反 1 弃、全弃权、加权 2:1:1 各组合 → decision 唯一可推出；DEADLOCK 不落盘（断言文件不存在）
-2. `issues_index` 与 fixture 信封逐条零差集；编排器产物无 description/suggestion 代写字段
+2. `issues_index` 与 fixture 信封逐条零差集；编排器产物无 description/suggestion 代写字段，且 `issues_summary` 段初始为空/缺省（执行者汇总段，见 UC-6 b）
 3. 独裁帽：权重 5:1:1:1 配置 → `validate_config` 拒绝
 4. 权重只作用于总票：单条 issue 不因权重被增删（对账断言）
 5. 编排器路径无 LLM 调用；同一票面重算结果幂等
@@ -88,8 +88,8 @@ agmsg ping：E4 → 管理员（`SIGNOFF_OR_MERGE`）+ 全员结果通告（deci
 
 | 位置 | 变更 |
 |---|---|
-| `src/macao/consensus/engine.py` + `vote.py` | 加权计票、双门槛、三段式 vote_result、issues_index 原样拼接 |
-| `src/macao/core/schema.py` | `vote_result` Schema：`issues_index`、`weights`、废止 `issues_to_fix` 正文代写 |
+| `src/macao/consensus/engine.py` + `vote.py` | 加权计票、双门槛、四段式 vote_result（计票/issues_index/预留 issues_summary 汇总段/summary 求和）、issues_index 原样拼接 |
+| `src/macao/core/schema.py` | `vote_result` Schema：`issues_index`、`issues_summary`（执行者写、可缺省）、`weights`、废止 `issues_to_fix` 正文代写 |
 | `src/macao/core/config.py` | `vote_weight` 校验 + 独裁帽 |
 | `tests/` | 第 6 节 |
 

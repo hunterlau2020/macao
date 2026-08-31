@@ -93,15 +93,15 @@
 
 编排器只校验 yml Schema 与 sha256 是否对得上文件字节，**不解析 md 语义**。sha256 对不上 → 该 manifest 无效票（fail-closed）。
 
-**（2）`vote_result.json`：总票 + 问题目录，不写「采纳」**
+**（2）`vote_result.json`：总票 + 问题目录 + 执行者汇总段（编排器不写「采纳」，采纳由执行者写入本文件汇总段）**
 
 一份评审结论 = 一张总票 + 若干问题点；不同模型的问题点**默认视为不同条目**（id 必须带 `reviewer_id` 前缀，禁止编排器做语义去重）。
 
 `vote_result` 建议三段：
 
 1. **计票**（编排器算）：各席位 `vote`、`weight`、加权合计、`decision`
-2. **问题目录 `issues_index`**（编排器**复制**自各 `.review.yml` 的 `issues[]`，不改写 description）：`{id, reviewer, severity, summary, full_document, sha256}`。这回答「要不要体现在 vote_result」——**要目录，不要正文、不要合并、不要标采纳**
-3. **采纳**不在此文件：执行者另写，按 `id` 引用目录
+2. **问题目录 `issues_index`**（编排器**复制**自各 `.review.yml` 的 `issues[]`，不改写 description）：`{id, reviewer, severity, summary, full_document, sha256}`。这回答「要不要体现在 vote_result」——**要目录，不要正文、不要合并**；编排器**不标采纳**
+3. **汇总段 `issues_summary`**（**执行者写**，PRODUCT-FACTS F-13/F-16）：归并「同一问题被哪些专家发现」（`found_by[]`）、标题清单、正文索引、**是否采纳**——写入本文件，不是另立文件；执行者不写、不改 `decision` 与机器段（见 UC-6 b）
 
 现行 `summary.critical_issues` 若保留，只能是各 manifest 里已声明计数的**求和**，禁止编排器读全文再统计。
 
