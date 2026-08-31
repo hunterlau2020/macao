@@ -5,7 +5,6 @@
 > **状态**：Draft / Specification
 > **适用范围**：MACAO CLI (`macao init` / `macao setup`)、`wizard.py` 智能向导模块、`agmsg` 团队感知与拓扑映射模块
 
-
 ---
 
 ## 1. 基本信息 (Metadata)

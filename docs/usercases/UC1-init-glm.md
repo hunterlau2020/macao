@@ -68,9 +68,9 @@
 ### h. 项目各个角色状态探测
 
 - **i. **  向每个CLI发出当前状态询问:
-  
+
   - 当前任务是什么？
-  
+
   - 当前状态是IDLE、CODING、READY_FOR_REVIEW、WAITING_REVIEW。。。中哪一种
 
 - **ii. ** 从CLI当前消息界面判断
