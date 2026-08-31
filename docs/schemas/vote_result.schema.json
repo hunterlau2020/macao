@@ -1,17 +1,21 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.3/vote_result.schema.json",
+  "$id": "https://macao.dev/schemas/v2.5/vote_result.schema.json",
   "title": "MACAO vote_result.json Consensus Record",
   "type": "object",
   "required": ["version", "checkpoint_ref", "review_round", "votes", "vote_breakdown", "input_artifacts", "decision"],
   "properties": {
     "version": { "type": "string" },
     "timestamp": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "task_id": { "type": "string" },
     "checkpoint_ref": { "type": "string", "minLength": 1 },
     "executor": { "type": "string" },
+    "executor_id": { "type": "string" },
     "review_round": { "type": "integer", "minimum": 1 },
-    "reviewers_total": { "type": "integer", "minimum": 2 },
+    "reviewers_total": { "type": "integer", "minimum": 1 },
     "reviewers_responded": { "type": "integer", "minimum": 0 },
+    "reviewers_accounted": { "type": "integer", "minimum": 0 },
     "votes": {
       "type": "array",
       "items": {
@@ -20,77 +24,89 @@
         "properties": {
           "reviewer": { "type": "string" },
           "vote": { "enum": ["YES_APPROVE", "NO_APPROVE", "ABSTAIN"] },
+          "weight": { "type": "integer", "minimum": 1 },
+          "source": { "enum": ["manifest", "timeout"] },
           "confidence": { "type": "number" },
           "issues_count": { "type": "integer" }
         }
       }
     },
+    "policy_snapshot": {
+      "type": "object",
+      "properties": {
+        "rule": { "type": "string" },
+        "configured_seats": { "type": "integer", "minimum": 1 },
+        "configured_weight": { "type": "integer", "minimum": 1 },
+        "seat_quorum_required": { "type": "integer", "minimum": 1 },
+        "weight_quorum_required": { "type": "integer", "minimum": 1 },
+        "decision_threshold_numerator": { "type": "integer" },
+        "decision_threshold_denominator": { "type": "integer" },
+        "minimum_winning_seats": { "type": "integer", "minimum": 1 },
+        "max_single_weight_share_numerator": { "type": "integer" },
+        "max_single_weight_share_denominator": { "type": "integer" }
+      }
+    },
     "consensus_rule": { "type": "string" },
     "vote_breakdown": {
       "type": "object",
-      "required": ["approve", "reject", "abstain"],
       "properties": {
         "approve": { "type": "integer", "minimum": 0 },
         "reject": { "type": "integer", "minimum": 0 },
-        "abstain": { "type": "integer", "minimum": 0 }
+        "abstain": { "type": "integer", "minimum": 0 },
+        "effective_seats": { "type": "integer", "minimum": 0 },
+        "effective_weight": { "type": "integer", "minimum": 0 },
+        "approve_seats": { "type": "integer", "minimum": 0 },
+        "approve_weight": { "type": "integer", "minimum": 0 },
+        "reject_seats": { "type": "integer", "minimum": 0 },
+        "reject_weight": { "type": "integer", "minimum": 0 },
+        "abstain_seats": { "type": "integer", "minimum": 0 },
+        "abstain_weight": { "type": "integer", "minimum": 0 }
       }
     },
     "input_artifacts": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["kind", "path", "sha256", "message_id"],
+        "required": ["path"],
         "properties": {
+          "reviewer": { "type": "string" },
           "kind": { "type": "string" },
           "path": { "type": "string" },
           "sha256": { "type": "string" },
+          "evidence_commit": { "type": "string" },
           "message_id": { "type": "string" }
         }
       }
     },
-    "decision": { "enum": ["APPROVED", "REWORK_REQUIRED", "RETRY_REVIEW", "CANCELLED"] },
-    "resolution": { "enum": ["automatic", "human_override"] },
-    "decision_confidence": { "type": "number" },
-    "summary": {
-      "type": "object",
-      "properties": {
-        "critical_issues": { "type": "integer", "minimum": 0 },
-        "major_issues": { "type": "integer", "minimum": 0 },
-        "minor_issues": { "type": "integer", "minimum": 0 },
-        "action": { "type": "string" }
-      }
-    },
-    "next_step": {
-      "type": "object",
-      "properties": {
-        "action": { "enum": ["REWORK", "MERGE", "RETRY_REVIEW"] },
-        "deadline": { "type": "string" },
-        "issues_to_fix": {
-          "type": "array",
-          "items": {
+    "issues_index": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["issue_id", "disposition_class", "severity", "title"],
+        "properties": {
+          "issue_id": { "type": "string" },
+          "reviewer": { "type": "string" },
+          "disposition_class": { "enum": ["BLOCKING", "ADVISORY"] },
+          "severity": { "type": "string" },
+          "title": { "type": "string" },
+          "full_document": {
             "type": "object",
-            "required": ["id"],
             "properties": {
-              "id": { "type": "string" },
-              "reviewer": { "type": "string" },
-              "type": { "type": "string" },
-              "severity": { "type": "string" },
-              "description": { "type": "string" },
-              "suggestion": { "type": "string" }
+              "path": { "type": "string" },
+              "evidence_commit": { "type": "string" },
+              "sha256": { "type": "string" },
+              "anchor": { "type": "string" }
             }
           }
         }
       }
-    }
-  },
-  "allOf": [
-    {
-      "if": { "properties": { "decision": { "enum": ["RETRY_REVIEW", "CANCELLED"] } }, "required": ["decision"] },
-      "then": { "properties": { "resolution": { "const": "human_override" } }, "required": ["resolution"] }
     },
-    {
-      "if": { "properties": { "decision": { "enum": ["APPROVED", "REWORK_REQUIRED"] }, "resolution": { "const": "human_override" } }, "required": ["decision", "resolution"] },
-      "then": { "properties": { "next_step": { "type": "object" } } }
-    }
-  ]
+    "issues_index_sha256": { "type": "string" },
+    "requires_disposition": { "type": "boolean" },
+    "decision": { "enum": ["APPROVED", "REWORK_REQUIRED", "DEADLOCK", "RETRY_REVIEW", "CANCELLED"] },
+    "resolution": { "enum": ["automatic", "human_override", "AUTO_WEIGHTED_CONSENSUS"] },
+    "decision_confidence": { "type": "number" },
+    "summary": { "type": "object" },
+    "next_step": { "type": "object" }
+  }
 }

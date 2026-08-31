@@ -3,7 +3,7 @@
 - **设计日期**：2026-09-01
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：PRD v2.4 §3.3（E4/E4a/E4b）、§14.5（Merge Policy）、§15.1；`execute_merge`（orchestrator.py:700）、Merge Controller 五道关卡；FAQ Q12/Q16。
+- **关联**：PRD v2.5 §3.3（E4/E4a/E4b）、§14.5（Merge Policy）、§15.1；`execute_merge`（orchestrator.py:700）、Merge Controller 五道关卡；FAQ Q12/Q16。
 - **边界声明**：`MERGING` 合的是 **git**（ff/CI/签字/push），不是"合并评审意见"（那是 UC-5 计票 + UC-6 采纳已完成的）。**评审对象 = 合并对象**：`checkpoint_ref` 硬绑定，任何产生新 commit 的操作（rebase/amend/cherry-pick/解冲突改动）都判为未评审新对象 → E4b。
 
 ---
@@ -24,7 +24,7 @@
 
 ### 关卡 2：技术合并
 
-`ff_only`（默认）合并；**Git Conflict** → 不自动解冲突（解冲突产生的改动=新变更=未评审），转 UC-7 P5 管理员裁定：人工解冲突后按新 commit 走 E4b 增量复审，或 CANCEL。
+`ff_only`（默认）合并；**Git Conflict** → 不自动解冲突（解冲突产生的改动=新变更=未评审），转 UC-7 P6 管理员裁定：人工解冲突后按新 commit 走 E4b 增量复审，或 CANCEL。
 
 ### 关卡 3：CI gate
 
@@ -36,7 +36,7 @@
 
 ### 关卡 5：推送与通告（E4a）
 
-push 前**最终硬校验**：待推对象 == `vote_result.checkpoint_ref`（字节级）；push 成功 → E4a → `DONE`：发 `MERGE_COMPLETED`（含 merge_commit）；本轮全部产物（`.dev.yml`/`.review.yml`/`vote_result.json`/diff 快照）原子归档 `.macao/archive/<ref>/r<round>/` 并随 git 提交；agmsg 通告全员（结果 + 归档路径）。
+push 前**最终硬校验**：待推对象 == `vote_result.checkpoint_ref`（字节级）；push 成功 → E4a → `DONE`：发 `MERGE_COMPLETED`（含 merge_commit）；本轮全部产物提升至 canonical evidence ref（`refs/macao/evidence/<task_id>/r<round>`）并归档至 `.macao/archive/<ref>/r<round>/`，不污染 source 分支 HEAD；agmsg 通告全员（结果 + 归档路径）。
 
 ### 完成提示
 

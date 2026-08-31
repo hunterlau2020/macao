@@ -58,15 +58,24 @@
 - **f4** 注入 `.gitignore` 隔离（幂等，复用 `ensure_gitignore_isolation` 8 规则）
 - **f5** 非交互修正：若本会话 agent 尚未加入该 agmsg 团队（`identities.sh` 无此项目记录），提示执行 `join.sh stockdb <macao> <type> "$(pwd)"`（MACAO 自身作为编排者入队，PRD §11.6 agmsg 网桥前置条件）
 
-### g. 项目进展判定（信号按优先级）
+| P2  | `macao.yaml` 不存在，或用户显式传入 `--adopt-existing` / `--force` | E2      |
+| P3  | 指定 `--agteam <team>` 存在或可经名册模板创建                     | E3      |
 
-| 判定 | 信号 | 后续动作 |
-|---|---|---|
-| **已开始（确定）** | `.macao/state.db` 存在且含活跃任务 | 进入 h 做 FSM 精识别（仍不擅自改状态库） |
-| **可疑已开始** | 无活跃任务，但 ① agmsg 历史含 workflow 样本文本，或 ② `.macao/archive/` 非空 | 进入 h；**推不出唯一 10 态则问管理员**（init 允许，见 h5） |
-| **新项目** | 以上全无 | h 全员 `IDLE`；提示 `macao task create` / `live-run` |
+---
 
-### h. 项目各个角色状态探测
+## 2. 主成功场景（M1：首次初始化 / 扫描并建立项目）
+
+用户在项目根目录运行 `macao init --agteam <team>`，系统完成：
+
+1. **环境与名册预检**：检查 Git 根目录、读取 agmsg team 名册（`identities.sh` / `team.sh`）、探测已安装 AI CLI（`which` / `claude-code --version` / `codex --version` / `kimi --version` / `opencode --version` 等）；
+2. **启发式角色分配**：若名册已存在，按既有 identity 映射；若名册未指定，按内置建议规则提示用户确认（如：Claude Code 担任 Executor，Codex/Kimi/Gemini 担任 Reviewers）；
+3. **初始 FSM 状态识别**：依据工作区中 `.macao/.dev.yml`、`.macao/.reviews/`、`refs/macao/evidence/` 等证据识别当前阶段，推导当前 `role_view`；
+4. **生成 `macao.yaml` 与 State Store 初始化**：写入配置单一事实源，初始化 SQLite `tasks` 与 `artifacts` 表；
+5. **向团队广播就绪消息**：通过 agmsg 发送统一初始化通告与首个 `next_action`。
+
+---
+
+### 细节规范与调度表
 
 目的：回答调度问题——**现在该通知 Reviewer 评审，还是该等 Executor 继续 coding？** 答案来自**任务级 FSM（单一事实源）**。init **默认只识别、不转移**；**识别不出唯一态时问管理员**（本用例是初始化，管理员在场），不得用 CLI 自报或 agmsg 闲聊来猜。
 
@@ -77,7 +86,7 @@
 | 开任务 | **管理员或执行者** 规划并 `macao task create` | 校验 Schema、建 `tasks` 行、发信封 | 拆解需求、写 WBS |
 | 评审申请 | **执行者** 全文 → `docs/reviews/*-review-request-*.md`；`.dev.yml` **只含摘要 + 指针 + sha256** | 校验 manifest、把指针原样放进 `REVIEW_REQUEST`；agmsg ping 更短（路径/SHA/round） | 写/改申请全文或摘要 |
 | 票面结论 | **各专家** 全文 → `docs/reviews/*-review-result-<mid>-<reviewer>.md`；`.review.yml` **只含摘要 + 问题索引 + 指针 + 总票** | 校验 manifest、按**加权**决策表写 `vote_result.decision`；`issues_index` **原样拼接**各专家索引（不合并同类项） | 归纳意见、合并「相同问题」、撰写 `issues_to_fix` 正文 |
-| 意见筛选 | **执行者** 读全文与索引，写采纳清单（下轮 `.dev.yml` 或 `adoption.yml`） | 只检测清单是否按 Schema 出现 | 代为决定采纳哪条 |
+| 意见处置 | **执行者** 读全文与索引，写处置清单（`executor.disposition.yml`） | 只检测清单是否按 Schema 出现、是否精确覆盖本轮 issue | 代为决定采纳哪条 |
 
 `vote_result.decision` 仍是计票（可加权），不是采纳清单。现 Schema 里由编排器填写的 `next_step.issues_to_fix.description/suggestion` **废止**（那是内容写作）。
 
@@ -315,4 +324,4 @@ CREATE TABLE IF NOT EXISTS agent_registry (
 - **调度罗盘是任务 FSM**；init 推不出唯一态时**问管理员**，不问执行者自裁、不用 CLI 自报多数决
 - **agmsg = 通知**：ping 不含摘要；评审方法看 `MACAO_REVIEW_GUIDELINES.md` 与 `docs/reference/*.md`；结论只落 `docs/reviews/*.md`
 - `--yes` 在歧义上 fail-closed（A7）
-- 遗留决策点：①模型默认表；②`--no-git`；③`--ask-clis`；④E7 硬失败 vs `ASK_ADMIN` 行；⑤采纳清单文件名（建议 `adoption.yml` 按 issue `id` 引用，不复用 `vote_result`）；⑥`vote_weight` 默认全 1 直到管理员显式配置，Loader 强制独裁帽
+- 遗留决策点：①模型默认表；②`--no-git`；③`--ask-clis`；④E7 硬失败 vs `ASK_ADMIN` 行；⑤意见处置产物（已裁定为 `executor.disposition.yml`，D-2 唯一产物）；⑥`vote_weight` 默认全 1 直到管理员显式配置，Loader 强制独裁帽

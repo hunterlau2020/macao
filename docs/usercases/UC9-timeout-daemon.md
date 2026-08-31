@@ -3,7 +3,7 @@
 - **设计日期**：2026-09-01
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：PRD v2.4 §3.3（超时非独立状态来源）、§6.1/§6.2（降级策略）、§18（OrchestratorDaemon）；`daemon.py`、`detect_timed_out_reviewers`（orchestrator.py:408）；GUIDELINES §6（超时/弃权场景库）；UC-5（弃权票计票）、UC-7 P4（人工裁定）。
+- **关联**：PRD v2.5 §3.3（超时非独立状态来源）、§6.1/§6.2（降级策略）、§18（OrchestratorDaemon）；`daemon.py`、`detect_timed_out_reviewers`（orchestrator.py:408）；GUIDELINES §6（超时/弃权场景库）；UC-5（弃权票计票）、UC-7 P4（人工裁定）。
 - **边界声明**：守护进程**不读日志猜业务态、不解析语义**（FAQ Q10）；超时降级的结果（弃权票/人工裁定）最终仍通过 E3/E7/E9 生效；Layer 3 诊断报告**只给管理员**。
 
 ---
@@ -33,8 +33,8 @@ c1 对 T 逐席位 re-ping（一次，不轰炸）；c2 再等待宽限窗口（
 ### d. 进入计票路径
 
 T 作为 `timed_out_reviewers` 驱动共识评估（E3 → UC-5）：弃权票显式入票面（不进加权分母、计入法定人数判定）；结果三分支：
-- 余票达双门槛 → 正常 APPROVED/REWORK_REQUIRED（弃权随终局 vote_result 落盘）
-- 余票 DEADLOCK → UC-7 P4 人工接管（`HUMAN_OVERRIDE_REQUEST`，daemon 不自行裁定）
+- 余票达双门槛 → 正常 APPROVED/REWORK_REQUIRED（弃权随不可变 vote_result 落盘）
+- 余票 DEADLOCK → UC-7 P1 人工接管（`HUMAN_OVERRIDE_REQUEST`，daemon 不自行裁定）
 - 全体弃权 → 必然 DEADLOCK → UC-7
 
 ### e. 诊断报告（Layer 3，只给管理员）

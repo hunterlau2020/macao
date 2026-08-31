@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.3/macao_config.schema.json",
+  "$id": "https://macao.dev/schemas/v2.5/macao_config.schema.json",
   "title": "MACAO macao.yaml Configuration",
   "type": "object",
   "required": ["project", "team"],
@@ -44,6 +44,7 @@
             "properties": {
               "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
               "model": { "type": "string" }, "host": { "type": "string" },
+              "vote_weight": { "type": "integer", "minimum": 1 },
               "agmsg_member_id": { "type": "string" }
             }
           }
@@ -54,8 +55,12 @@
     "policy": {
       "type": "object",
       "properties": {
-        "consensus_rule": { "const": "2/3_majority" },
+        "consensus_rule": { "enum": ["2/3_majority", "weighted_2/3_v1"] },
         "min_effective_votes": { "type": "integer", "minimum": 1 },
+        "dictator_cap_enabled": { "type": "boolean" },
+        "minimum_winning_seats": { "type": "integer", "minimum": 1 },
+        "seat_quorum_required": { "type": "integer", "minimum": 1 },
+        "weight_quorum_required": { "type": "integer", "minimum": 1 },
         "max_rework_rounds": { "type": "integer", "minimum": 1 },
         "review_strategy": { "type": "string" }
       }
@@ -76,7 +81,8 @@
         "checkpoint_validation": { "type": "string" },
         "review_request": { "type": "string" },
         "per_reviewer": { "type": "string" },
-        "consensus_check": { "type": "string" }
+        "consensus_check": { "type": "string" },
+        "review_disposition": { "type": "string" }
       }
     },
     "thresholds": {
@@ -91,6 +97,13 @@
       "properties": {
         "usage_metering": { "type": "boolean" },
         "monthly_budget_usd": { "type": ["null", "number"] }
+      }
+    },
+    "aep": {
+      "type": "object",
+      "properties": {
+        "max_message_bytes": { "type": "integer", "minimum": 1024 },
+        "max_inline_text_bytes": { "type": "integer", "minimum": 256 }
       }
     },
     "security": {

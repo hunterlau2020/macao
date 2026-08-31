@@ -255,13 +255,13 @@ team:
 | 项目态 | 执行者该做什么 | 评审专家该做什么 | 编排器只做 |
 |---|---|---|---|
 | `IDLE` / `DONE` / `CANCELLED` | 等新任务（人或执行者去 `task create`） | 等新任务 | 提示，不规划 WBS |
-| `CODING` / `REWORK` | 编码；返工时读意见并筛选采纳 | 等派发 | ping 执行者 |
+| `CODING` / `REWORK` | 编码；返工时读上一轮 disposition 决定 | 等派发 | ping 执行者 |
 | `READY_FOR_REVIEW` | 检查点已交（申请=已写的 `.dev.yml` + 全文） | 仍未派发 | 校验信封并 ping 专家（不改摘要） |
-| `WAITING_REVIEW` | 等票 | 未交：**该评**（席位视图 `REVIEWING`）；已交：已交票 | 催未交席位；不读全文 |
-| `CONSENSUS_CHECK` | 等计票结果 | 等计票结果 | 加权决策表；僵局问管理员 |
+| `WAITING_REVIEW` | 等票 | 未交：**该评**（席位视图 `SHOULD_REVIEW`）；已交：已交票 | 催未交席位；不读全文 |
+| `CONSENSUS_CHECK` | 有 issue 且无 FINAL：**该处置**（`SHOULD_DISPOSE`）；无 issue：等结果 | 等计票结果 | 加权决策表；有 issue 发 `DISPOSITION_REQUIRED`；僵局问管理员 |
 | `MERGING` | 等合并流水线 | 等合并结束 | CI / 签字 / push（合的是 git，不是「合并意见」） |
 
-`REVIEWING` 只是专家在 `WAITING_REVIEW` 下的局部视图（PRD §1.2），**不是**第十一个任务态。读 agmsg 是 ping 一瞬，不单列为角色态。
+`SHOULD_REVIEW` / `SHOULD_DISPOSE` 只是专家与执行者在对应阶段的角色投影（PRD §14.2），**不是**额外的任务态。读 agmsg 是 ping 一瞬，不单列为角色态。
 
 `macao init` 能唯一推出上表则不问人；库态与产物打架、自报互斥、只有可疑信号时**问管理员**（`--yes` 禁止代选）。
 
@@ -272,19 +272,20 @@ team:
 - `task create` 的标题/验收由**管理员或执行者**填写。
 - 评审申请正文由**执行者**写在 `docs/reviews/`，`.dev.yml` 只是摘要信封；`REVIEW_REQUEST` 是邮差。
 - 评审结论由**评审者**按 GUIDELINES 写：结论（是否通过）+ 证据（问题/建议列表）。
-- `vote_result.decision` 由编排器按摘录的票加权算出。执行者**汇总**问题清单、正文索引、哪些专家发现、是否采纳；**不写 `decision`**（被评人兼裁判）。详见 [Q15](#q15-vote_resultjson-要不要收录各模型的修改意见计票如何加权)。
+- `vote_result.decision` 与 `issues_index` 由编排器原样提取拼装并加权算出。执行者负责**逐项处置**并写入独立 `executor.disposition.yml`，**不回写 `vote_result.json`**。详见 [Q15](#q15-vote_resultjson-要不要收录各模型的修改意见计票如何加权)。
 
-### Q14: agmsg、`.dev.yml` / `.review.yml` 和 `docs/reviews/` 各放什么？
+### Q14: agmsg、`.dev.yml` / `.review.yml`、`executor.disposition.yml` 和 `refs/macao/evidence/` 各放什么？
 
-**答**：agmsg 有体积上限，这正是 `docs/reviews/` 存在的原因。
+**答**：agmsg 有体积上限（AEP/1.1 16 KiB 约束），过程存证严格保存在 Evidence Ref。
 
 | 层 | 放什么 |
 |---|---|
-| agmsg 正文 | ping：谁行动、短 SHA、yml 路径、全文路径 |
-| `.macao/.dev.yml` / `.macao/.reviews/<id>.review.yml` | 信封：status/vote、短摘要、问题索引（id/severity/一行）、`full_document.path` + `sha256` |
-| `docs/reviews/*.md` | 评审申请 / 评审结论**全文**（命名见 `docs/MACAO_REVIEW_GUIDELINES.md` §1.3） |
+| agmsg 正文 | ping 与信封：谁行动、短 SHA、yml 路径、全文路径与哈希 |
+| `.macao/.dev.yml` / `.macao/.reviews/<id>.review.yml` / `.macao/.dispositions/r<round>/executor.disposition.yml` | 机器信封：status/vote、问题索引（id/severity/一行）、`full_document.path` + `sha256` |
+| `refs/macao/evidence/<task_id>/r<round>` | 评审申请、审查 manifest、计票结果与处置声明的不可变 Git 归档 |
+| `docs/reviews/*.md` | 评审申请 / 评审结论 / 意见处置**全文**（命名见 `docs/MACAO_REVIEW_GUIDELINES.md` §1.3） |
 
-编排器只核 yml Schema 与 sha256 是否对得上文件字节，不解析 markdown。对不上 → 该票无效。
+编排器只核 yml Schema 与 sha256 是否对得上文件字节，不解析 markdown。对不上 $\implies$ 该票无效。
 
 ### Q15: `vote_result.json` 要不要收录各模型的修改意见？计票如何加权？意见采纳如何流转？
 
@@ -297,7 +298,7 @@ team:
 | 产物 | 谁写 | 内容 | 编排器（Orchestrator）行为 |
 |---|---|---|---|
 | **机器裁决** `.macao/vote_result.json` | **Orchestrator** 单一写入 | 策略快照 `policy_snapshot`、票面 `votes`、纯整数加权 `vote_breakdown`、原始问题索引 `issues_index`、机器决策 `decision`、`requires_disposition: boolean` | 校验 manifest、原样提取票面与问题、执行纯整数公式、即时落盘并归档。**禁止**人工或执行者篡改此文件 |
-| **意见处置** `.macao/.dispositions/r<round>/executor.disposition.yml` + `docs/reviews/*-disposition-*.md` | **执行者（Executor）** 单一写入 | 针对本轮全部 issue 的逐项处置（`ADOPTED` / `DEFERRED` / `REJECTED` / `NEEDS_ADMIN` / `EXEMPTED_BY_ADMIN`）、显式 `requires_new_checkpoint: boolean`、理由锚点与全文哈希 | 校验：精确覆盖全部 issue 一项不漏、必填布尔值；全为 false 进 `MERGING`（E4），任一为 true 进 `REWORK`（E5a） |
+| **意见处置** `.macao/.dispositions/r<round>/executor.disposition.yml` + `docs/reviews/*-disposition-*.md` | **执行者（Executor）** 单一写入 | 针对本轮全部 issue 的逐项处置（`ADOPTED` / `DEFERRED` / `REJECTED` / `NEEDS_ADMIN` / `EXEMPTED_BY_ADMIN`）、显式 `requires_new_checkpoint: boolean`、理由锚点与全文哈希 | 校验：精确覆盖全部 issue 一项不漏、必填布尔值；当 `decision == APPROVED` 且无未豁免 BLOCKING 且全部 `requires_new_checkpoint == false` 进 `MERGING`（E4），任一为 true 进 `REWORK`（E5a） |
 
 **加权共识机制（`weighted_2/3_v1`）**：
 - 权重来自 `macao.yaml` 中管理员预先配置的 `vote_weight`（默认 1），严禁系统根据字数、问题数或模型自信度自动调权；

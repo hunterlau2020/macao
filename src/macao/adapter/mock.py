@@ -169,6 +169,7 @@ class MockAgentAdapter(AgentAdapter):
         vote: Any = Vote.YES_APPROVE,
         opinion_status: Any = OpinionStatus.APPROVED,
         issues: Optional[List[Dict[str, Any]]] = None,
+        items: Optional[List[Dict[str, Any]]] = None,
         filename: Optional[str] = None,
         confidence: float = 0.95
     ) -> Path:
@@ -201,6 +202,36 @@ class MockAgentAdapter(AgentAdapter):
             },
             "vote": vote_val
         }
+        converted_items = []
+        if items is not None:
+            converted_items = items
+        elif issues:
+            for idx, itm in enumerate(issues):
+                if isinstance(itm, dict) and "issue_id" in itm:
+                    converted_items.append(itm)
+                elif isinstance(itm, dict):
+                    converted_items.append({
+                        "issue_id": f"{self.agent_id}/ISSUE-{idx+1}",
+                        "disposition_class": "BLOCKING" if vote_val == "NO_APPROVE" else "ADVISORY",
+                        "severity": itm.get("severity", "major"),
+                        "title": itm.get("issue") or itm.get("description") or itm.get("summary") or "Simulated issue"
+                    })
+        elif vote_val == "NO_APPROVE":
+            converted_items = [
+                {
+                    "issue_id": f"{self.agent_id}/ISSUE-01",
+                    "disposition_class": "BLOCKING",
+                    "severity": "major",
+                    "title": "Simulated blocking issue"
+                }
+            ]
+
+        if vote_val == "ABSTAIN":
+            data["items"] = []
+            data["abstain_reason"] = "Simulated abstain reason"
+        else:
+            data["items"] = converted_items
+
         is_valid, err = validate_review_manifest(data)
         if not is_valid:
             raise ValueError(f"Mock generated invalid review manifest: {err}")

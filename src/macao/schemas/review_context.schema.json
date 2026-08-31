@@ -1,15 +1,19 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.3/review_context.schema.json",
+  "$id": "https://macao.dev/schemas/v2.5/review_context.schema.json",
   "title": "MACAO REVIEW_REQUEST review_context（唯一权威结构，见 PRD §5.2）",
   "type": "object",
   "required": ["dev_checkpoint", "repository", "task_info", "code_changes", "quality_snapshot"],
   "properties": {
     "dev_checkpoint": {
       "type": "object",
-      "required": ["path"],
       "properties": {
-        "path": { "type": "string", "minLength": 1 },
+        "path": { "type": "string" },
+        "commit": { "type": "string" },
+        "sha256": { "type": "string" },
+        "base_commit": { "type": "string" },
+        "head_commit": { "type": "string" },
+        "review_round": { "type": "integer" },
         "content_base64": { "type": "string" }
       }
     },
@@ -22,11 +26,22 @@
         "fetch_policy": { "type": "string" }
       }
     },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string" },
+        "commit": { "type": "string" },
+        "dev_manifest": { "type": "object" }
+      }
+    },
     "task_info": {
       "type": "object",
-      "required": ["description"],
       "properties": {
-        "description": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "source": { "type": "string" },
+        "path": { "type": "string" },
+        "commit": { "type": "string" },
+        "sha256": { "type": "string" },
         "business_impact": { "type": "string" },
         "timeline_info": { "type": "string" },
         "review_focus": { "type": "array", "items": { "type": "string" } }
@@ -44,6 +59,7 @@
             "head_commit": { "type": "string", "minLength": 1 }
           }
         },
+        "diff_policy": { "type": "string" },
         "diff_command": { "type": "string" },
         "summary": {
           "type": "object",
@@ -71,11 +87,10 @@
     },
     "quality_snapshot": {
       "type": "object",
-      "required": ["tests"],
       "properties": {
+        "source": { "type": "string" },
         "tests": {
           "type": "object",
-          "required": ["passed", "failed", "coverage"],
           "properties": {
             "passed": { "type": "integer", "minimum": 0 },
             "failed": { "type": "integer", "minimum": 0 },
@@ -89,18 +104,26 @@
     "executor_self_assessment": {
       "type": "object",
       "properties": {
+        "source": { "type": "string" },
+        "anchor": { "type": "string" },
         "what_was_done": { "type": "string" },
         "review_focus": { "type": "array", "items": { "type": "string" } },
         "known_limitations": { "type": "array", "items": { "type": "string" } }
       }
     },
-    "history": {
+    "review_guidelines": {
       "type": "object",
       "properties": {
-        "previous_reviews": { "type": "integer", "minimum": 0 },
-        "previous_feedback": { "type": "array" }
+        "path": { "type": "string" },
+        "commit": { "type": "string" },
+        "sha256": { "type": "string" }
       }
     },
-    "references": { "type": "object" }
+    "history": {
+      "type": ["array", "object"]
+    },
+    "references": {
+      "type": ["array", "object"]
+    }
   }
 }

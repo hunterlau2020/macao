@@ -3,7 +3,7 @@
 - **设计日期**：2026-09-01
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：PRD v2.4 §2.3（vote_result）、§3.3（E3/E4/E5）；FAQ Q15；UC-1 h0(2)(3)（问题目录 + 加权规则）；`VoteAggregator`/`ConsensusEngine`；GUIDELINES §2.1（L1–L4 判据外部评审用，本用例只算票）。
+- **关联**：PRD v2.5 §2.3（vote_result）、§3.3（E3/E4/E5/E5a）；FAQ Q15；UC-1 h0(2)(3)（问题目录 + 加权规则）；`VoteAggregator`/`ConsensusEngine`；GUIDELINES §2.1（L1–L4 判据外部评审用，本用例只算票）。
 - **边界声明**：编排器**无模型**：从各 `.review.yml` **原样摘录** `vote`，加权 2/3 + 席位法定人数 + 独裁帽写出 `decision`（执行者不写此字段，只做后续汇总，见 UC-6 / FAQ Q15 / PRODUCT-FACTS F-13）；`issues_index` **原样拼接**各信封索引，不合并同类项、不标采纳；僵局 HOLD 问**管理员**（UC-7），不问执行者。
 
 ---
@@ -13,7 +13,7 @@
 | # | 条件 | 不满足时的行为 |
 |---|---|---|
 | P1 | 任务 `WAITING_REVIEW`（或超时降级完成，UC-9） | E1 |
-| P2 | 当前 ref/round 有效票 ≥ `minimum_quorum`（含超时 ABSTAIN 票） | E2（交 UC-9） |
+| P2 | 当前 ref/round 所有配置席位已 accounted（收到合法 manifest 或被持久化 timeout 纳入 accounted 集合） | E2（交 UC-9） |
 | P3 | 每张票已过 UC-4 f1–f4（Schema/上下文/去重） | 该票剔除，审计 |
 
 ## 2. 主成功场景
@@ -46,7 +46,7 @@ E3 产物型转移 `WAITING_REVIEW → CONSENSUS_CHECK`；收集本轮全部合�
 
 1. **计票与策略快照**：各席位 `reviewer/vote/weight/source`、纯整数 `policy_snapshot`、`vote_breakdown`、`decision`、`resolution`
 2. **`issues_index`**（编排器**原样复制**）：逐信封拼接 `{issue_id, reviewer, disposition_class, severity, title, full_document}`；**不合并、不改写、不排序去重**
-3. **内容处置与采纳彻底外置**：`vote_result.json` 仅声明 `requires_disposition: boolean`。具体逐项处置由 Executor 写入独立按轮隔离的 `review_disposition`（见 UC-6）
+3. **内容处置与采纳彻底外置**：`vote_result.json` 仅声明 `requires_disposition: boolean`。具体逐项处置由 Executor 写入独立按轮隔离的 `executor.disposition.yml`（见 UC-6）
 4. 不可变单写保证：落盘后由 Orchestrator 即时提升至 evidence ref，严禁任何后续覆盖或回写。
 
 ### d. 落盘与转移
@@ -95,8 +95,6 @@ agmsg ping：E4 → 管理员（`SIGNOFF_OR_MERGE`）；E5 / E5a → 执行者�
 | `src/macao/consensus/engine.py` + `vote.py` | 加权五重门禁纯整数计票、不可变 vote_result（计票/policy_snapshot/issues_index）、DEADLOCK 即时落盘 |
 | `src/macao/core/schema.py` | `vote_result` Schema v2.0：`policy_snapshot`、`issues_index`、`requires_disposition`、移除旧 `issues_summary` |
 | `src/macao/core/config.py` | `vote_weight` 校验 + 纯整数独裁帽 |
-| `tests/` | 第 6 节 |
-| `src/macao/core/config.py` | `vote_weight` 校验 + 独裁帽 |
 | `tests/` | 第 6 节 |
 
 ## 8. 设计自审

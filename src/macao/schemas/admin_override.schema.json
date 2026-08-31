@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://macao.dev/schemas/v2.5/admin_override.schema.json",
+  "title": "MACAO admin_override.json Admin Override Record",
+  "type": "object",
+  "required": ["override_id", "timestamp", "task_id", "checkpoint_ref", "review_round", "trigger", "choice", "admin_identity"],
+  "properties": {
+    "override_id": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string" },
+    "task_id": { "type": "string", "minLength": 1 },
+    "checkpoint_ref": { "type": "string", "minLength": 1 },
+    "review_round": { "type": "integer", "minimum": 1 },
+    "trigger": { "type": "string" },
+    "choice": { "enum": ["APPROVED", "REWORK", "RETRY_REVIEW", "CANCEL", "EXTEND"] },
+    "admin_identity": { "type": "string", "minLength": 1 },
+    "exempt_issue_ids": { "type": "array", "items": { "type": "string" } },
+    "note": { "type": "string" }
+  }
+}

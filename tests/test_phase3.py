@@ -244,6 +244,11 @@ opinion:
   status: "CHANGES_REQUESTED"
   feedback:
     summary: "Found regression in math calculation"
+items:
+  - issue_id: "codex/BUG-01"
+    disposition_class: "BLOCKING"
+    severity: "major"
+    title: "Math regression"
 ```
 """
         is_val, manifest, err = ReviewExtractor.extract_and_validate(raw_output, "codex", "abc1234", 1)
@@ -293,6 +298,7 @@ reviewer:
   id: "opencode"
   cli: "opencode"
 vote: "ABSTAIN"
+abstain_reason: "No domain knowledge on this file."
 opinion:
   status: "ABSTAINED"
   feedback:
