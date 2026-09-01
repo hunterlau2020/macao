@@ -3,13 +3,26 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-01（全量对账 `2766c69` 文档轨 4 份专家报告；登记表补入本轮 4 份并修正报告计数 86→103）
+- **最新更新时间**：2026-09-01（全量对账 `2da1bc2` 文档轨 2 份专家报告；登记 `2c40cd5` 全量用例体系 UseCases PRD v2.5 对齐评审申请；报告总计数 103→105）
 - **当前并行评审轨道**：
-  - **文档轨（进行中）**：[`2026-09-01-review-request-PRD-v2.5-Design-Sync.md`](2026-09-01-review-request-PRD-v2.5-Design-Sync.md) → 目标 **L1 DOC-ALIGNED / PG-0**，被审提交 `2766c69`
+  - **文档轨（进行中）**：
+    1. [`2026-09-01-review-request-PRD-v2.5-Design-Sync.md`](2026-09-01-review-request-PRD-v2.5-Design-Sync.md) → 目标 **L1 DOC-ALIGNED / PG-0**，整改提交 `2c40cd5`
+    2. [`2026-09-01-review-request-UseCases-v2.5-Alignment.md`](2026-09-01-review-request-UseCases-v2.5-Alignment.md) → 目标 **L1 DOC-ALIGNED / PG-0**，被审提交 `2c40cd5`
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨**：PRD v2.5 **未获授予 L1 / PG-0**——票型 **2 授予（GLM、Qwen）+ 2 拒绝（Claude、Codex）**，未达成授予共识；**文档定级维持 PRD v2.3.1 的 L1 DOC-ALIGNED / PG-0**，v2.5 尚不构成实施基线，Phase 1~5 编码未获准入
+  - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**）
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中
+
+
+### 文档轨：PRD v2.5 第三轮复核（`2766c69` → `2da1bc2`）
+
+- **本轮票型（2 份，独立出具）**：
+  - **Claude**：`NO_APPROVE`（确认 N-1 公式控制字符、N-2 vote_result 决策枚举、Codex P1-4/P1-6/P1-7 等前序阻断全部闭环；提出 3 项 P1：M-1 review_context additionalProperties 未放行 `required_blocks`、M-2 macao_config 未单向封闭为 `weighted_2/3_v1`、M-3 PRD §2.5 未提 `override_id`）；
+  - **Grok**：`NO_APPROVE`（确认 P0-1 状态机主流程闭环、8 份 Schema 双副本一致、86/86 测试通过；提出 3 项 P1：P1-1 封闭 consensus_rule、P1-2 UC-6 示例 executor 结构与 PRD §2.5 override_id 契约、P1-3 E7 APPROVED 处置流程闭环）。
+- **整改与闭环（已在 `2c40cd5` 实装）**：
+  1. `review_context.schema.json` 补充 `required_blocks` 属性声明，PRD §5.2 权威实例通过自身契约校验；
+  2. `macao_config.schema.json` 单向严格封闭 `consensus_rule: ["weighted_2/3_v1"]`，并同步更新各处代码与测试默认模板；
+  3. PRD §2.5 补充 `override_id` 字段定义与规则 4 守卫约束，UC-6 统一 `executor` 对象结构与 `EXEMPTED_BY_ADMIN` 处置流程。
 
 
 ### 文档轨：PRD v2.5 Design-Sync 整改轮（`0bc6247` → `2766c69`）

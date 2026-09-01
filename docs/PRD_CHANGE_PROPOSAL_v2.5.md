@@ -151,32 +151,36 @@ version: "1.0"
 task_id: "task-1"
 checkpoint_ref: "a1b2c3d"
 review_round: 1
-artifact_revision: 1
-executor_id: "cc-ds4"
-status: "FINAL"
-full_document:
-  path: "docs/reviews/2026-09-01-review-disposition-a1b2c3d-cc-ds4.md"
-  sha256: "<sha256>"
-vote_result:
-  path: ".macao/vote_result.json"
-  evidence_commit: "c4d5e6f"
-  sha256: "<sha256>"
+executor:
+  id: "cc-ds4"
+  role: "executor"
+  cli: "claude-code"
+disposition_status: "FINAL"  # DRAFT | FINAL | PENDING_ADMIN
+generated_at: "2026-09-01T12:10:00Z"
 issues_index_sha256: "<sha256>"
-items:
+full_document:
+  path: "docs/reviews/2026-09-01-review-disposition-task-1-r1.md"
+  evidence_commit: "c2d3e4f"
+  sha256: "<sha256>"
+dispositions:
   - issue_id: "codex/SEC-01"
-    decision: "ADOPTED"
+    reviewer_id: "codex"
+    disposition_type: "ADOPTED"
     requires_new_checkpoint: true
-    reason_ref: "#codex-sec-01"
-    followup_task_id: null
-    override_id: null
+    rationale: "已在代码中增加超时捕获与重试机制"
+    full_document:
+      path: "docs/reviews/2026-09-01-review-disposition-task-1-r1.md"
+      evidence_commit: "c2d3e4f"
+      sha256: "<sha256>"
+      anchor: "#codex-sec-01"
 ```
 
-`decision` 统一为：
+`disposition_type` 统一为：
 
 - `ADOPTED`：已采纳；`requires_new_checkpoint` 可为 `true` 或 `false`；
-- `DEFERRED`：延期，必须有理由，`followup_task_id` 可选，不查验任务存在性，`requires_new_checkpoint=false`；
+- `DEFERRED`：延期，必须有理由，`requires_new_checkpoint=false`；
 - `REJECTED`：不采纳，必须有理由，`requires_new_checkpoint=false`；
-- `NEEDS_ADMIN`：无法由 Executor 决定，`status=PENDING_ADMIN`，当前状态 HOLD；
+- `NEEDS_ADMIN`：无法由 Executor 决定，`disposition_status=PENDING_ADMIN`，当前状态 HOLD；
 - `EXEMPTED_BY_ADMIN`：仅在有效 E7 override 覆盖时使用，必须有 `override_id`，`requires_new_checkpoint=false`。
 
 强制规则：
@@ -185,7 +189,7 @@ items:
 2. `issues_index` 的稳定顺序是“冻结的 Reviewer 配置顺序 × 各 manifest 原始 issue 顺序”，禁止排序、去重和语义合并；
 3. `requires_new_checkpoint` 对每一项都是必填布尔值；缺失时失败关闭；
 4. Markdown 保存完整理由，YAML 只保存结构化索引和锚点；
-5. `status` 只有 `FINAL | PENDING_ADMIN`；产物一旦被状态转移消费即冻结并归档；`PENDING_ADMIN` 的后续结果用更高 `artifact_revision` 写新版本，不原地修改；
+5. `disposition_status` 枚举为 `DRAFT | FINAL | PENDING_ADMIN`；产物一旦被状态转移消费即冻结并归档；`FINAL` 状态下严禁遗留 `NEEDS_ADMIN`；
 6. disposition 必须反向引用冻结的 vote result 和 `issues_index` 哈希；Orchestrator 只校验关联关系，不回写 vote result。
 
 ### 4.4 disposition 的完整协议边与超时

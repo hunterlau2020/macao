@@ -670,6 +670,17 @@ dispositions:
       evidence_commit: "c2d3e4f"
       sha256: "<sha256>"
       anchor: "#gemini-sec-01"
+  - issue_id: "codex/ARCH-02"
+    reviewer_id: "codex"
+    disposition_type: "EXEMPTED_BY_ADMIN"
+    override_id: "override-20260901-abcd"
+    requires_new_checkpoint: false
+    rationale: "管理员在 admin_override.json 中已豁免此项非阻塞架构建议"
+    full_document:
+      path: "docs/reviews/2026-09-01-review-disposition-task-1-r1.md"
+      evidence_commit: "c2d3e4f"
+      sha256: "<sha256>"
+      anchor: "#codex-arch-02"
 ```
 
 **处置规则与守卫**：
@@ -678,7 +689,8 @@ dispositions:
    - 每项 issue 必须提供非空布尔值 `requires_new_checkpoint`；
    - 若任一 issue 的 `requires_new_checkpoint == true` $\implies$ 触发 E5a 进入 `REWORK`；
    - 若全部 issue 的 `requires_new_checkpoint == false` $\implies$ 触发 E4 进入 `MERGING`；
-3. **状态守卫**：只有 `disposition_status == "FINAL"` 的产物才能触发 E4/E5a；`DRAFT` 或 `PENDING_ADMIN` 状态下保持在 `CONSENSUS_CHECK` HOLD 状态，等待执行者完善或管理员 E7 override。
+3. **状态守卫**：只有 `disposition_status == "FINAL"` 的产物才能触发 E4/E5a；`DRAFT` 或 `PENDING_ADMIN` 状态下保持在 `CONSENSUS_CHECK` HOLD 状态，等待执行者完善或管理员 E7 override；在 `FINAL` 状态下，所有 issue 必须已得出明确处置，严禁遗留 `NEEDS_ADMIN`；
+4. **管理员豁免关联守卫**：若 `disposition_type == "EXEMPTED_BY_ADMIN"`，必须关联非空的 `override_id`，且 `requires_new_checkpoint` 必须为 `false`。
 
 ---
 

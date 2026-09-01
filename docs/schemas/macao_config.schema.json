@@ -63,7 +63,7 @@
         "consensus_rule"
       ],
       "properties": {
-        "consensus_rule": { "enum": ["weighted_2/3_v1", "2/3_majority"] },
+        "consensus_rule": { "enum": ["weighted_2/3_v1"] },
         "min_effective_votes": { "type": "integer", "minimum": 1 },
         "dictator_cap_enabled": { "type": "boolean" },
         "minimum_winning_seats": { "type": "integer", "minimum": 1 },

@@ -561,7 +561,7 @@ team:
       adapter: pty-wrapper
 
 policy:
-  consensus_rule: 2/3_majority
+  consensus_rule: weighted_2/3_v1
   min_effective_votes: 2
   max_rework_rounds: 3
 merge:
