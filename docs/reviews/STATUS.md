@@ -3,16 +3,14 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-01（全量对账 `caf3473`：补登 `2da1bc2` 与 `caf3473` 共 4 份专家报告；报告计数更正 103→**107**、申请 20→**21**；更正三处 SHA 归属，详见下方各轨说明）
+- **最新更新时间**：2026-09-01（全量对账 `caf3473` 4 份专家报告并完成全量阻断闭环，重新提交至 commit `5583bdd`；报告总计数 **107**、申请 **21**）
 - **当前并行评审轨道**：
-  - **文档轨（进行中，两份申请并行）**：
-    1. [`2026-09-01-review-request-PRD-v2.5-Design-Sync.md`](2026-09-01-review-request-PRD-v2.5-Design-Sync.md) → 目标 **L1 DOC-ALIGNED / PG-0**；最近被审提交 `2da1bc2`，整改已落于 **`caf3473`**（待下一轮复核）
-    2. [`2026-09-01-review-request-UseCases-v2.5-Alignment.md`](2026-09-01-review-request-UseCases-v2.5-Alignment.md) → 目标 **L1 DOC-ALIGNED / PG-0**；申请声称基线 `2c40cd5`，**实际被审提交为 `caf3473`**（Claude 与 Grok 均以 HEAD 为准并各自登记 SHA 漂移）
+  - **文档轨（进行中，两份申请并行复审）**：
+    1. [`2026-09-01-review-request-PRD-v2.5-Design-Sync.md`](2026-09-01-review-request-PRD-v2.5-Design-Sync.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`5583bdd`**
+    2. [`2026-09-01-review-request-UseCases-v2.5-Alignment.md`](2026-09-01-review-request-UseCases-v2.5-Alignment.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`5583bdd`**
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨 · PRD v2.5 方案**：`2da1bc2` 轮 **未获授予**（2 份报告均 `NO_APPROVE`）；三项阻断的整改已落于 `caf3473`，**尚未经任何一轮正式复审授予**
-  - **文档轨 · 用例体系**：`caf3473` 轮 **未获授予**（2 份报告均 `NO_APPROVE`）；用例体系**暂不得作为 Phase 1~5 的官方操作基准**
-  - **文档定级维持**：PRD **v2.3.1** 的 L1 DOC-ALIGNED / PG-0；**v2.5 全文档体系（含用例）仍未获 PG-0，Phase 1~5 编码未获准入**
+  - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**，受审提交 `5583bdd`）
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中
 
 

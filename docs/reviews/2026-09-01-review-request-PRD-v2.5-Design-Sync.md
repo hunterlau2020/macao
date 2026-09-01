@@ -3,7 +3,7 @@
 - **申请日期**：2026-09-01
 - **申请人**：MACAO Architecture Team
 - **目标定级**：**L1 DOC-ALIGNED / PG-0（v2.5 实施基线定级与技术准入）**
-- **当前代码基线**：`origin/main`
+- **当前代码与文档基线**：`commit 5583bdd`（`origin/main`）
 - **关联提案**：[`docs/PRD_CHANGE_PROPOSAL_v2.5.md`](../PRD_CHANGE_PROPOSAL_v2.5.md)（DRAFT v0.3 / 专家意见闭环稿）
 - **关联事实源**：[`docs/usercases/PRODUCT-FACTS.md`](../usercases/PRODUCT-FACTS.md)（F-1 ～ F-22）
 
