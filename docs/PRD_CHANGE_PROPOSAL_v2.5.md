@@ -131,7 +131,7 @@ Schema 必须通过 `allOf` 条件约束表达以下规则：
 #### 管理员 E7 覆盖与豁免语义
 
 1. **DEADLOCK 覆盖为 APPROVED**：管理员提交 override，指定 `exempt_issue_ids` 与 note，系统生成 `override_id` 并记录独立 `admin_override.json`。Executor 据此将相关 issue 标记为 `EXEMPTED_BY_ADMIN` 并产出 FINAL disposition，满足 E4 进入 `MERGING`。
-2. **处置超时覆盖为 APPROVED**：管理员提交 override 附带 `exempt_issue_ids` 与 note，系统生成 `override_id` 并可由管理员一并签署替代 FINAL disposition，满足 E4 进入 `MERGING`。
+2. **处置超时覆盖为 APPROVED**：管理员提交 override 附带 `exempt_issue_ids` 与 note，系统生成独立 `admin_override.json`（含 `override_id`）；执行者在 `.macao/.dispositions/r<round>/executor.disposition.yml` 中将对应 issue 标记为 `EXEMPTED_BY_ADMIN`+`override_id` 并提交 FINAL disposition，编排器校验满足 E4 进入 `MERGING`。严格保持执行者对 disposition 的单一垄断写者权，严禁管理员代写 disposition。
 3. **REWORK_REQUIRED 覆盖为 APPROVED**：E7 源状态包含 `REWORK` 与 `CONSENSUS_CHECK`。当在 `REWORK` 状态下管理员决定豁免合并时，通过 E7 转移直接推进至 `MERGING`（守卫：FINAL disposition 中所有未修复 BLOCKING issue 均显式标记为 `EXEMPTED_BY_ADMIN` 且绑定合法 `override_id`）。
 4. **`vote_result.json` 不可变**：任何 override 不修改原 `vote_result.json` 的 `decision` 字段，终局机器状态与人工裁定依据通过 `override_id` 与 SQLite 审计表链接。
 

@@ -51,9 +51,9 @@
 | **D-4: BACKLOG 命名更名为 DEFERRED** | UC-6 §2.b, UC-1 h0(2), PRD §2.5 | 统一处置枚举为 `ADOPTED / DEFERRED / REJECTED / NEEDS_ADMIN / EXEMPTED_BY_ADMIN`，`DEFERRED` 必须附带延期 rationale，`requires_new_checkpoint=false`。 |
 | **D-5: requires_new_checkpoint 显式布尔守卫** | UC-6 §2.b/c, UC-3 §2.g | 每项 issue 必须提供非空布尔值 `requires_new_checkpoint`；全 false 且 APPROVED $\implies$ E4 进入 `MERGING`；任一 true $\implies$ E5a 进入 `REWORK`；严禁编排器从文本推测。 |
 | **D-6: 纯整数加权五重门禁与独裁帽** | UC-5 §2.b, UC-1 h0(3), UC-10 §2.b | 统一采用纯整数四则运算：$\forall i, 3w_i < 2W$、$E_N \ge \lceil 2N/3 \rceil$、$E_W \ge \lceil 2W/3 \rceil$、$3W_{win} \ge 2E_W$、胜方席位 $\ge 2$；严禁浮点数运算与静默四舍五入。 |
-| **D-7: FSM 三投影与 E1～E10 转移一致** | UC-4 §2.g, UC-5 §2.a/d, UC-6 §2.c, UC-7 §2.c | Layer 1a 仅在全席位 accounted（`accounted == configured`）时触发 E3；Layer 1c 按 `requires_new_checkpoint` 与 `decision` 精确分流 E4（MERGING）与 E5a（REWORK）。 |
-| **D-8: Git Evidence Ref 体系与两阶段 Push 校验** | UC-3 §2.c, UC-4 §2.b, UC-8 §2.关卡1/6 | 证据进入独立 `refs/macao/evidence/<task_id>/r<round>`；AEP/1.1 零 base64（通过 `{path, evidence_commit, sha256}` 引用，≤16 KiB 字节预算）；UC-8 关卡 1 强制 Pre-merge `ls-remote` 校验已推送。 |
-| **D-9: init / doctor / reconcile / adopt 职责边界与单写者垄断规范** | UC-1, UC-10, README 产物表 | 静态配置（Admin 单写）、开发检查点（Executor 单写）、评审意见（Reviewer 单写）、共识计票（Orchestrator 单写）、意见处置（Executor 单写）、人工接管（Admin 单写）。 |
+| **D-7: AEP/1.1 协议栈与第 8 类消息 DISPOSITION_REQUIRED** | UC-2 §2.e, UC-3 §2.c, UC-4 §2.b, UC-6 §2.a | 8 类消息（Type A～Type H）全部遵从 AEP/1.1，增加 Type E `DISPOSITION_REQUIRED`；严禁 base64 内联长正文，统一通过 `{path, evidence_commit, sha256}` Git Evidence Ref 引用；硬约束 ≤16 KiB 字节预算与 2048 字节内联文本。 |
+| **D-8: Git Evidence Ref 体系与两阶段 Push 校验** | UC-3 §2.c, UC-4 §2.b, UC-8 §2.关卡1/6 | 证据进入独立 `refs/macao/evidence/<task_id>/r<round>`，不因补写证据改变被评审的 source `checkpoint_ref`；UC-8 关卡 1 强制 Pre-merge `ls-remote` 校验已推送（fail-closed），任务完成不自动把证据合入 source 分支。 |
+| **D-9: init / doctor / reconcile / adopt 职责边界与单写者产物垄断规范** | UC-1, UC-10, README 产物表 | `macao init` 是入口，`doctor` 只读体检，`reconcile` 确定性恢复，`adopt` 是别名；五大核心产物单一垄断写者严格互斥，严禁跨角色代写。 |
 
 ---
 

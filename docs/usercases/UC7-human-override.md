@@ -32,7 +32,7 @@
 
 | choice | 转移 | 语义 |
 |---|---|---|
-| `APPROVED` | → E4 → `MERGING` | 接受当前 checkpoint；落盘 `admin_override.json`（含 `override_id`）；执行者提交含 `EXEMPTED_BY_ADMIN`+`override_id`（`requires_new_checkpoint: false`）的 FINAL disposition 后，编排器触发 E4 进入合并流水线 |
+| `APPROVED` | 落盘 `admin_override.json`（解 DEADLOCK HOLD，投影 `SHOULD_DISPOSE`）→ 经执行者 FINAL disposition 校验通过后触发 E4 → `MERGING` | 接受当前 checkpoint；管理员生成独立 `admin_override.json`（含 `override_id`，可选列出 `exempt_issue_ids`）；解除 DEADLOCK HOLD 并通知执行者（`role_view=SHOULD_DISPOSE`）；执行者在 `.macao/.dispositions/r<round>/executor.disposition.yml` 中将对应 issue 处置标记为 `EXEMPTED_BY_ADMIN`+`override_id`，提交 FINAL disposition（`requires_new_checkpoint: false`）；编排器校验通过后触发 E4 进入 `MERGING` 流水线。**严禁无 FINAL 直跳 MERGING，严禁管理员代写 disposition** |
 | `REWORK` | → E5 同规则 → `REWORK` | 返工（round+1）；裁定说明即返工依据 |
 | `RETRY_REVIEW` | → E9 → `WAITING_REVIEW` | 本轮意见作废归档；round 不变；全新 `REVIEW_REQUEST`（新 message_id + 新 deadline） |
 | `CANCEL` | → E10 → `CANCELLED`（终态） | 通知全员；现场归档 |

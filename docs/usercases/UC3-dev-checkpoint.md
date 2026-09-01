@@ -39,7 +39,7 @@ review_round: 1
 executor: { id: "cc-ds4", cli: "claude-code" }
 checkpoint_ref: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
 development:
-  git: { latest_commit: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", source_branch: feature/x }
+  git: { latest_commit: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", branch: feature/x }
   quality_metrics: { tests_passed: true }   # 自报，编排器不复核
 full_document:
   path: docs/reviews/2026-09-01-review-request-task-1-r1.md
@@ -109,4 +109,4 @@ d1 Schema（Draft-07）；d2 `signal == EXPLICIT`（隐式信号只预警不转�
 
 - 三层载体严格执行（FAQ Q14）：agmsg 不传正文、yml 只当信封、全文在 `docs/reviews/`；sha256 把信封钉死在全文字节上
 - "评审对象 = 合并对象"自本用例锁 ref 开始（UC-8 E4a 硬校验的起点）
-- 遗留决策点：①检查点窗口时长（1m）与窗口后策略；②`quality_metrics` 自报字段是否演进为可选 CI 证据；③采纳清单是否独立 `adoption.yml`（UC-1 遗留⑤）
+- 遗留决策点：①检查点窗口时长（1m）与窗口后策略；②`quality_metrics` 自报字段是否演进为可选 CI 证据；③单轮多次检查点的 STALE 归档策略

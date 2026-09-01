@@ -3,32 +3,37 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-01（全量对账 `caf3473` 4 份专家报告并完成全量阻断闭环，重新提交至 commit `5583bdd`；报告总计数 **107**、申请 **21**）
+- **最新更新时间**：2026-09-02（全量对账 `5583bdd` Grok 独立评审报告并完成全部阻断闭环，重新提交至 commit `HEAD`；报告总计数 **108**、申请 **21**）
 - **当前并行评审轨道**：
   - **文档轨（进行中，两份申请并行复审）**：
-    1. [`2026-09-01-review-request-PRD-v2.5-Design-Sync.md`](2026-09-01-review-request-PRD-v2.5-Design-Sync.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`5583bdd`**
-    2. [`2026-09-01-review-request-UseCases-v2.5-Alignment.md`](2026-09-01-review-request-UseCases-v2.5-Alignment.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`5583bdd`**
+    1. [`2026-09-01-review-request-PRD-v2.5-Design-Sync.md`](2026-09-01-review-request-PRD-v2.5-Design-Sync.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **HEAD**
+    2. [`2026-09-01-review-request-UseCases-v2.5-Alignment.md`](2026-09-01-review-request-UseCases-v2.5-Alignment.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **HEAD**
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**，受审提交 `5583bdd`）
+  - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**）
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中
 
 
-### 文档轨：全量用例体系（UseCases）v2.5 对齐轮（`2c40cd5` → `caf3473`）
+### 文档轨：全量用例体系（UseCases）v2.5 对齐复核轮（`5583bdd`）
 
-- **本轮票型（3 份独立出具，均为 `NO_APPROVE`）**：
-  - **Claude**：`NO_APPROVE`，**P1 × 5 / P2 × 5 / P3 × 3**。确认主干已真对齐（UC-5 三态决策表与五重门禁、UC-7 五选项闭合与「DEADLOCK 已落盘 + 独立 `admin_override.json` + 严禁二次回写」、UC-9 对 `accounted` 与 $E_N/E_W$ 的严格切分、UC-4 产物层去重），**GUIDELINES §6 反例库 11/11 可唯一推出**，申请 §5.1 点名的 5 类 fail-closed 拦截全部具备，申请 §4 四组自动化结论逐条重跑属实。阻断项：**U-1** 处置产物路径分裂（UC-6 与 README 写 `.macao/executor.disposition.yml`，而 PRD §2.5 与 Layer 1c 读取方写 `.macao/.dispositions/r<round>/…` → 照 UC-6 实现将在 `CONSENSUS_CHECK` 永久静默 HOLD）；**U-2** AEP Type 字母整体错位一位（UC-2/UC-4/README 的 Type B/C 应为 Type A/B，而 UC-7 的 Type H 正确 → 用例集自身不自洽）；**U-3** `.review.yml` issue 列表用 `issues[]`，契约与 PRD §2.2 为 `items[]`；**U-4** UC-8 缺 Pre-merge Evidence Seal 且把两阶段封存顺序做反（evidence 提升被置于源码 push 之后）；**U-13** UC-3 `.dev.yml` 示例缺 `full_document.evidence_commit`、UC-1-gemini「生成的 `macao.yaml` 规格示例」整体为 v2.4（`version: "2.4"`、`consensus_strategy` 而非 `consensus_rule`、无加权与预算字段）。
-  - **Grok**：`NO_APPROVE`，**P1 × 3、无 P0**。独立确认主旅程、D-1 不可变 `vote_result`、D-4 三值决策、D-5 五重门禁、D-8 拓扑前进、超时 ABSTAIN 边界在 UC-4/5/9 主路径已可读出；确认其自身在 `2da1bc2` 轮的 P1-1/P1-2 在 HEAD 已闭环。阻断项：**P1-1** 处置产物路径未收敛（与 Claude U-1 独立收敛于同一处）；**P1-2** E7 `APPROVED` 且仍有未覆盖 issue 时，带 `EXEMPTED_BY_ADMIN` 的 FINAL 由谁写、能否无 FINAL 直跳 `MERGING`，UC-6 A2 / UC-7 §2.c / §16.1 三处推不出唯一边（上轮 P1-3 未闭）；**P1-3** 待审用例 YAML 示例未全部通过自称唯一的契约。另登记 P2 × 8 / P3 × 1。
-  - **Qwen**：`NO_APPROVE`，**BLOCKING × 6 / ADVISORY × 3**。独立核验确认测试 86/86、控制字符 0、fixtures valid 8/8 + invalid 拦截、0 diff 等声明属实；独立复现并确认 Claude/Grok 所提 5 项阻断（B-1 路径分裂、B-2 Type 字母错位、B-3 items[] 字段名、B-4 UC-8 Pre-merge Evidence 关卡与封存顺序、B-5 UC-3/UC-1-gemini 契约合规）；另**独立新发现 B-6**：申请 §3 的 D-1～D-9 编号与权威提案源（`PRD_CHANGE_PROPOSAL_v2.5.md` L34–42）系统性错位（D-2/D-3/D-4/D-5/D-6/D-8/D-9 对应关系需与提案逐条一致）。
-- **全量阻断项闭环实装**：
-  1. **B-1 / U-1 / P1-1 处置路径收敛**：全库统一为 `.macao/.dispositions/r<round>/executor.disposition.yml`，修正 `UC-6`、`README.md` 及评审申请中的扁平路径写法；
-  2. **B-2 / U-2 AEP Type 字母对齐**：全量修正为 PRD §2.4 权威标识（`DEVELOPMENT_STARTED` = Type A，`REVIEW_REQUEST` = Type B）；
-  3. **B-3 / U-3 items[] 字段契约对齐**：全量修正为 `items[]`（含 UC-4 §6 验收断言），消除 `issues[]` 错配；
-  4. **B-4 / U-4 UC-8 关卡与两阶段封存对齐**：重排为六道关卡，新增关卡 1 Pre-merge Evidence Push 校验（`ls-remote` 校验 `refs/macao/evidence/<task_id>/r<round>` 已推送，未推送 fail-closed 拦截），源码 push 后执行 Post-merge 封存与归档；
-  5. **B-5 / U-13 用例 YAML 示例契约合规**：UC-3 补充 `evidence_commit: "e5f6a7b"`，UC-1-gemini 全量升级为 v2.5 `macao.yaml` 规格（`consensus_rule: "weighted_2/3_v1"`，补齐加权与预算字段），全部示例通过 Draft-07 校验（PASS）；
-  6. **B-6 D-1～D-9 权威编号对齐**：申请 §3 表全面对齐 `PRD_CHANGE_PROPOSAL_v2.5.md` 权威定义（D-1 不可变计票、D-2 独立 disposition、D-3 显式 ABSTAIN、D-4 DEFERRED、D-5 requires_new_checkpoint、D-6 纯整数五重门禁、D-7 FSM 投影、D-8 Evidence Ref、D-9 职责边界与单写者垄断）；
-  7. **P1-2 / U-5 E7 豁免流程与 5 选项闭合**：UC-6 A2 明确执行者提交带 `EXEMPTED_BY_ADMIN`+`override_id` 的 FINAL disposition；README §UC-7 补齐 `EXTEND`（五选项闭合）。
-- **本轮机验结果**：`docs/usercases/*.md` **13 份、控制字符 0**；全部 YAML/JSON 示例 **Draft-07 校验 100% PASS**；`fixtures/valid` **8/8 PASS**、`fixtures/invalid` **7/7 拦截**（新增 `admin_override_invalid_choice.json`）；`docs/schemas/` ↔ `src/macao/schemas/` **8 份逐字节一致**；`PYTHONPATH=src python3 -m unittest discover tests` **86/86 PASS**；`compileall` rc=0。
+- **本轮票型（1 份独立出具，`NO_APPROVE`）**：
+  - **Grok**：`NO_APPROVE`，**P1 × 2、无 P0**。独立确认上轮 2 项阻断（处置路径收敛至 `.macao/.dispositions/r<round>/executor.disposition.yml`、三份抽取 YAML 校验 PASS）已真正闭环；确认 Type 字母、`items[]`、UC-8 关卡 1 `ls-remote` fail-closed 均已落实；确认机验全项通过（13 份用例控制字符 0、valid 8/8、invalid 7/7、86/86 PASS）。阻断项：**P1-1** E7 `APPROVED` 有 issue 时时点与投影边分叉（UC-7 转移列直接写 E4 而语义列等 FINAL、PRD Layer 1c 对 DEADLOCK 未读 override/FINAL、提案 §4.2 仍残留「管理员替代签署 FINAL」）；**P1-2** 申请 §3 D-7 仍为 FSM（自称权威源的提案 L40 D-7 为 AEP/1.1，D-8 为 Evidence Ref，D-9 为 init/doctor/reconcile/adopt）。另记 P2-1～P2-8（UC-8 关卡 6 提升表述、README 产物表重复行、UC-1-glm 拼接残表与 8 规则、UC-3 branch 字段名等）。
+- **全量阻断项与建议项闭环实装**：
+  1. **P1-1 E7 豁免流时点、投影与唯一边彻底闭环**：
+     - UC-7 §2.c 表转移列与语义列严格同步为「落盘 `admin_override.json`（解 DEADLOCK HOLD，投影 `SHOULD_DISPOSE`）$\rightarrow$ 经执行者 FINAL disposition 校验通过后触发 E4 $\rightarrow$ `MERGING`」，严禁无 FINAL 直跳 `MERGING`，严禁管理员代写 disposition；
+     - PRD §3.2 Layer 1c 伪代码正式支持 DEADLOCK 下读取 `admin_override.json`（`choice: APPROVED`）与 `executor.disposition.yml`（FINAL）并在校验通过后触发 E4/E5a；
+     - PRD §3.4 场景三拆解为 6a（管理员出具 override 解除 HOLD）+ 6a-1（执行者提交 FINAL disposition 触发 E4）；
+     - 提案 §4.2 彻底删除「管理员替代签署 FINAL」表述；
+     - UC-1-glm `h1`/`h2` 调度与投影表显式增补 `CONSENSUS_CHECK`（已出具 admin_override 且待 FINAL）$\rightarrow$ `SHOULD_DISPOSE`。
+  2. **P1-2 申请 §3 对照表与权威源 100% 逐字对齐**：
+     - 申请 §3 D-1～D-9 编号与定义严格对齐 `PRD_CHANGE_PROPOSAL_v2.5.md` L34–42（D-7 为 AEP/1.1，D-8 为 Evidence Ref，D-9 为 init/doctor/reconcile/adopt 职责边界），删去「Layer 1a 触发 E3」误称。
+  3. **P2/P3 细节项全面清理**：
+     - UC-8 关卡 6 澄清 Post-merge 证据封存（PRD §14.5 第 5 步）；
+     - README 产物表消除 3 行重复项；
+     - UC-1-glm 移除 L61-62 拼接残表与第二个 Header，统一 gitignore 9 规则与五重纯整数门禁公式；
+     - UC-1-gemini 步骤 4 与 TUI 终端图示升级为 Schema v2.5；
+     - UC-3 示例更新为 `branch: feature/x`，清理 `adoption.yml` 残留。
+- **本轮机验结果**：`docs/usercases/*.md` **13 份、控制字符 0**；全部 YAML/JSON 示例 **Draft-07 校验 100% PASS**；`fixtures/valid` **8/8 PASS**、`fixtures/invalid` **7/7 拦截**；`docs/schemas/` ↔ `src/macao/schemas/` **8 份逐字节一致**；`PYTHONPATH=src python3 -m unittest discover tests` **86/86 PASS**；`compileall` rc=0。
 
 ---
 

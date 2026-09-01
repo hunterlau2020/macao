@@ -55,23 +55,8 @@
 - **f1** 组装 `macao.yaml`：`team.name=stockdb`；executor/reviewers 各含 `agmsg_member_id`（schema 已支持；`generate_smart_config` 扩展）
 - **f2** 写前 Schema 校验（`validate_config`），失败即中止不落盘
 - **f3** 存在旧配置且 `--force`：先 `macao.yaml.bak.<ts>` 原子备份再写；无 `--force` → E5
-- **f4** 注入 `.gitignore` 隔离（幂等，复用 `ensure_gitignore_isolation` 8 规则）
+- **f4** 注入 `.gitignore` 隔离（幂等，复用 `ensure_gitignore_isolation` 9 规则）
 - **f5** 非交互修正：若本会话 agent 尚未加入该 agmsg 团队（`identities.sh` 无此项目记录），提示执行 `join.sh stockdb <macao> <type> "$(pwd)"`（MACAO 自身作为编排者入队，PRD §11.6 agmsg 网桥前置条件）
-
-| P2  | `macao.yaml` 不存在，或用户显式传入 `--adopt-existing` / `--force` | E2      |
-| P3  | 指定 `--agteam <team>` 存在或可经名册模板创建                     | E3      |
-
----
-
-## 2. 主成功场景（M1：首次初始化 / 扫描并建立项目）
-
-用户在项目根目录运行 `macao init --agteam <team>`，系统完成：
-
-1. **环境与名册预检**：检查 Git 根目录、读取 agmsg team 名册（`identities.sh` / `team.sh`）、探测已安装 AI CLI（`which` / `claude-code --version` / `codex --version` / `kimi --version` / `opencode --version` 等）；
-2. **启发式角色分配**：若名册已存在，按既有 identity 映射；若名册未指定，按内置建议规则提示用户确认（如：Claude Code 担任 Executor，Codex/Kimi/Gemini 担任 Reviewers）；
-3. **初始 FSM 状态识别**：依据工作区中 `.macao/.dev.yml`、`.macao/.reviews/`、`refs/macao/evidence/` 等证据识别当前阶段，推导当前 `role_view`；
-4. **生成 `macao.yaml` 与 State Store 初始化**：写入配置单一事实源，初始化 SQLite `tasks` 与 `artifacts` 表；
-5. **向团队广播就绪消息**：通过 agmsg 发送统一初始化通告与首个 `next_action`。
 
 ---
 
@@ -120,9 +105,7 @@
 加权规则（纯整数五重门禁，无模型）：
 
 - 有效权重 = 未弃权席位的 `vote_weight` 之和（弃权仍不进分母）
-- 赞成加权占比 ≥ 2/3 且满足胜方席位数（≥2）→ `APPROVED`；反对同理 → `REWORK_REQUIRED`；否则 Deadlock → **管理员**（不是执行者）
-- **双门槛**：席位法定人数 `⌈2N/3⌉` 与权重法定人数 `⌈2W/3⌉` **同时满足**
-- **独裁帽**：任一席位 $3 \times w_i < 2 \times W$，配置校验失败则拒绝启动
+- 纯整数五重门禁（$3W_{win} \ge 2E_W$、$E_N \ge \lceil 2N/3 \rceil$、$E_W \ge \lceil 2W/3 \rceil$、胜方席位 $\ge 2$、独裁帽 $\forall i, 3w_i < 2W$）同时满足 → `APPROVED`；反对同理 → `REWORK_REQUIRED`；否则 Deadlock → **管理员**（不是执行者）
 - 权重只作用于总票 `YES/NO`，不作用于单条问题是否成立——单条是否改代码仍是执行者通过 `requires_new_checkpoint` 显式声明
 
 2 人且权重 1:1 时行为与现决策表相同；3 人可把更细的模型配成 2、其余为 1，但仍不能单人 ≥ 2/3。
@@ -139,6 +122,7 @@
 | `WAITING_REVIEW` | `AWAIT_REVIEW_SUBMISSIONS` | 专家写 `.review.yml` + `docs/reviews/`；编排器只催票/收票 |
 | `CONSENSUS_CHECK`（尚无 vote_result） | `TALLY_CONSENSUS` | 编排器跑纯整数加权决策表 |
 | `CONSENSUS_CHECK`（`requires_disposition` 且无 FINAL） | **`NOTIFY_EXECUTOR_DISPOSE`** | 编排器发 `DISPOSITION_REQUIRED`；**执行者写 disposition** |
+| `CONSENSUS_CHECK`（已出具 `admin_override` APPROVED 且待 FINAL） | **`NOTIFY_EXECUTOR_DISPOSE`** | 编排器解除 DEADLOCK HOLD；**执行者写含 `EXEMPTED_BY_ADMIN` 的 FINAL** |
 | `CONSENSUS_CHECK`（HOLD: DEADLOCK/超时/NEEDS_ADMIN） | `ASK_ADMIN` | 问管理员（`override resolve`；不是问执行者自裁） |
 | `MERGING` | `PERFORM_MERGE_AND_PUSH` | 规则合并 + Pre-merge/Post-merge 验证；编排器不总结评审 |
 | `UNKNOWN` 或无法唯一推出 | `RUN_DOCTOR_OR_ASK_ADMIN` | 问管理员（init）；见 h5 |
@@ -159,6 +143,7 @@
 | `WAITING_REVIEW`（已交有效产物） | `AWAIT_REVIEWS` | `REVIEW_SUBMITTED` |
 | `CONSENSUS_CHECK`（尚无 vote_result） | `AWAIT_DECISION` | `AWAIT_DECISION` |
 | `CONSENSUS_CHECK`（`requires_disposition` 且无 FINAL） | **`SHOULD_DISPOSE`** | `AWAIT_DECISION` |
+| `CONSENSUS_CHECK`（已出具 `admin_override` APPROVED 且待 FINAL） | **`SHOULD_DISPOSE`** | `AWAIT_DECISION` |
 | `CONSENSUS_CHECK`（HOLD: DEADLOCK/超时/NEEDS_ADMIN） | `AWAIT_HUMAN` | `AWAIT_HUMAN` |
 | `MERGING` | `AWAIT_MERGE` | `AWAIT_MERGE` |
 | `UNKNOWN` | `AWAIT_HUMAN`（先 h5 问管理员） | `AWAIT_HUMAN` |

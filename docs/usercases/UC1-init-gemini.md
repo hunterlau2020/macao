@@ -89,13 +89,13 @@ sequenceDiagram
 ### 步骤 4：交互式引导与用户确认 (Interactive Guided Q&A)
 向导在终端以 Rich/TUI 形式向用户呈现初始建议，提供默认选项并支持微调：
 1. **团队名称与 Executor 绑定**：确认 `agmsg` 团队名称及主开发负责人映射（CLI + 模型）；
-2. **Reviewers 审查矩阵**：确认参与仲裁的 Reviewer 列表、各自绑定的 `agmsg_member_id`、CLI 类型与使用模型；
-3. **共识策略与超时机制**：确认仲裁比例（默认 2/3 多数制）、CI 门禁指令与单审查员超时时间（如 `10m`）；
+2. **Reviewers 审查矩阵**：确认参与仲裁的 Reviewer 列表、各自绑定的 `agmsg_member_id`、CLI 类型、使用模型及投票权重（`vote_weight`）；
+3. **共识策略与超时机制**：确认加权共识规则（默认 `weighted_2/3_v1` 纯整数五重门禁）、CI 门禁指令与各阶段超时参数；
 4. **项目阶段确认**：确认是否按“全新项目”或“存量在建项目”挂载。
 
 ### 步骤 5：单一事实源固化与运行时隔离
 1. **写入 `macao.yaml`**：将用户最终确认的配置写入项目根目录，并即时通过 Draft-07 Schema 校验；
-2. **注入 `.gitignore`**：自动追加 `.macao/worktrees/`、`.macao/.reviews/`、`.macao/.dev.yml`、`.macao/vote_result.json`、`.macao/archive/`、`.macao/*.db*` 等规则，彻底杜绝审查工作区分支和运行时 SQLite 污染代码库；
+2. **注入 `.gitignore`**：自动追加 `.macao/worktrees/`、`.macao/.reviews/`、`.macao/.dev.yml`、`.macao/vote_result.json`、`.macao/archive/`、`.macao/*.db*` 等 9 规则隔离，彻底杜绝审查工作区分支和运行时 SQLite 污染代码库；
 3. **初始化状态存储**：创建 `.macao/state.db`，记录初始化完成审计事件（`PROJECT_INITIALIZED`）。
 
 ### 步骤 6：生成完成与指引输出 (Onboarding Summary)
@@ -219,16 +219,16 @@ aep:
 [3/4] Team & Model Configuration Alignment:
 ? Confirm or customize the proposed team mapping? (Use arrow keys)
   ❯ [Accept Proposed Configuration]
-    - Executor: stockdb-dev (opencode: GLM 5.3 max) [agmsg: agent_dev_01]
-    - Reviewer 1: stockdb-arch (claude-code: claude-3-7-sonnet) [agmsg: agent_arch_02]
-    - Reviewer 2: stockdb-sec (codex: o3-mini) [agmsg: agent_sec_03]
-    - Reviewer 3: stockdb-qa (antigravity: gemini-2.0-pro) [agmsg: agent_qa_04]
+    - Executor: stockdb-dev (opencode: GLM-5.3-max) [agmsg: agent_dev_01]
+    - Reviewer 1: stockdb-arch (claude-code: claude-3-7-sonnet) [agmsg: agent_arch_02, weight: 1]
+    - Reviewer 2: stockdb-sec (codex: o3-mini) [agmsg: agent_sec_03, weight: 1]
+    - Reviewer 3: stockdb-qa (antigravity: gemini-2.0-pro) [agmsg: agent_qa_04, weight: 1]
   [Customize CLI / Model assignments]
   [Switch to purely local manual config]
 
 [4/4] Solidifying Project Configuration:
-  ✓ Written configuration to macao.yaml (Validated against Schema v2.4)
-  ✓ Injected runtime isolation entries into .gitignore
+  ✓ Written configuration to macao.yaml (Validated against Schema v2.5)
+  ✓ Injected runtime isolation entries into .gitignore (9 rules)
   ✓ Initialized MACAO state store (.macao/state.db)
 
 🎉 MACAO Project 'stockdb' successfully initialized!

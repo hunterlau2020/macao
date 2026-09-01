@@ -774,6 +774,20 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
                                    expect_review_round=rnd)
         if result.valid:
             if result.decision == 'DEADLOCK':
+                ovr = load_and_validate('.macao/admin_override.json', ADMIN_OVERRIDE_SCHEMA,
+                                        expect_checkpoint_ref=ref, expect_review_round=rnd)
+                if ovr.valid and ovr.choice == 'APPROVED':
+                    disp = load_and_validate(f'.macao/.dispositions/r{rnd}/executor.disposition.yml',
+                                             DISPOSITION_SCHEMA,
+                                             expect_checkpoint_ref=ref,
+                                             expect_review_round=rnd)
+                    if disp.valid and disp.disposition_status == 'FINAL':
+                        archive_round_artifacts(ref, rnd)
+                        if any(d.requires_new_checkpoint for d in disp.dispositions):
+                            return AgentState.REWORK      # E5a：改码返工
+                        return AgentState.MERGING          # E4：无改码合并
+                    # 管理员已批准但执行者尚未提交 FINAL disposition：保持 CONSENSUS_CHECK (HOLD，等待执行者处置)
+                    return AgentState.CONSENSUS_CHECK
                 return AgentState.CONSENSUS_CHECK  # 保持 HOLD，等待 E7 人工裁定
             elif result.decision == 'APPROVED':
                 if result.requires_disposition:
@@ -894,12 +908,13 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 |------|------|--------------------|------------------|
 | 1-4 | 同场景一步骤 1-4；1 赞成 + 1 反对 + 1 弃权（round 1） | `IDLE` → … → `CONSENSUS_CHECK`（E3） | 3 × `.review.yml` |
 | 5 | E3 伴随动作：门禁判定未通过，**即时落盘不可变 `vote_result.json`（`decision: DEADLOCK`）**，发送 `HUMAN_OVERRIDE_REQUEST`（Type H，10 分钟时限），进入 `CONSENSUS_CHECK` HOLD | （保持 HOLD 待裁定） | `vote_result.json`（DEADLOCK） |
-| 6a | 管理员 `macao override resolve --choice APPROVED --exempt-issue-ids gemini/SEC-01` | 落盘独立 `admin_override.json`（生成 override_id）；因所有未修复 issue 均已豁免，且存在 FINAL disposition → `MERGING`（E4） | `admin_override.json` + `executor.disposition.yml` |
+| 6a | 管理员 `macao override resolve --choice APPROVED --exempt-issue-ids gemini/SEC-01` | 落盘独立 `admin_override.json`（含 override_id），解除 DEADLOCK HOLD，通知执行者进行最终处置（`role_view=SHOULD_DISPOSE`） | `admin_override.json` |
+| 6a-1 | Executor 提交 `executor.disposition.yml`（FINAL，`EXEMPTED_BY_ADMIN`+`override_id`，`requires_new_checkpoint=false`） | `CONSENSUS_CHECK` → `MERGING`（E4；编排器校验所有阻断 issue 均已豁免且 FINAL 合法后触发合并） | `executor.disposition.yml` + `admin_override.json` |
 | 6b | 管理员选 REWORK | 落盘 `admin_override.json` → `REWORK`（E5） | `admin_override.json` |
 | 6c | 管理员选 RETRY_REVIEW | 落盘 `admin_override.json` → `WAITING_REVIEW`（E9；意见作废归档、round 不变） | `admin_override.json` |
 | 6d | 管理员选 CANCEL | 落盘 `admin_override.json` → `CANCELLED`（E10 终态） | `admin_override.json` |
 | 6e | 管理员选 EXTEND | 落盘 `admin_override.json` → 重置超时保持 HOLD | `admin_override.json` |
-| 7 | （仅 6a）合并流水线完成 | `MERGING` → `DONE`（E4a） | — |
+| 7 | （仅 6a-1）合并流水线完成 | `MERGING` → `DONE`（E4a） | — |
 
 ---
 

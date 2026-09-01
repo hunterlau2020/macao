@@ -99,9 +99,6 @@ UC-1 init ──► UC-2 task create ──► UC-3 开发/检查点 (E1/E6)
 | `docs/reviews/*.md` | 各角色对应作者 | 人类可读申请、结论、处置、裁定全文与 Git 留痕（GUIDELINES §1.3 命名） |
 | `.macao/state.db` | 编排器 (Orchestrator) | 动态 FSM 状态、席位只读投影与不可篡改审计日志库 |
 | agmsg / AEP/1.1 | 协议发送方 | 控制信封与短通知 ping（零 base64，≤16 KiB 字节预算） |
-| `docs/reviews/*.md` | 各角色对应作者 | 人类可读申请、结论、处置、裁定全文与 Git 留痕（GUIDELINES §1.3 命名） |
-| `.macao/state.db` | 编排器 (Orchestrator) | 动态 FSM 状态、席位只读投影与不可篡改审计日志库 |
-| agmsg / AEP/1.1 | 协议发送方 | 控制信封与短通知 ping（零 base64，≤16 KiB 字节预算） |
 
 ---
 
