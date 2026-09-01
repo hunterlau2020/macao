@@ -124,7 +124,7 @@ sequenceDiagram
 ### 生成的 `macao.yaml` 规格示例：
 
 ```yaml
-version: "2.4"
+version: "2.5"
 project:
   name: "stockdb"
   repository:
@@ -139,7 +139,7 @@ team:
     id: "stockdb-dev"
     agmsg_member_id: "agent_dev_01"   # agmsg 通信总线寻址 topic/id
     cli: "opencode"
-    model: "GLM 5.3 max"
+    model: "GLM-5.3-max"
     adapter: "pty-wrapper"
   reviewers:
     - id: "stockdb-arch"
@@ -147,30 +147,50 @@ team:
       cli: "claude-code"
       model: "claude-3-7-sonnet"
       adapter: "pty-wrapper"
+      vote_weight: 1
     - id: "stockdb-sec"
       agmsg_member_id: "agent_sec_03"
       cli: "codex"
       model: "o3-mini"
       adapter: "pty-wrapper"
+      vote_weight: 1
     - id: "stockdb-qa"
       agmsg_member_id: "agent_qa_04"
       cli: "antigravity"
       model: "gemini-2.0-pro"
       adapter: "pty-wrapper"
+      vote_weight: 1
 
 policy:
-  consensus_strategy: "majority"      # 2/3 多数票仲裁
+  consensus_rule: "weighted_2/3_v1"
+  dictator_cap_enabled: true
+  min_effective_votes: 2
+  minimum_winning_seats: 2
+  seat_quorum_required: 2
+  weight_quorum_required: 2
   max_rework_rounds: 3
-  min_effective_votes: 3
+  review_strategy: "delta_plus_focus"
 
 merge:
   strategy: "ff_only"
-  require_human_signoff: true
   ci_gate_command: "pytest -q"
+  require_human_signoff: true
+  rebase_before_merge: false
 
 timeouts:
+  development: "2h"
+  checkpoint_validation: "1m"
+  review_request: "30m"
   per_reviewer: "10m"
-  per_task: "2h"
+  consensus_check: "1m"
+  review_disposition: "1h"
+  human_override: "10m"
+  merge_pipeline: "5m"
+  post_merge_seal: "1m"
+
+aep:
+  max_message_bytes: 16384
+  strict_envelope_validation: true
 ```
 
 ---

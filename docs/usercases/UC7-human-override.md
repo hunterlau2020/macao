@@ -32,7 +32,7 @@
 
 | choice | 转移 | 语义 |
 |---|---|---|
-| `APPROVED` | → E4 → `MERGING` | 接受当前 checkpoint，必须提供 FINAL disposition 且未修复阻断 issue 均已显式列入 `--exempt-issue-ids`，进合并流水线 |
+| `APPROVED` | → E4 → `MERGING` | 接受当前 checkpoint；落盘 `admin_override.json`（含 `override_id`）；执行者提交含 `EXEMPTED_BY_ADMIN`+`override_id`（`requires_new_checkpoint: false`）的 FINAL disposition 后，编排器触发 E4 进入合并流水线 |
 | `REWORK` | → E5 同规则 → `REWORK` | 返工（round+1）；裁定说明即返工依据 |
 | `RETRY_REVIEW` | → E9 → `WAITING_REVIEW` | 本轮意见作废归档；round 不变；全新 `REVIEW_REQUEST`（新 message_id + 新 deadline） |
 | `CANCEL` | → E10 → `CANCELLED`（终态） | 通知全员；现场归档 |

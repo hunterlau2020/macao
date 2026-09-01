@@ -3,7 +3,7 @@
 - **设计日期**：2026-09-01
 - **状态**：用例设计稿（v2.5 规范）
 - **关联**：PRD v2.5 §3.3（E5/E5a/E6）、§15.2（返工策略）；FAQ Q13/Q15；UC-5 `issues_index`；UC-3。
-- **边界声明**：**处置与采纳是执行者的内容工作**（FAQ Q13 / Q15、PRODUCT-FACTS F-13/F-16/F-21）：针对本轮全部 issue 逐项声明处置决定（`ADOPTED / DEFERRED / REJECTED / NEEDS_ADMIN / EXEMPTED_BY_ADMIN`）、必填布尔值 `requires_new_checkpoint`、理由与全文哈希。执行者不写、不改 `vote_result.json`。编排器只检测 disposition Schema、覆盖率 100%、布尔有效性与 hash 匹配。
+- **边界声明**：**处置与采纳是执行者的内容工作**（FAQ Q13 / Q15、PRODUCT-FACTS F-13/F-16/F-20）：针对本轮全部 issue 逐项声明处置决定（`ADOPTED / DEFERRED / REJECTED / NEEDS_ADMIN / EXEMPTED_BY_ADMIN`）、必填布尔值 `requires_new_checkpoint`、理由与全文哈希。执行者不写、不改 `vote_result.json`。编排器只检测 disposition Schema、覆盖率 100%、布尔有效性与 hash 匹配。
 
 ---
 
@@ -21,7 +21,7 @@
 读 `vote_result.json` 的 `issues_index` 目录，按需要读取各 Reviewer 在 `docs/reviews/` 的全文。
 
 ### b. 执行者编写独立 Review Disposition 产物
-执行者在 `.macao/executor.disposition.yml`（归档至 `.macao/archive/<checkpoint_ref>/r<round>/executor.disposition.yml`）与 `docs/reviews/` 输出不可变处置产物：
+执行者在 `.macao/.dispositions/r<round>/executor.disposition.yml`（归档至 `.macao/archive/<checkpoint_ref>/r<round>/executor.disposition.yml`）与 `docs/reviews/` 输出不可变处置产物：
 
 ```yaml
 version: "1.0"
@@ -43,6 +43,7 @@ full_document:
 
 dispositions:
   - issue_id: "codex/SEC-01"
+    reviewer_id: "codex"
     disposition_type: "ADOPTED"
     requires_new_checkpoint: true
     rationale: "已在代码中增加超时捕获与重试机制"
@@ -71,7 +72,7 @@ dispositions:
 ## 3. 备选流与异常流
 
 - **A1 执行者拒绝意见**：合法（`REJECTED` + `requires_new_checkpoint: false` + `rationale`）；若为 BLOCKING 则下一轮 Reviewer 仍可能投反对票。
-- **A2 管理员豁免**：管理员通过 `macao override resolve --choice APPROVED --exempt-issue-ids [...]` 将 BLOCKING issue 标记为 `EXEMPTED_BY_ADMIN`，生成 `override_id` 并放行至 `MERGING`。
+- **A2 管理员豁免接管流**：管理员通过 `macao override resolve --choice APPROVED --exempt-issue-ids [...]` 生成独立 `.macao/admin_override.json`（含 `override_id`）；执行者读取该裁定件，在 `.macao/.dispositions/r<round>/executor.disposition.yml` 中将对应 issue 的处置类型写为 `EXEMPTED_BY_ADMIN` 并填入 `override_id`（`requires_new_checkpoint: false`），将 `disposition_status` 标记为 `FINAL`；编排器校验通过后触发 E4 放行至 `MERGING`。
 - **E1 清单遗漏或包含未知 id**：拒收（fail-closed），维持当前状态并告警。
 - **E2 缺失 requires_new_checkpoint**：Schema 校验失败拒收。
 

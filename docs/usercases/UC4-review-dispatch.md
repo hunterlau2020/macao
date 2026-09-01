@@ -4,7 +4,7 @@
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
 - **关联**：PRD v2.5 §2.2（`.review.yml`）、§3.3（E2/E3）、§5（Reviewer Context 10 大必需与语义块）、§12.5（输出自愈）、§17.1（Worktree 派发）；FAQ Q14/Q16；GUIDELINES 全文；`dispatch_review_requests`（orchestrator.py:294）、`LiveAgentDispatcher`。
-- **边界声明**：编排器是**邮差 + 规则机**：E2 把执行者已有 manifest **原样**放入 AEP/1.1 `REVIEW_REQUEST`（Type C，零 base64 内联）并 ping；评审正文、票面、问题索引全部由各专家写。编排器不归纳意见、不合并同类项、不代写摘要（FAQ Q13/Q15）。
+- **边界声明**：编排器是**邮差 + 规则机**：E2 把执行者已有 manifest **原样**放入 AEP/1.1 `REVIEW_REQUEST`（Type B，零 base64 内联）并 ping；评审正文、票面、问题索引全部由各专家写。编排器不归纳意见、不合并同类项、不代写摘要（FAQ Q13/Q15）。
 
 ---
 
@@ -37,7 +37,7 @@
 
 ### e. 专家评审（内容层，全部由专家负责）
 
-e1 在 worktree 内取 diff、读全文与验收标准；e2 评审结论全文写入 `docs/reviews/<yyyy-MM-dd>-review-result-<mid>-<reviewer>.md`（GUIDELINES §1.3 命名、§10 模板：L1–L4 结论、P0/P1 证据、行号）；e3 写 `.review.yml` 信封：`vote`（三值）、`opinion.status`、`issues[]`（id 带 `reviewer_id` 前缀、severity、one-line）、`full_document{path,sha256}`、`summary ≤2KB`；e4 方法遵循 GUIDELINES（四类证据、声明矩阵、反例库）。
+e1 在 worktree 内取 diff、读全文与验收标准；e2 评审结论全文写入 `docs/reviews/<yyyy-MM-dd>-review-result-<mid>-<reviewer>.md`（GUIDELINES §1.3 命名、§10 模板：L1–L4 结论、P0/P1 证据、行号）；e3 写 `.review.yml` 信封：`vote`（三值）、`opinion.status`、`items[]`（id 带 `reviewer_id` 前缀、severity、one-line）、`full_document{path,evidence_commit,sha256}`、`summary ≤2KB`；e4 方法遵循 GUIDELINES（四类证据、声明矩阵、反例库）。
 
 ### f. 编排器收票（Layer 1，确定性）
 
@@ -78,7 +78,7 @@ f1 Schema + sha256 对账（同 UC-3 d5，fail-closed）；f2 上下文强绑定
 2. GUIDELINES §6 反例库逐场景推演：无关 YAML、缺票、矛盾票、重复票、错轮/错 ref → 全部拒绝或去重，预期结果可从本文唯一推出
 3. `docs/reviews/` 命名与 §1.3 一致；ping 正文不含评审结论/摘要（内容审计）
 4. worktree 物理创建与原子清理（复用 `test_live_dispatcher_worktree_mock_execution`）
-5. 编排器路径无 LLM 调用；`issues[]` 的 id 均带 reviewer 前缀且未被改写
+5. 编排器路径无 LLM 调用；`items[]` 的 id 均带 reviewer 前缀且未被改写
 
 ## 7. 实现落点
 

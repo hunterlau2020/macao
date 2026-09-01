@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "override_id": "ovr-20260901-002",
+  "timestamp": "2026-09-01T10:15:00Z",
+  "task_id": "task-123",
+  "checkpoint_ref": "a1b2c3d",
+  "review_round": 1,
+  "admin_identity": "admin@macao.local",
+  "trigger": "consensus_deadlock",
+  "choice": "INVALID_FORCE_MERGE",
+  "exempt_issue_ids": [],
+  "note": "Invalid choice not in the closed enum"
+}

@@ -43,13 +43,14 @@ development:
   quality_metrics: { tests_passed: true }   # 自报，编排器不复核
 full_document:
   path: docs/reviews/2026-09-01-review-request-task-1-r1.md
+  evidence_commit: "e5f6a7b"
   sha256: "<64位十六进制哈希>"
 summary: "≤2KB 摘要（执行者写）"
 ```
 
 ### d. 编排器校验（Layer 1a，确定性）
 
-d1 Schema（Draft-07）；d2 `signal == EXPLICIT`（隐式信号只预警不转移）；d3 **新 commit**：`checkpoint_ref != 上轮 ref` 且 `commit_exists`；d4 round 匹配；d5 `full_document.path` 存在且**字节级 sha256 对得上**——对不上即无效信封（fail-closed，UC-1 h0）；d6 归属：`executor.id` == 配置的 executor 席位。
+d1 Schema（Draft-07）；d2 `signal == EXPLICIT`（隐式信号只预警不转移）；d3 **新 commit**：`checkpoint_ref != 上轮 ref` 且 `commit_exists`（严格为上轮 checkpoint 之拓扑子孙提交）；d4 round 匹配；d5 `full_document.path` 存在且**字节级 sha256 对得上**——对不上即无效信封（fail-closed，UC-1 h0）；d6 归属：`executor.id` == 配置的 executor 席位。
 
 ### e. 产物型转移 → `READY_FOR_REVIEW`
 
@@ -61,7 +62,7 @@ d1 Schema（Draft-07）；d2 `signal == EXPLICIT`（隐式信号只预警不转�
 
 ### g. 返工轮（`REWORK` 入口）
 
-流程同 a–f，差异：申请全文须含**采纳清单**（按 UC-6，引用上轮 `issues_index` 的 `id`：采纳哪些、不采纳哪些及理由——内容由执行者写）；P5 校验 round+1；E6 转移触发（`REWORK → READY_FOR_REVIEW`），`checkpoint_ref` 更新。
+流程同 a–f，差异：申请全文须**反向引用**上轮 FINAL disposition 的 `path + evidence_commit + sha256` 与处置理由（按 UC-6，内容由执行者写）；P5 校验 round+1；E6 转移触发（`REWORK → READY_FOR_REVIEW`），`checkpoint_ref` 更新。
 
 ## 3. 备选流
 
@@ -101,7 +102,7 @@ d1 Schema（Draft-07）；d2 `signal == EXPLICIT`（隐式信号只预警不转�
 | 位置 | 变更 |
 |---|---|
 | `src/macao/workflow/orchestrator.py:check_development_checkpoint` | 补 sha256/指针校验（h0(1) 回写）、STALE 语义、审计原因码 |
-| `src/macao/core/schema.py` | `.dev.yml` Schema 增 `full_document{path,sha256}` 必填 |
+| `src/macao/core/schema.py` | `.dev.yml` Schema 增 `full_document{path,evidence_commit,sha256}` 必填 |
 | `tests/` | 第 6 节 |
 
 ## 8. 设计自审

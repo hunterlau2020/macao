@@ -48,7 +48,7 @@ b1 Schema 校验（缺任一必填 → E6 拒绝，不建半行）；b2 `source 
 
 ### e. 投递 `DEVELOPMENT_STARTED` 信封
 
-AEP 消息（Type B）只含：`task_id`、`title`、`success_criteria`、`source_branch`、`target_branch`、`expected_artifacts`。**不含**：编排器自拟的实施步骤、风险分析、代码指引。agmsg 对 executor 席位发 ping：「task `<id>` 已受理，开始 CODING；验收标准见 DEVELOPMENT_STARTED 信封」。
+AEP 消息（Type A）只含：`task_id`、`title`、`success_criteria`、`source_branch`、`target_branch`、`expected_artifacts`。**不含**：编排器自拟的实施步骤、风险分析、代码指引。agmsg 对 executor 席位发 ping：「task `<id>` 已受理，开始 CODING；验收标准见 DEVELOPMENT_STARTED 信封」。
 
 ### f. 完成提示
 

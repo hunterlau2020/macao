@@ -97,7 +97,7 @@
 | 层 | 放什么 | 体积 |
 |---|---|---|
 | agmsg 正文 | ping：谁行动、`checkpoint_ref` 短 SHA、manifest 路径、全文路径 | 最短 |
-| `.dev.yml` / `.review.yml` | 信封：status/vote、一段 `summary`（建议 ≤2KB）、`issues[]` 索引（id/severity/one-line）、`full_document.path` + `sha256` | 摘要 |
+| `.dev.yml` / `.review.yml` | 信封：status/vote、一段 `summary`（建议 ≤2KB）、`items[]` 索引（id/severity/one-line）、`full_document.path` + `sha256` | 摘要 |
 | `docs/reviews/*.md` | 评审申请 / 评审结论**全文**（GUIDELINES §1.3 命名） | 不限 |
 
 编排器只校验 yml Schema 与 sha256 是否对得上文件字节，**不解析 md 语义**。sha256 对不上 → 该 manifest 无效票（fail-closed）。
