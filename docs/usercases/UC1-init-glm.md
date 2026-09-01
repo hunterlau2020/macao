@@ -3,7 +3,7 @@
 - **设计日期**：2026-08-31
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：吸收并统一现行 `macao init` 与 `macao setup`；总体目录见 `docs/usercases/README.md`；FAQ Q5/Q10–Q16；PRD v2.4 §3；评审方法以 `docs/MACAO_REVIEW_GUIDELINES.md` 为准、`docs/reference/*.md` 为方法来源；留痕只进 `docs/reviews/`；回应 codex 3c5ed32 轮 P1-5。
+- **关联**：吸收并统一现行 `macao init` 与 `macao setup`；总体目录见 `docs/usercases/README.md`；FAQ Q5/Q10–Q16；PRD v2.5 §3；评审方法以 `docs/MACAO_REVIEW_GUIDELINES.md` 为准、`docs/reference/*.md` 为方法来源；留痕只进 `docs/reviews/`；回应 codex 3c5ed32 轮 P1-5。
 - **agmsg 定位**：总线**主用途是通知**其他 team agents（init 完成、`next_action`、请谁行动）。名册/历史仍可经官方脚本读取（`team.sh` / `history.sh` / `identities.sh` / `whoami.sh` / `join.sh`），但 **agmsg 正文不是 FSM 事实源，也不是评审结论**。禁止直读 `db/`、`teams/`、`run/actas.*`；探活禁用 `inbox.sh` / `check-inbox.sh`（会 mark-read）。
 
 ---

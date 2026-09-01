@@ -21,7 +21,7 @@
 读 `vote_result.json` 的 `issues_index` 目录，按需要读取各 Reviewer 在 `docs/reviews/` 的全文。
 
 ### b. 执行者编写独立 Review Disposition 产物
-执行者在 `.macao/.dispositions/r<round>/executor.disposition.yml` 与 `docs/reviews/` 输出不可变处置产物：
+执行者在 `.macao/executor.disposition.yml`（归档至 `.macao/archive/<checkpoint_ref>/r<round>/executor.disposition.yml`）与 `docs/reviews/` 输出不可变处置产物：
 
 ```yaml
 version: "1.0"
@@ -52,6 +52,8 @@ dispositions:
 
 规则：
 - 清单必须**精确穷尽**本轮 `issues_index` 的全部 `issue_id`（无差集、无未知 id）；
+- `disposition_status: "FINAL"` 时，所有 issue 必须已得出明确处置，严禁遗留 `NEEDS_ADMIN`；
+- `disposition_type: "EXEMPTED_BY_ADMIN"` 时，必须填写非空 `override_id` 且 `requires_new_checkpoint: false`；
 - 每条必填 `requires_new_checkpoint: boolean`，严禁编排器从自然语言文本中猜测。
 
 ### c. 状态流转守卫（FSM Guards）

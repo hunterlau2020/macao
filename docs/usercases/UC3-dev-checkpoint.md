@@ -3,8 +3,8 @@
 - **设计日期**：2026-09-01
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：PRD v2.4 §2.1（`.dev.yml` 规范）、§3.3（产物型转移 `CODING/REWORK → READY_FOR_REVIEW`、E6）、§3.4（产物生命周期）；FAQ Q13/Q14；UC-1 h0（三层载体）；`check_development_checkpoint`（orchestrator.py:202）。
-- **边界声明**：执行者**独占**业务 commit、评审申请全文与 `.dev.yml` 内容；编排器只校验信封（Schema + 指针 + sha256 + `signal: EXPLICIT` + 新 commit + round 匹配），**不读、不写、不摘要**任何正文（FAQ Q10/Q13）。
+- **关联**：PRD v2.5 §2.1（`.dev.yml` 规范）、§3.3（产物型转移 `CODING/REWORK → READY_FOR_REVIEW`、E6）、§3.4（产物生命周期）；FAQ Q13/Q14；UC-1 h0（三层载体）；`check_development_checkpoint`（orchestrator.py:202）。
+- **边界声明**：执行者**独占**业务 commit、评审申请全文与 `.dev.yml` 内容；编排器只校验信封（Schema + 指针 + sha256 + `signal: EXPLICIT` + 新 commit 拓扑前进 + round 匹配），**不读、不写、不摘要**任何正文（FAQ Q10/Q13）。
 
 ---
 
@@ -13,7 +13,7 @@
 | # | 条件 | 不满足时的行为 |
 |---|---|---|
 | P1 | 任务处于 `CODING` 或 `REWORK` | E1 |
-| P2 | 本轮业务工作已产生**新 commit**（相对当前 `checkpoint_ref`） | E2 |
+| P2 | 本轮业务工作已产生**拓扑前进的新 commit**（严格为上轮 `checkpoint_ref` 之子孙且未被消费） | E2 |
 | P3 | 申请全文已写入 `docs/reviews/<yyyy-MM-dd>-review-request-<mid>-*.md` | E3 |
 | P4 | `.macao/.dev.yml` 按 §2.1 Schema 落盘，`signal: EXPLICIT` | E4 |
 | P5 | `review_round` 与任务当前轮一致（返工轮 round+1） | E5 |
@@ -31,18 +31,19 @@
 ### c. 执行者写 `.dev.yml`（摘要信封）
 
 ```yaml
-version: "1.0"
+version: "v2.5"
+task_id: "task-1"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
-executor: { id: <agent_id>, cli: <cli> }
-checkpoint_ref: <新 commit 完整 SHA>
+executor: { id: "cc-ds4", cli: "claude-code" }
+checkpoint_ref: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
 development:
-  git: { latest_commit: <SHA>, source_branch: feature/x }
+  git: { latest_commit: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", source_branch: feature/x }
   quality_metrics: { tests_passed: true }   # 自报，编排器不复核
 full_document:
-  path: docs/reviews/<...>-review-request-<mid>.md
-  sha256: <全文 SHA-256>
+  path: docs/reviews/2026-09-01-review-request-task-1-r1.md
+  sha256: "<64位十六进制哈希>"
 summary: "≤2KB 摘要（执行者写）"
 ```
 

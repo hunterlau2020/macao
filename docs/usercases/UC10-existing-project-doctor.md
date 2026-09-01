@@ -3,7 +3,7 @@
 - **设计日期**：2026-09-01
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：PRD v2.4 §14.1 第 1–2 步、§14.2、§20（Wizard 与运行时隔离）；FAQ Q8/Q9/Q11；UC-1（init 吸收 setup）；`preflight`/`doctor`（cli/main.py）、`ensure_gitignore_isolation`。
+- **关联**：PRD v2.5 §14.1 第 1–2 步、§14.2、§20（Wizard 与运行时隔离）；FAQ Q8/Q9/Q11；UC-1（init 吸收 setup）；`preflight`/`doctor`（cli/main.py）、`ensure_gitignore_isolation`。
 - **边界声明**：**零侵入**：不自动改既有任务 FSM、不迁移既有分支策略、不动用户代码；一切修复动作显式列出并经确认。诊断是**只读报告 + 建议命令**，不是自动修复器（FAQ Q9：配置文件不记运行态，运行态在 State Store）。
 
 ---
@@ -27,7 +27,7 @@ a1 `macao init`（UC-1 全流程：CLI 探测 → 团队绑定 → `macao.yaml` 
 
 | 组 | 检查项 |
 |---|---|
-| 配置 | `macao.yaml` Schema、`vote_weight` 独裁帽、`min_effective_votes` 与席位数匹配、timeout 合法 |
+| 配置 | `macao.yaml` Schema、`policy.consensus_rule: weighted_2/3_v1`、`vote_weight` 纯整数独裁帽（$\forall i, 3w_i < 2W$）、法定人数与席位数匹配、timeout 合法 |
 | 环境 | Git 仓库/分支拓扑（source/target 存在、ff 可行）、`state.db` 可写、表结构版本 |
 | 隔离 | `.gitignore` 9 条规则齐备（差量列出缺失项）、无泄漏的 `.macao/worktrees/*`、无残留锁文件 |
 | 席位 | `agent_registry` 与 macao.yaml 双向零差集、agmsg 入队状态（`identities.sh`） |

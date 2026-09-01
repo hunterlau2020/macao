@@ -63,7 +63,7 @@ agmsg ping：E4 → 管理员（`SIGNOFF_OR_MERGE`）；E5 / E5a → 执行者�
 |---|---|---|
 | A1 | 权重全 1 | 退化为标准 2/3 席位多数，行为与既有测试一致 |
 | A2 | 部分席位 ABSTAIN | 弃权不进分母；法定人数按配置总权重与总席位计；全弃权 → DEADLOCK |
-| A3 | `resolution: human_override`（E7 裁定） | 独立生成 `admin_override.json` 并记录 `override_id`，关联原 DEADLOCK `vote_result.json` |
+| A3 | 管理员人工接管（E7 裁定） | 独立生成 `admin_override.json` 并记录 `override_id` 关联原 DEADLOCK `vote_result.json`（原 `vote_result.json` 保持不变） |
 | A4 | `require_signoff` 与 decision | 计票只产 decision；签字是 UC-8 流水线步骤，不在本用例 |
 
 ## 4. 异常流

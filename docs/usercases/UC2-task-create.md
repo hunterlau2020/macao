@@ -3,7 +3,7 @@
 - **设计日期**：2026-09-01
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：目录见 `docs/usercases/README.md`；PRD v2.4 §3.3（E1）、§14.1 第 3 步、§11.4（tasks 表）；FAQ Q13（编排器不规划、不拆 WBS）；UC-1 h1（`IDLE → PROMPT_TASK_CREATE` 的落点）。
+- **关联**：目录见 `docs/usercases/README.md`；PRD v2.5 §3.3（E1）、§14.1 第 3 步、§11.4（tasks 表）；FAQ Q13（编排器不规划、不拆 WBS）；UC-1 h1（`IDLE → PROMPT_TASK_CREATE` 的落点）。
 - **边界声明**：任务**规划**（拆需求、写验收、选分支）是**人或执行者 CLI 的内容工作**；编排器只做**表单受理**：Schema 校验、建 `tasks` 行、E1 转移、投递 `DEVELOPMENT_STARTED` 信封。编排器无模型（FAQ Q5），不得生成/补全/改写标题与验收标准。
 
 ---

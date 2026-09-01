@@ -3,8 +3,8 @@
 - **设计日期**：2026-09-01
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：PRD v2.4 §2.2（`.review.yml`）、§3.3（E2/E3）、§5（Reviewer Context）、§12.5（输出自愈）、§17.1（Worktree 派发）；FAQ Q14/Q16；GUIDELINES 全文；`dispatch_review_requests`（orchestrator.py:294）、`LiveAgentDispatcher`。
-- **边界声明**：编排器是**邮差 + 规则机**：E2 把执行者已有 manifest **原样**放入 `REVIEW_REQUEST` 并 ping；评审正文、票面、问题索引全部由各专家写。编排器不归纳意见、不合并同类项、不代写摘要（FAQ Q13/Q15）。
+- **关联**：PRD v2.5 §2.2（`.review.yml`）、§3.3（E2/E3）、§5（Reviewer Context 10 大必需与语义块）、§12.5（输出自愈）、§17.1（Worktree 派发）；FAQ Q14/Q16；GUIDELINES 全文；`dispatch_review_requests`（orchestrator.py:294）、`LiveAgentDispatcher`。
+- **边界声明**：编排器是**邮差 + 规则机**：E2 把执行者已有 manifest **原样**放入 AEP/1.1 `REVIEW_REQUEST`（Type C，零 base64 内联）并 ping；评审正文、票面、问题索引全部由各专家写。编排器不归纳意见、不合并同类项、不代写摘要（FAQ Q13/Q15）。
 
 ---
 
@@ -23,9 +23,9 @@
 
 `READY_FOR_REVIEW → WAITING_REVIEW`；`.dev.yml` 标记 `consumed` 并归档 `.macao/archive/<ref>/r<round>/`；记录各评审者 deadline（`timeouts.per_reviewer`）。
 
-### b. 构造 `REVIEW_REQUEST` 信封（零改写）
+### b. 构造 AEP/1.1 `REVIEW_REQUEST` 信封（零改写，零 base64）
 
-信封内容 = UC-3 的 manifest **原样引用** + 标准 Context 包（PRD §5.2）：`task_id`、`checkpoint_ref`、`review_round`、diff 获取方式（worktree 内 `git diff <target>..<ref>`）、`.dev.yml` 摘要、全文路径 + sha256、验收标准、评审方法指针（`MACAO_REVIEW_GUIDELINES.md`）。**编排器不增删摘要内容。**
+信封内容 = UC-3 的 manifest **原样引用** + 10 大必需与语义 Context 块（PRD §5.2）：`task_id`、`checkpoint_ref`、`review_round`、diff 获取方式（worktree 内 `git diff <target>..<ref>`）、`.dev.yml` 摘要、全文路径 + sha256、验收标准、评审方法指针（`MACAO_REVIEW_GUIDELINES.md`）。**严禁 base64 内联长正文**。
 
 ### c. 派发到隔离 Worktree（§17.1）
 
@@ -45,7 +45,7 @@ f1 Schema + sha256 对账（同 UC-3 d5，fail-closed）；f2 上下文强绑定
 
 ### g. 收敛
 
-有效票 ≥ `minimum_quorum` → E3 进 UC-5；deadline 内未齐 → UC-9 超时守护接管。
+全席位 accounted（`reviewers_accounted == reviewers_configured`，有效票或超时弃权票）→ E3 进 UC-5；deadline 到期未交席位交 UC-9 超时守护注入弃权票以达成 E3。
 
 ## 3. 备选流
 
