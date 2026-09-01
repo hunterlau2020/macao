@@ -90,8 +90,10 @@ class ReviewContextBuilder:
         self.security_issues = security_issues
         return self
 
-    def set_self_assessment(self, what_was_done: str, review_focus: List[str], known_limitations: Optional[List[str]] = None) -> "ReviewContextBuilder":
+    def set_self_assessment(self, what_was_done: str, review_focus: List[str], known_limitations: Optional[List[str]] = None, source: str = "task_info") -> "ReviewContextBuilder":
         self.executor_self_assessment = {
+            "source": source,
+            "anchor": "#self-assessment",
             "what_was_done": what_was_done,
             "review_focus": review_focus,
             "known_limitations": known_limitations or []
@@ -107,29 +109,53 @@ class ReviewContextBuilder:
 
     def build(self) -> Dict[str, Any]:
         """Constructs and validates review_context against Schema."""
+        h_commit = self.head_commit or "0000000000000000000000000000000000000000"
+        b_commit = self.base_commit or h_commit
+        sha_zero = "0000000000000000000000000000000000000000000000000000000000000000"
+
         context: Dict[str, Any] = {
-            "dev_checkpoint": {
-                "path": self.dev_checkpoint_path
-            },
             "repository": {
-                "workspace_path": self.workspace_path,
-                "remote_name": self.remote_name,
+                "workspace_path": self.workspace_path or ".macao/worktrees/default",
+                "remote_name": self.remote_name or "origin",
                 "fetch_policy": self.fetch_policy
             },
+            "dev_checkpoint": {
+                "path": self.dev_checkpoint_path or ".macao/.dev.yml",
+                "commit": h_commit,
+                "sha256": sha_zero,
+                "base_commit": b_commit,
+                "head_commit": h_commit,
+                "review_round": 1
+            },
+            "evidence": {
+                "ref": f"refs/macao/evidence/{self.task_description or 'task'}/r1",
+                "commit": h_commit,
+                "dev_manifest": {
+                    "path": self.dev_checkpoint_path or ".macao/.dev.yml",
+                    "commit": h_commit,
+                    "sha256": sha_zero
+                }
+            },
             "task_info": {
-                "description": self.task_description,
+                "description": self.task_description or "Task development and review",
+                "source": "review_request",
+                "path": "docs/reviews/task.md",
+                "commit": h_commit,
+                "sha256": sha_zero,
                 "review_focus": self.review_focus
             },
             "code_changes": {
                 "refs": {
-                    "base_commit": self.base_commit,
-                    "head_commit": self.head_commit
+                    "base_commit": b_commit,
+                    "head_commit": h_commit
                 },
+                "diff_policy": "generate_locally",
                 "diff_command": self.diff_command,
                 "summary": self.summary,
                 "files_list": self.files_list
             },
             "quality_snapshot": {
+                "source": "evidence.dev_manifest",
                 "tests": {
                     "passed": self.tests_passed,
                     "failed": self.tests_failed,
@@ -139,15 +165,22 @@ class ReviewContextBuilder:
                     "lint_errors": self.lint_errors,
                     "security_issues": self.security_issues
                 }
-            }
+            },
+            "executor_self_assessment": self.executor_self_assessment or {
+                "source": "task_info",
+                "anchor": "#self-assessment",
+                "what_was_done": "Implementation completed",
+                "review_focus": self.review_focus,
+                "known_limitations": []
+            },
+            "review_guidelines": {
+                "path": "docs/MACAO_REVIEW_GUIDELINES.md",
+                "commit": h_commit,
+                "sha256": sha_zero
+            },
+            "history": self.history if self.history is not None else [],
+            "references": self.references if self.references is not None else []
         }
-
-        if self.executor_self_assessment:
-            context["executor_self_assessment"] = self.executor_self_assessment
-        if self.history:
-            context["history"] = self.history
-        if self.references:
-            context["references"] = self.references
 
         is_valid, err = validate_review_context(context)
         if not is_valid:

@@ -1,0 +1,16 @@
+version: "1.0"
+task_id: "task-123"
+checkpoint_ref: "a1b2c3d"
+review_round: 1
+executor:
+  id: "cc-ds4"
+full_document:
+  path: "docs/reviews/2026-09-01-disposition.md"
+  evidence_commit: "a1b2c3d"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+disposition_status: "FINAL"
+dispositions:
+  - issue_id: "codex/ISSUE-01"
+    disposition_type: "NEEDS_ADMIN"
+    requires_new_checkpoint: false
+    rationale: "Unresolved blocker needing admin decision"

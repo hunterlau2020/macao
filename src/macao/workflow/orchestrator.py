@@ -1,6 +1,5 @@
-"""High-Level Multi-Agent Workflow Orchestrator (PRD §3, §10)."""
-
 import os
+import json
 import uuid
 import yaml
 import datetime
@@ -28,6 +27,7 @@ from macao.workflow.fsm import WorkflowFSM
 from macao.workflow.transitions import TransitionTable
 from macao.utils.git_utils import GitManager
 from macao.core.config import ConfigManager
+from macao.core.schema import validate_admin_override
 from macao.core.schema import validate_dev_manifest
 
 
@@ -598,6 +598,24 @@ class Orchestrator:
             # If decision is DEADLOCK OR any reviewer timed out, MUST HOLD in CONSENSUS_CHECK and NOT automatically transition to MERGING.
             # Timeout degradation requires human confirmation via resolve_override.
             if decision == Decision.DEADLOCK or (timed_out_reviewers and len(timed_out_reviewers) > 0):
+                # PRD v2.5 D-1 / §3.4 场景三: Orchestrator writes immutable vote_result.json on DEADLOCK
+                vdata = self.vote_aggregator.generate_vote_result(
+                    checkpoint_ref=ref,
+                    executor_id=exec_id,
+                    review_round=rnd,
+                    configured_reviewers=num_configured,
+                    reviews=collected_reviews,
+                    timed_out_reviewers=list(timed_out_reviewers) if timed_out_reviewers else [],
+                    write_to_disk=True
+                )
+                self.store.register_artifact(
+                    task_id=task_id,
+                    kind="vote_result",
+                    checkpoint_ref=ref,
+                    review_round=rnd,
+                    path=".macao/vote_result.json"
+                )
+
                 reason_code = "TIMEOUT_ESCALATION" if timed_out_reviewers else "DEADLOCK_DETECTED"
                 existing_deadlocks = self.store.get_audit_events_by_type(task_id, "DEADLOCK_DETECTED", review_round=rnd)
                 if not existing_deadlocks:
@@ -813,31 +831,40 @@ class Orchestrator:
             if "reviewer_id" in a.get("detail", {}) and a.get("sequence_id", 0) >= latest_dispatch_seq
         ]
 
-        # 5. Generate and write authoritative vote_result.json with human resolution and ABSTAIN votes
-        allowed_revs = set(self.config.get("reviewer_ids", []))
-        collected_reviews = self.vote_aggregator.collect_reviews(ref, rnd, allowed_reviewer_ids=allowed_revs)
-        vdata = self.vote_aggregator.generate_vote_result(
-            checkpoint_ref=ref,
-            executor_id=exec_id,
-            review_round=rnd,
-            configured_reviewers=len(self.config.get("reviewer_ids", ["codex", "opencode", "antigravity"])),
-            reviews=collected_reviews,
-            human_resolution=resolution_choice,
-            timed_out_reviewers=timed_out_revs,
-            write_to_disk=True
-        )
+        # 5. Generate and write authoritative admin_override.json (PRD v2.5 D-1/D-2)
+        override_data = {
+            "version": "1.0",
+            "override_id": f"ovr-{task_id}-{rnd}",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "task_id": task_id,
+            "checkpoint_ref": ref,
+            "review_round": rnd,
+            "admin_identity": "admin@macao.local",
+            "trigger": "consensus_deadlock",
+            "choice": choice_enum.value,
+            "exempt_issue_ids": [],
+            "note": note
+        }
+        is_valid_ovr, err_ovr = validate_admin_override(override_data)
+        if not is_valid_ovr:
+            raise ValueError(f"Generated admin_override is invalid: {err_ovr}")
 
-        # Register authoritative vote_result artifact in store
+        ovr_file = self.root / ".macao" / "admin_override.json"
+        ovr_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(ovr_file, "w", encoding="utf-8") as f:
+            json.dump(override_data, f, indent=2, ensure_ascii=False)
+
+        # Register authoritative admin_override artifact in store
         self.store.register_artifact(
             task_id=task_id,
-            kind="vote_result",
+            kind="admin_override",
             checkpoint_ref=ref,
             review_round=rnd,
-            path=".macao/vote_result.json"
+            path=".macao/admin_override.json"
         )
 
-        # 6. Perform FSM transition (archives vote_result.json & reviews to .macao/archive/)
-        change = self.fsm.transition(task_id, target_state, trigger_id, vdata)
+        # 6. Perform FSM transition (archives admin_override.json & reviews to .macao/archive/)
+        change = self.fsm.transition(task_id, target_state, trigger_id, override_data)
 
         # 7. For RETRY_REVIEW (E9), clean obsolete reviews and active vote_result from active directory and re-dispatch fresh requests (PRD §3.3 E9 / P1-NEW-6 / P2-NEW-4)
         if choice_enum == OverrideChoice.RETRY_REVIEW:

@@ -1,12 +1,21 @@
 version: "1.0"
-timestamp: "2024-01-15T10:45:30Z"
+timestamp: "2026-09-01T10:45:30Z"
 reviewer:
-  id: "cc-glm"
+  id: "codex"
   role: "reviewer"
   cli: "codex"
 checkpoint_ref: "a1b2c3d"
 review_round: 1
+full_document:
+  path: "docs/reviews/2026-09-01-codex-review.md"
+  evidence_commit: "a1b2c3d"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 opinion:
   status: "CHANGES_REQUESTED"
   confidence: 0.92
 vote: "NO_APPROVE"
+items:
+  - issue_id: "codex/ISSUE-01"
+    disposition_class: "BLOCKING"
+    severity: "critical"
+    title: "Missing connection pool timeout lock"

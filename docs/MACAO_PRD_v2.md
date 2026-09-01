@@ -329,10 +329,10 @@ abstain_reason: null # 显式 ABSTAIN 时必填，此时 items 必须为空
 **加权 2/3 共识规则（`weighted_2/3_v1` 五重纯整数门禁）**：
 
 设配置席位数为 $N$，配置总权重为 $W$，非弃权有效席位数为 $E_N$，非弃权有效权重为 $E_W$：
-1. **配置期独裁帽**：$orall i, 3 	imes w_i < 2 	imes W$（单席位权重达 2/3 拒绝启动系统）；
-2. **席位法定人数**：$E_N \ge \lceil 2N/3 ceil$；
-3. **权重法定人数**：$E_W \ge \lceil 2W/3 ceil$（分母为配置总权重 $W$）；
-4. **胜方权重阈值**：赞成满足 $3 	imes approve\_weight \ge 2 	imes E_W$，或反对满足 $3 	imes reject\_weight \ge 2 	imes E_W$；
+1. **配置期独裁帽**：$\forall i, 3 \times w_i < 2 \times W$（单席位权重达 2/3 拒绝启动系统）；
+2. **席位法定人数**：$E_N \ge \lceil 2N/3 \rceil$；
+3. **权重法定人数**：$E_W \ge \lceil 2W/3 \rceil$（分母为配置总权重 $W$）；
+4. **胜方权重阈值**：赞成满足 $3 \times approve\_weight \ge 2 \times E_W$，或反对满足 $3 \times reject\_weight \ge 2 \times E_W$；
 5. **胜方最少席位门禁**：胜方有效席位数 $\ge minimum\_winning\_seats$（默认 2）。
 6. **判定结果**：
    - 赞成满足 4、5 $\implies$ `decision = APPROVED`；
@@ -893,7 +893,7 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 
 ## 第四部分：改进的 MVP 范围与交付计划
 
-### 4.1 严格的 MVP 范围（第一期，6-8 周）
+### 4.1 严格的 MVP 范围（第一期）
 
 #### 必做 (P0)
 - [ ] **多 CLI Adapter 运行时**（基于 PTY 封装与 Hook）
@@ -945,11 +945,11 @@ Phase 5: 全量测试集与真实 OPS 验证 (Day 6-7)
 ### 5.1 为什么需要规范化 Context？
 
 **问题**：每个 Reviewer CLI 运行在独立进程中，对 Executor 的工作缺乏完整理解。
-**解决**：提供标准化的 Reviewer Context 包，涵盖 9 大语义块，以引用与定位器形式高效传递。
+**解决**：提供标准化的 Reviewer Context 包，涵盖 10 大必需块，以引用与定位器形式高效传递。
 
-### 5.2 标准化的 Reviewer Context 包与 9 大语义块
+### 5.2 标准化的 Reviewer Context 包与 10 大必需块
 
-> 本节是 `review_context` 的**唯一权威完整模型**（两个传输块 + 七个语义块，共 9 大必需块）。AEP `REVIEW_REQUEST` 通过引用与定位器传递，机器契约见 `docs/schemas/review_context.schema.json`。
+> 本节是 `review_context` 的**唯一权威完整模型**（两个传输定位块 + 八个语义块，共 10 大必需块）。AEP `REVIEW_REQUEST` 通过引用与定位器传递，机器契约见 `docs/schemas/review_context.schema.json`。
 
 ```yaml
 review_context:
@@ -1352,10 +1352,11 @@ team:
     id: "cc-ds4"
     cli: "claude-code"
     adapter: "claude-hook"
+    model: "claude-3-7-sonnet-20250219"
   reviewers:
-    - { id: "codex", cli: "codex", adapter: "pty-wrapper", vote_weight: 2 }
-    - { id: "kimi",  cli: "kimi",  adapter: "pty-wrapper", vote_weight: 1 }
-    - { id: "gemini", cli: "opencode", adapter: "pty-wrapper", vote_weight: 1 }
+    - { id: "codex", cli: "codex", adapter: "pty-wrapper", vote_weight: 2, model: "o3-mini" }
+    - { id: "kimi",  cli: "kimi",  adapter: "pty-wrapper", vote_weight: 1, model: "moonshot-v1-32k" }
+    - { id: "gemini", cli: "opencode", adapter: "pty-wrapper", vote_weight: 1, model: "gemini-2.0-flash" }
 policy:
   consensus_rule: "weighted_2/3_v1"
   dictator_cap_enabled: true     # 3*w_i < 2*W
@@ -1498,7 +1499,7 @@ KPI 之外增加共识有效性评测：构造 N ≥ 20 的含已知缺陷样本
 
 | 角色 | 实体 | 核心职责 | 垄断权（单一写者原则） |
 |------|------|---------|----------------------|
-| **编排者** | 用户 + MACAO Orchestrator | 任务受理、FSM 推进（E1~E10）、加权共识仲裁、合并执行、人工接管处理 | 唯一写不可变 `vote_result.json`、唯一执行 merge、唯一管理 evidence promotion |
+| **编排者/管理员** | 用户 (Admin) + MACAO Orchestrator | 任务受理、FSM 推进（E1~E10）、加权共识仲裁、合并执行、人工接管处理与豁免裁决 | 唯一写不可变 `vote_result.json`、唯一写 `admin_override.json`、唯一执行 merge、唯一管理 evidence promotion |
 | **执行者** | Executor CLI（Claude Code / OpenCode） | 理解需求 → 改码 → 自测 → commit → 生成 `.dev.yml`；写 `executor.disposition.yml` | 唯一写 `.dev.yml`、唯一产生业务 commit、唯一写 `executor.disposition.yml` |
 | **评审专家** | Reviewer CLI ×N（Codex / Kimi / Gemini 等） | 按 review_context 取 diff → 审查 → 产出结构化 issue 清单 → 投票 | 各自唯一写自己的 `.review.yml` 与评审全文 |
 
@@ -1538,7 +1539,7 @@ KPI 之外增加共识有效性评测：构造 N ≥ 20 的含已知缺陷样本
 ## 第十七部分：Phase 3 真实多 Agent 调度与输出自愈机制
 
 ### 17.1 LiveAgentDispatcher 真实工作区派发
-- **Worktree 动态隔离**：在状态推进至 `WAITING_REVIEW` 时，在 `.macao/worktrees/<task_id>/<reviewer_id>` 动态创建物理独立的 Git Worktree；
+- **Worktree 动态隔离**：在状态推进至 `WAITING_REVIEW` 时，在 `.macao/worktrees/<reviewer_id>/<task_id>/r<round>` 动态创建物理独立的 Git Worktree；
 - **PTY 伪终端会话生命周期**：为每个 CLI 进程分配独立子终端，注入 non-interactive 与 sandboxed 参数，实时捕获终端输出；
 - **原子清理保障**：审查结束或任务终结后，执行 `git worktree remove --force` 原子销毁工作区。
 

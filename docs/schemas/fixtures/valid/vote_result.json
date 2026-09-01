@@ -1,20 +1,61 @@
 {
   "version": "1.0",
-  "timestamp": "2024-01-15T10:55:00Z",
+  "timestamp": "2026-09-01T10:00:00Z",
+  "generated_at": "2026-09-01T10:00:00Z",
+  "task_id": "task-123",
   "checkpoint_ref": "a1b2c3d",
   "executor": "cc-ds4",
   "review_round": 1,
-  "reviewers_total": 2,
-  "reviewers_responded": 2,
+  "reviewers_total": 3,
+  "reviewers_responded": 3,
+  "reviewers_accounted": 3,
   "votes": [
-    { "reviewer": "cc-glm", "vote": "NO_APPROVE", "confidence": 0.92, "issues_count": 3 },
-    { "reviewer": "kimi", "vote": "NO_APPROVE", "confidence": 0.85, "issues_count": 1 }
+    { "reviewer": "codex", "vote": "YES_APPROVE", "weight": 2, "source": "manifest", "confidence": 0.95, "issues_count": 0 },
+    { "reviewer": "kimi",  "vote": "YES_APPROVE", "weight": 1, "source": "manifest", "confidence": 0.90, "issues_count": 0 },
+    { "reviewer": "gemini", "vote": "NO_APPROVE", "weight": 1, "source": "manifest", "confidence": 0.85, "issues_count": 1 }
   ],
-  "consensus_rule": "2/3_majority",
-  "vote_breakdown": { "approve": 0, "reject": 2, "abstain": 0 },
+  "policy_snapshot": {
+    "rule": "weighted_2/3_v1",
+    "configured_seats": 3,
+    "configured_weight": 4,
+    "seat_quorum_required": 2,
+    "weight_quorum_required": 3,
+    "decision_threshold_numerator": 2,
+    "decision_threshold_denominator": 3,
+    "minimum_winning_seats": 2,
+    "max_single_weight_share_numerator": 2,
+    "max_single_weight_share_denominator": 3
+  },
+  "consensus_rule": "weighted_2/3_v1",
+  "vote_breakdown": {
+    "approve": 2,
+    "reject": 1,
+    "abstain": 0,
+    "effective_seats": 3,
+    "effective_weight": 4,
+    "approve_seats": 2,
+    "approve_weight": 3,
+    "reject_seats": 1,
+    "reject_weight": 1,
+    "abstain_seats": 0,
+    "abstain_weight": 0
+  },
   "input_artifacts": [
-    { "kind": "review", "path": ".macao/.reviews/cc-glm.review.yml", "sha256": "9f2a7c1e5bd0", "message_id": "msg-20240115-003" },
-    { "kind": "review", "path": ".macao/.reviews/kimi.review.yml", "sha256": "b91c04d8e3af", "message_id": "msg-20240115-004" }
+    { "reviewer": "codex", "kind": "review_manifest", "path": ".macao/.reviews/codex.review.yml", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "evidence_commit": "a1b2c3d" },
+    { "reviewer": "kimi", "kind": "review_manifest", "path": ".macao/.reviews/kimi.review.yml", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "evidence_commit": "a1b2c3d" },
+    { "reviewer": "gemini", "kind": "review_manifest", "path": ".macao/.reviews/gemini.review.yml", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "evidence_commit": "a1b2c3d" }
   ],
-  "decision": "REWORK_REQUIRED"
+  "issues_index": [
+    {
+      "issue_id": "gemini/ISSUE-01",
+      "reviewer": "gemini",
+      "disposition_class": "ADVISORY",
+      "severity": "minor",
+      "title": "Consider adding docstring for connection timeout parameter"
+    }
+  ],
+  "issues_index_sha256": "3a7b1c4e9f0d2a8b5c6e7f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c",
+  "requires_disposition": true,
+  "decision": "APPROVED",
+  "resolution": "AUTO_WEIGHTED_CONSENSUS"
 }

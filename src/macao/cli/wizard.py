@@ -175,6 +175,9 @@ def generate_smart_config(
     rev_count = len(reviewers)
     quorum_votes = math.ceil(2 * rev_count / 3) if rev_count > 0 else 1
 
+    for r in reviewers:
+        r.setdefault("vote_weight", 1)
+
     config_data = {
         "project": {
             "name": proj_name,
@@ -189,7 +192,11 @@ def generate_smart_config(
             "reviewers": reviewers
         },
         "policy": {
-            "consensus_rule": "2/3_majority",
+            "consensus_rule": "weighted_2/3_v1",
+            "dictator_cap_enabled": True,
+            "minimum_winning_seats": 2,
+            "seat_quorum_required": quorum_votes,
+            "weight_quorum_required": quorum_votes,
             "min_effective_votes": quorum_votes,
             "max_rework_rounds": 3,
             "review_strategy": "delta_plus_focus"

@@ -29,7 +29,7 @@ task_id: "task-1"
 checkpoint_ref: "a1b2c3d"
 review_round: 1
 executor_id: "cc-ds4"
-disposition_status: "FINAL"  # DRAFT | FINAL (仅 FINAL 触发 FSM 守卫)
+disposition_status: "FINAL"  # DRAFT | FINAL | PENDING_ADMIN (仅 FINAL 触发 FSM 守卫)
 generated_at: "2026-09-01T12:10:00Z"
 issues_index_sha256: "<sha256>"
 

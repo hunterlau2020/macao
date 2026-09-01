@@ -30,8 +30,11 @@
           "type": "object",
           "required": ["id", "cli", "adapter"],
           "properties": {
-            "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
-            "model": { "type": "string" }, "host": { "type": "string" },
+            "id": { "type": "string" },
+            "cli": { "type": "string" },
+            "adapter": { "type": "string" },
+            "model": { "type": "string" },
+            "host": { "type": "string" },
             "agmsg_member_id": { "type": "string" }
           }
         },
@@ -42,8 +45,11 @@
             "type": "object",
             "required": ["id", "cli", "adapter"],
             "properties": {
-              "id": { "type": "string" }, "cli": { "type": "string" }, "adapter": { "type": "string" },
-              "model": { "type": "string" }, "host": { "type": "string" },
+              "id": { "type": "string" },
+              "cli": { "type": "string" },
+              "adapter": { "type": "string" },
+              "model": { "type": "string" },
+              "host": { "type": "string" },
               "vote_weight": { "type": "integer", "minimum": 1 },
               "agmsg_member_id": { "type": "string" }
             }
@@ -51,11 +57,13 @@
         }
       }
     },
-
     "policy": {
       "type": "object",
+      "required": [
+        "consensus_rule"
+      ],
       "properties": {
-        "consensus_rule": { "enum": ["2/3_majority", "weighted_2/3_v1"] },
+        "consensus_rule": { "enum": ["weighted_2/3_v1", "2/3_majority"] },
         "min_effective_votes": { "type": "integer", "minimum": 1 },
         "dictator_cap_enabled": { "type": "boolean" },
         "minimum_winning_seats": { "type": "integer", "minimum": 1 },

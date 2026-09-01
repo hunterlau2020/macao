@@ -1,12 +1,21 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://macao.dev/schemas/v2.3/dev_manifest.schema.json",
+  "$id": "https://macao.dev/schemas/v2.5/dev_manifest.schema.json",
   "title": "MACAO .dev.yml Development Checkpoint Manifest",
   "type": "object",
-  "required": ["version", "executor", "development", "status", "signal", "review_round"],
+  "required": [
+    "version",
+    "executor",
+    "development",
+    "status",
+    "signal",
+    "review_round"
+  ],
   "properties": {
     "version": { "type": "string" },
     "timestamp": { "type": "string" },
+    "task_id": { "type": "string", "minLength": 1 },
+    "checkpoint_ref": { "type": "string", "minLength": 1 },
     "review_round": { "type": "integer", "minimum": 1 },
     "executor": {
       "type": "object",
@@ -16,6 +25,15 @@
         "role": { "type": "string" },
         "cli": { "type": "string", "minLength": 1 },
         "version": { "type": "string" }
+      }
+    },
+    "full_document": {
+      "type": "object",
+      "required": ["path", "evidence_commit", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "evidence_commit": { "type": "string" },
+        "sha256": { "type": "string" }
       }
     },
     "development": {
@@ -64,6 +82,6 @@
       }
     },
     "status": { "const": "ready_for_review" },
-    "signal": { "const": "EXPLICIT" }
+    "signal": { "enum": ["EXPLICIT", "IMPLICIT"] }
   }
 }

@@ -3,7 +3,23 @@
   "$id": "https://macao.dev/schemas/v2.5/vote_result.schema.json",
   "title": "MACAO vote_result.json Consensus Record",
   "type": "object",
-  "required": ["version", "checkpoint_ref", "review_round", "votes", "vote_breakdown", "input_artifacts", "decision"],
+  "required": [
+    "version",
+    "checkpoint_ref",
+    "review_round",
+    "reviewers_total",
+    "reviewers_responded",
+    "reviewers_accounted",
+    "votes",
+    "policy_snapshot",
+    "vote_breakdown",
+    "input_artifacts",
+    "issues_index",
+    "issues_index_sha256",
+    "requires_disposition",
+    "decision",
+    "resolution"
+  ],
   "properties": {
     "version": { "type": "string" },
     "timestamp": { "type": "string" },
@@ -33,6 +49,16 @@
     },
     "policy_snapshot": {
       "type": "object",
+      "required": [
+        "rule",
+        "configured_seats",
+        "configured_weight",
+        "seat_quorum_required",
+        "weight_quorum_required",
+        "decision_threshold_numerator",
+        "decision_threshold_denominator",
+        "minimum_winning_seats"
+      ],
       "properties": {
         "rule": { "type": "string" },
         "configured_seats": { "type": "integer", "minimum": 1 },
@@ -49,6 +75,16 @@
     "consensus_rule": { "type": "string" },
     "vote_breakdown": {
       "type": "object",
+      "required": [
+        "effective_seats",
+        "effective_weight",
+        "approve_seats",
+        "approve_weight",
+        "reject_seats",
+        "reject_weight",
+        "abstain_seats",
+        "abstain_weight"
+      ],
       "properties": {
         "approve": { "type": "integer", "minimum": 0 },
         "reject": { "type": "integer", "minimum": 0 },
@@ -103,8 +139,8 @@
     },
     "issues_index_sha256": { "type": "string" },
     "requires_disposition": { "type": "boolean" },
-    "decision": { "enum": ["APPROVED", "REWORK_REQUIRED", "DEADLOCK", "RETRY_REVIEW", "CANCELLED"] },
-    "resolution": { "enum": ["automatic", "human_override", "AUTO_WEIGHTED_CONSENSUS"] },
+    "decision": { "enum": ["APPROVED", "REWORK_REQUIRED", "DEADLOCK"] },
+    "resolution": { "enum": ["automatic", "AUTO_WEIGHTED_CONSENSUS"] },
     "decision_confidence": { "type": "number" },
     "summary": { "type": "object" },
     "next_step": { "type": "object" }

@@ -3,7 +3,16 @@
   "$id": "https://macao.dev/schemas/v2.5/review_disposition.schema.json",
   "title": "MACAO executor.disposition.yml Review Disposition Manifest",
   "type": "object",
-  "required": ["version", "task_id", "checkpoint_ref", "review_round", "executor", "disposition_status", "dispositions"],
+  "required": [
+    "version",
+    "task_id",
+    "checkpoint_ref",
+    "review_round",
+    "executor",
+    "disposition_status",
+    "dispositions",
+    "full_document"
+  ],
   "properties": {
     "version": { "type": "string" },
     "timestamp": { "type": "string" },
@@ -22,12 +31,14 @@
     },
     "full_document": {
       "type": "object",
+      "required": ["path", "evidence_commit", "sha256"],
       "properties": {
         "path": { "type": "string" },
         "evidence_commit": { "type": "string" },
         "sha256": { "type": "string" }
       }
     },
+    "issues_index_sha256": { "type": "string" },
     "disposition_status": { "enum": ["DRAFT", "FINAL", "PENDING_ADMIN"] },
     "dispositions": {
       "type": "array",
@@ -39,7 +50,7 @@
           "reviewer_id": { "type": "string" },
           "disposition_type": { "enum": ["ADOPTED", "DEFERRED", "REJECTED", "NEEDS_ADMIN", "EXEMPTED_BY_ADMIN"] },
           "requires_new_checkpoint": { "type": "boolean" },
-          "rationale": { "type": "string" },
+          "rationale": { "type": "string", "minLength": 1 },
           "override_id": { "type": "string" },
           "full_document": {
             "type": "object",
@@ -50,8 +61,45 @@
               "anchor": { "type": "string" }
             }
           }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "disposition_type": { "const": "EXEMPTED_BY_ADMIN" } },
+              "required": ["disposition_type"]
+            },
+            "then": {
+              "properties": {
+                "override_id": { "type": "string", "minLength": 1 },
+                "requires_new_checkpoint": { "const": false }
+              },
+              "required": ["override_id"]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "disposition_status": { "const": "FINAL" } },
+        "required": ["disposition_status"]
+      },
+      "then": {
+        "properties": {
+          "dispositions": {
+            "type": "array",
+            "items": {
+              "properties": {
+                "disposition_type": {
+                  "not": { "const": "NEEDS_ADMIN" }
+                }
+              }
+            }
+          }
         }
       }
     }
-  }
+  ]
 }

@@ -123,34 +123,60 @@ class MockAgentAdapter(AgentAdapter):
         project_root: str,
         commit_sha: str,
         review_round: int = 1,
-        tests_passed: bool = True
+        tests_passed: bool = True,
+        tests_exempt: bool = False,
+        signal: str = "EXPLICIT"
     ) -> Path:
         """Simulates Executor generating .macao/.dev.yml."""
         out_dir = Path(project_root) / ".macao"
         out_dir.mkdir(parents=True, exist_ok=True)
         dev_file = out_dir / ".dev.yml"
+        checkpoint_ref = commit_sha or "0000000000000000000000000000000000000000"
 
         data: Dict[str, Any] = {
             "version": "1.0",
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": "2026-09-01T00:00:00Z",
+            "task_id": "task-mock",
+            "checkpoint_ref": checkpoint_ref,
+            "review_round": review_round,
             "executor": {
                 "id": self.agent_id,
                 "role": "executor",
                 "cli": self.cli_name
             },
+            "full_document": {
+                "path": ".macao/.dev.yml",
+                "evidence_commit": checkpoint_ref,
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+            },
             "development": {
-                "description": "Simulated development output",
-                "artifacts": [{"path": "src/main.py"}],
+                "phase": "feature_complete",
+                "description": "Mock development checkpoint completed",
+                "artifacts": [
+                    {
+                        "path": "src/main.py",
+                        "type": "code",
+                        "changed_lines": 42
+                    }
+                ],
+                "checklist": ["Implementation complete", "Self-test passed"],
                 "quality_metrics": {
-                    "tests_passed": tests_passed
+                    "tests_passed": tests_passed,
+                    "tests_exempt": tests_exempt,
+                    "tests_total": 10,
+                    "test_coverage": 0.95,
+                    "lint_errors": 0,
+                    "security_scan_passed": True
                 },
                 "git": {
-                    "latest_commit": commit_sha
-                }
+                    "latest_commit": checkpoint_ref,
+                    "branch": "feature/mock",
+                    "files_changed": 1
+                },
+                "review_focus": ["Mock logic verification"]
             },
-            "review_round": review_round,
             "status": "ready_for_review",
-            "signal": "EXPLICIT"
+            "signal": signal
         }
         is_valid, err = validate_dev_manifest(data)
         if not is_valid:

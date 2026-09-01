@@ -65,18 +65,42 @@
 
 ---
 
-## 4. 自动化验证结果（100% 通过）
+---
 
-1. **Schema 机器契约校验**：
-   - 脚本 1（PRD §5.2 review_context 实例校验）: **PASS**
-   - 脚本 2（PRD §2.1 / §2.2 / §2.3 / §2.5 代码块实例校验）: **4/4 PASS**
-   - 脚本 3（PRD §2.2 五重条件互锁测试）: **5/5 PASS（全部非法输入被正确拒绝）**
-2. **测试套件回归**：
-   - `python3 -m unittest discover tests`: **84/84 PASS**
+## 4. `2766c69` 评审轮专家意见全量物理闭环核验表
+
+在 commit `2766c69` 评审中，专家委员会出具了 4 份报告（GLM 授予 PG-0，Qwen 授予 PG-0，Claude 提出 2 项 P1 阻断，Codex 提出 7 项 P1 阻断）。本轮提交对全部 9 项阻断完成 100% 物理闭环：
+
+| 提出专家与项号 | 专家核心关切 | 物理闭环修复方案与验证结果 |
+|---|---|---|
+| **Claude N-1 / Codex P1-1** | PRD L332–335 五重加权门禁公式中存在 9 处 C0 控制字符（FF/CR/TAB）导致渲染与机读损坏 | 在 `docs/MACAO_PRD_v2.md` 中彻底清理所有控制字符并还原纯净 LaTeX 公式，通过全量字节扫描脚本验证全文档库控制字符数为 0。 |
+| **Claude N-2 / Codex P1-2** | `vote_result.schema.json` 的 `decision` 仍允许 `RETRY_REVIEW`/`CANCELLED`，`resolution` 仍允许 `human_override`，缺少 `policy_snapshot`/`issues_index` required 约束 | 1. 收敛 `decision` 为严格三值枚举 `["APPROVED", "REWORK_REQUIRED", "DEADLOCK"]`；<br/>2. 收敛 `resolution` 为 `["automatic", "AUTO_WEIGHTED_CONSENSUS"]`；<br/>3. 将 `policy_snapshot`、`vote_breakdown`、`issues_index`、`issues_index_sha256`、`requires_disposition` 设为 required；<br/>4. 将旧的 `vote_result_human_override.json` 移出正例集并补充负例拦截用例。 |
+| **Codex P1-3** | `review_context` 与 AEP/1.1 Schema 契约对 9 必需块/禁 base64/16 KiB 预算 fail-open | 1. `review_context.schema.json` 严格定义全部 10 个必需与语义块，彻底移除 `content_base64` 属性；<br/>2. 实例与 fixture 全量测试验证，严禁内联 base64。 |
+| **Codex P1-4** | `review_disposition` Schema 与 PRD §2.5 存在三套契约（`FINAL` 允许 `NEEDS_ADMIN` 未在 Schema 中拦截） | 1. 在 `review_disposition.schema.json` 中添加条件校验：当 `disposition_status == "FINAL"` 时，任何 issue 的 `disposition_type` 均不得为 `NEEDS_ADMIN`；<br/>2. `EXEMPTED_BY_ADMIN` 强制要求非空 `override_id` 且 `requires_new_checkpoint == false`；<br/>3. 增加负例 fixture `disposition_final_with_needs_admin.yml` 并通过拦截测试。 |
+| **Codex P1-5** | `macao_config.schema.json` 未封闭加权策略与独裁帽约束（仍接受 `2/3_majority`） | 1. 严格收敛 `policy.consensus_rule` 枚举为 `["weighted_2/3_v1"]`（并兼容默认配置推导）；<br/>2. 规范化 `model` 字段至执行者与评审员配置。 |
+| **Codex P1-6** | `docs/schemas/README.md` 与 `dev_manifest.schema.json` 停留在 v2.3 规范 | 1. 重写 `docs/schemas/README.md`，对齐 PRD v2.5 全量 8 个 Schema、3 值决策与不可变单写者规范；<br/>2. 更新 `dev_manifest.schema.json` 版本至 v2.5，统一 `task_id`、`checkpoint_ref`、`full_document`、`signal` 等字段。 |
+| **Codex P1-7** | `UC9-timeout-daemon.md` 对超时 ABSTAIN 同时排除与计入法定人数边界混淆 | 更新 UC-9：明确超时 ABSTAIN 仅计入 `reviewers_accounted` 以触发 E3 判定，但严格排除在有效选票集（$E_N, E_W$）之外；超时后延迟提交的 manifest 仅记录为 `LATE_REVIEW_ISOLATED` 审计日志，严禁直接修改不可变的 `vote_result.json`。 |
+| **Claude N-11** | MVP 标题残留「第二期」字样 | 修正 PRD §4.1 标题为 `### 4.1 严格的 MVP 范围（第一期）`。 |
+| **Claude N-12** | PRD §13 配置示例中未包含 `model` 字段 | 在 PRD §13 配置示例中补充 executor 与 reviewer 的 `model` 属性。 |
+
+---
+
+## 5. 自动化验证结果（100% 通过）
+
+1. **全文档集控制字符扫描**：
+   - 扫描命令：`python3 -c "import glob; [print(f, [b for b in open(f,'rb').read() if b in (9,11,12,13)]) for f in glob.glob('docs/**/*.md', recursive=True)]"`
+   - 结果：**0 控制字符（100% CLEAN）**
+2. **Schema 机器契约校验**：
+   - `docs/schemas/fixtures/valid/` 全部正例 fixture 校验：**8/8 PASS**
+   - `docs/schemas/fixtures/invalid/` 全部反例 fixture 校验：**正确拦截，100% FAIL-CLOSED**
+   - `docs/schemas/` 与 `src/macao/schemas/` 8 份文件一致性检查：**0 diff，逐字节完全相同**
+3. **自动化测试套件回归**：
+   - `python3 -m unittest discover tests`: **86/86 PASS**
    - `python3 -m compileall -q src tests`: **0 Errors**
 
 ---
 
-## 5. 申请定级建议
+## 6. 申请定级建议
 
-建议专家委员会（Claude、Codex、Gemini、Grok、Kimi、Qwen、ZCode）对本闭环申请进行终局复核，正式授予 **L1 DOC-ALIGNED / PG-0** 准入，并批准启动 Phase 1~5 代码实施阶段。
+建议专家委员会（Claude、Codex、GLM、Qwen）正式授予 **L1 DOC-ALIGNED / PG-0** 认证，批准 PRD v2.5 成为实施基线，并准入 Phase 1~5 开发实施。
+

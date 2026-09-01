@@ -1,6 +1,7 @@
 """End-to-End Multi-Agent Simulation Tests (PRD §3.4 Scenarios S1 ~ S6 & Safety Gates)."""
 
 import os
+import json
 import shutil
 import unittest
 import tempfile
@@ -190,9 +191,12 @@ class TestOrchestratorSimulation(unittest.TestCase):
         task_now = self.orchestrator.store.get_task("task-deadlock")
         self.assertEqual(task_now["state"], AgentState.CONSENSUS_CHECK.value)
 
-        # PRD §3.3 Rule: vote_result.json MUST NOT be written to disk on DEADLOCK
+        # PRD v2.5 D-1: vote_result.json IS written to disk on DEADLOCK with decision DEADLOCK
         vote_json_path = Path(self.tmpdir) / ".macao" / "vote_result.json"
-        self.assertFalse(vote_json_path.exists())
+        self.assertTrue(vote_json_path.exists())
+        with open(vote_json_path, "r", encoding="utf-8") as f:
+            v_res = json.load(f)
+        self.assertEqual(v_res["decision"], "DEADLOCK")
 
     def test_p0_reviewer_deduplication(self):
         """P0-2 Regression Test: Duplicate reviews from same reviewer ID must not count as 2 votes."""

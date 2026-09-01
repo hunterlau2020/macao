@@ -129,10 +129,14 @@ development:
             self.assertIsNone(vdata)
             self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
 
-            # Assert vote_result.json was NOT written to disk during DEADLOCK
-            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+            # Assert immutable vote_result.json was written to disk on DEADLOCK per PRD v2.5 D-1
+            vote_json_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertTrue(vote_json_file.exists())
+            with open(vote_json_file, "r", encoding="utf-8") as f:
+                v_res = json.load(f)
+            self.assertEqual(v_res["decision"], "DEADLOCK")
 
-            # Assert REVIEWER_TIMEOUT_ABSTAIN and HUMAN_OVERRIDE_REQUEST were logged
+            # Assert REVIEWER_TIMEOUT_ABSTAIN and DEADLOCK_DETECTED were logged
             audits = orch.store.list_audit_events(t_id, limit=20)
             audit_types = [a["type"] for a in audits]
             self.assertIn("REVIEWER_TIMEOUT_ABSTAIN", audit_types)
@@ -142,21 +146,14 @@ development:
             change_override = orch.resolve_override(t_id, "APPROVED", note="Timeout resolved by admin")
             self.assertEqual(change_override.to_state, AgentState.MERGING)
 
-            # Assert vote_result.json on disk contains the ABSTAIN vote and correct statistics (PRD §2.2 / §3.3)
-            vote_json_file = Path(tmpdir) / ".macao" / "vote_result.json"
-            self.assertTrue(vote_json_file.exists())
-            with open(vote_json_file, "r", encoding="utf-8") as f:
-                v_res = json.load(f)
+            # Assert admin_override.json on disk contains the admin choice (PRD v2.5 D-1/D-2)
+            admin_json_file = Path(tmpdir) / ".macao" / "admin_override.json"
+            self.assertTrue(admin_json_file.exists())
+            with open(admin_json_file, "r", encoding="utf-8") as f:
+                ovr_res = json.load(f)
 
-            self.assertEqual(v_res["decision"], "APPROVED")
-            self.assertEqual(v_res["resolution"], "human_override")
-            self.assertEqual(v_res["reviewers_responded"], 2)
-            self.assertEqual(v_res["vote_breakdown"]["approve"], 1)
-            self.assertEqual(v_res["vote_breakdown"]["abstain"], 1)
-
-            votes_map = {v["reviewer"]: v["vote"] for v in v_res["votes"]}
-            self.assertEqual(votes_map["codex"], "YES_APPROVE")
-            self.assertEqual(votes_map["opencode"], "ABSTAIN")
+            self.assertEqual(ovr_res["choice"], "APPROVED")
+            self.assertEqual(ovr_res["trigger"], "consensus_deadlock")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -196,23 +193,32 @@ development:
             orch.check_development_checkpoint(t_id)
             orch.dispatch_review_requests(t_id)
 
-            # Reviewer 1 & 2 submit approval (2 of 3)
-            for r_id in ["codex", "antigravity"]:
-                rev_adapter = MockAgentAdapter(agent_id=r_id, cli_name=r_id, role="reviewer")
-                rev_adapter.simulate_produce_review_manifest(
-                    project_root=tmpdir,
-                    checkpoint_ref=head,
-                    review_round=1,
-                    vote=Vote.YES_APPROVE,
-                    opinion_status=OpinionStatus.APPROVED
-                )
+            # Reviewer 1 (codex) submits approval
+            rev_codex = MockAgentAdapter(agent_id="codex", cli_name="codex", role="reviewer")
+            rev_codex.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote=Vote.YES_APPROVE,
+                opinion_status=OpinionStatus.APPROVED
+            )
 
             # Advance clock by 11 minutes -> opencode times out
             future_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=11)
             detected_timeouts = orch.detect_timed_out_reviewers(t_id, current_time=future_time)
-            self.assertEqual(detected_timeouts, ["opencode"])
+            
+            # antigravity votes NO_APPROVE -> 1 Approve + 1 Reject + 1 Timeout (Abstain) = 1 Approve / 2 Effective (50% < 66.7%) -> DEADLOCK
+            rev_ag = MockAgentAdapter(agent_id="antigravity", cli_name="agy", role="reviewer")
+            rev_ag.simulate_produce_review_manifest(
+                project_root=tmpdir,
+                checkpoint_ref=head,
+                review_round=1,
+                vote=Vote.NO_APPROVE,
+                opinion_status=OpinionStatus.CHANGES_REQUESTED,
+                items=[{"issue_id": "ag/1", "disposition_class": "BLOCKING", "severity": "critical", "title": "Security flaw"}]
+            )
 
-            # Call consensus: Even though 2/3 approved, because opencode timed out, it MUST HOLD in CONSENSUS_CHECK!
+            # Call consensus: 1 Approve + 1 Reject + 1 Timeout -> DEADLOCK (HOLD in CONSENSUS_CHECK)
             change, vdata = orch.collect_and_evaluate_consensus(
                 task_id=t_id,
                 configured_reviewers=3,
@@ -222,24 +228,23 @@ development:
             self.assertIsNone(change)
             self.assertIsNone(vdata)
             self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
-            # Automatic vote_result.json must NOT be written to disk
-            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+            # Assert immutable vote_result.json was written to disk on DEADLOCK per PRD v2.5 D-1
+            vote_json_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertTrue(vote_json_file.exists())
+            with open(vote_json_file, "r", encoding="utf-8") as f:
+                v_res = json.load(f)
+            self.assertEqual(v_res["decision"], "DEADLOCK")
 
             # Human resolves override with APPROVED -> moves to MERGING
             change_ov = orch.resolve_override(t_id, "APPROVED", note="Approved by human admin despite timeout")
             self.assertEqual(change_ov.to_state, AgentState.MERGING)
 
-            # Assert vote_result.json is written with 3 reviewers, 2 approve, 1 abstain
-            vote_json_file = Path(tmpdir) / ".macao" / "vote_result.json"
-            self.assertTrue(vote_json_file.exists())
-            with open(vote_json_file, "r", encoding="utf-8") as f:
-                v_res = json.load(f)
-
-            self.assertEqual(v_res["decision"], "APPROVED")
-            self.assertEqual(v_res["resolution"], "human_override")
-            self.assertEqual(v_res["reviewers_responded"], 3)
-            self.assertEqual(v_res["vote_breakdown"]["approve"], 2)
-            self.assertEqual(v_res["vote_breakdown"]["abstain"], 1)
+            # Assert admin_override.json is written with choice APPROVED
+            admin_json_file = Path(tmpdir) / ".macao" / "admin_override.json"
+            self.assertTrue(admin_json_file.exists())
+            with open(admin_json_file, "r", encoding="utf-8") as f:
+                ovr_res = json.load(f)
+            self.assertEqual(ovr_res["choice"], "APPROVED")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -878,18 +883,16 @@ merge:
             late_audits = orch.store.get_audit_events_by_type(t_id, "LATE_REVIEW_ISOLATED", review_round=1)
             self.assertGreaterEqual(len(late_audits), 1)
 
-            # Confirm only explicit human override can transition to MERGING with human_override resolution
+            # Confirm only explicit human override can transition to MERGING with admin_override artifact
             change_human = orch.resolve_override(t_id, "APPROVED", note="Human override signoff")
             self.assertEqual(change_human.to_state, AgentState.MERGING)
             self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.MERGING.value)
 
-            vote_res_file = Path(tmpdir) / ".macao" / "vote_result.json"
-            self.assertTrue(vote_res_file.exists())
-            with open(vote_res_file, "r") as f:
-                vr = json.load(f)
-            self.assertEqual(vr["resolution"], "human_override")
-            self.assertEqual(vr["reviewers_responded"], 2)
-            self.assertEqual(vr["vote_breakdown"]["abstain"], 1)
+            admin_ovr_file = Path(tmpdir) / ".macao" / "admin_override.json"
+            self.assertTrue(admin_ovr_file.exists())
+            with open(admin_ovr_file, "r") as f:
+                ovr = json.load(f)
+            self.assertEqual(ovr["choice"], "APPROVED")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -1022,15 +1025,16 @@ development:
                 confidence=0.95
             )
 
-            # Generation 1 consensus evaluation with timeout -> HOLDS in CONSENSUS_CHECK
+            # Generation 1 consensus evaluation with timeout -> writes DEADLOCK vote_result and HOLDS in CONSENSUS_CHECK
             change1 = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2, timed_out_reviewers=["opencode"])
             self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
-            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
+            self.assertTrue((Path(tmpdir) / ".macao" / "vote_result.json").exists())
 
-            # Admin triggers RETRY_REVIEW (E9)
+            # Admin triggers RETRY_REVIEW (E9) -> cleans active vote_result.json
             change_retry = orch.resolve_override(t_id, "RETRY_REVIEW", note="Retrying round 1 review with fresh dispatch")
             self.assertEqual(change_retry.to_state, AgentState.WAITING_REVIEW)
             self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.WAITING_REVIEW.value)
+            self.assertFalse((Path(tmpdir) / ".macao" / "vote_result.json").exists())
 
             # Generation 2: Both codex AND opencode submit timely YES_APPROVE manifests
             rev_codex.simulate_produce_review_manifest(

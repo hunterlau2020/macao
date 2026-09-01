@@ -28,22 +28,27 @@
 
 ### c. 超时降级（PRD §6.2 顺序）
 
-c1 对 T 逐席位 re-ping（一次，不轰炸）；c2 再等待宽限窗口（`grace_sec`，建议 60s）；c3 仍未交票 → 该席位记 **ABSTAIN 弃权票**（`confidence: 0.0`），审计 `REVIEWER_TIMEOUT_ABSTAIN`（detail：reviewer_id/review_round/checkpoint_ref）。
+c1 对 T 逐席位 re-ping（一次，不轰炸）；c2 再等待宽限窗口（`grace_sec`，建议 60s）；c3 仍未交票 → 该席位记 **ABSTAIN 弃权票**（`source: "timeout"`, `confidence: 0.0`），计入 `reviewers_accounted` 集合，审计 `REVIEWER_TIMEOUT_ABSTAIN`（detail：reviewer_id/review_round/checkpoint_ref）。
 
-### d. 进入计票路径
+### d. 进入计票路径（PRD §2.3 加权共识五重门禁）
 
-T 作为 `timed_out_reviewers` 驱动共识评估（E3 → UC-5）：弃权票显式入票面（不进加权分母、计入法定人数判定）；结果三分支：
-- 余票达双门槛 → 正常 APPROVED/REWORK_REQUIRED（弃权随不可变 vote_result 落盘）
-- 余票 DEADLOCK → UC-7 P1 人工接管（`HUMAN_OVERRIDE_REQUEST`，daemon 不自行裁定）
-- 全体弃权 → 必然 DEADLOCK → UC-7
+所有席位 `accounted == configured` 后触发共识评估（E3 → UC-5）：
+- **集合定义**：超时弃权票计入 `accounted` 席位以满足 E3 门禁，但**绝不计入非弃权有效席位 $E_N$ 与有效权重 $E_W$**；
+- **法定人数与权重计算**：席位法定人数 $E_N \ge \lceil 2N/3 \rceil$ 与权重法定人数 $E_W \ge \lceil 2W/3 \rceil$ 均基于非弃权有效集合判定；
+- **结果三分支**：
+  - 非弃权余票满足法定人数且达胜方权重/席位阈值 $\implies$ 正常 `APPROVED` 或 `REWORK_REQUIRED`（弃权票随不可变 `vote_result.json` 落盘）；
+  - 因弃权导致 $E_N < \lceil 2N/3 \rceil$ 或未达胜方阈值 $\implies$ 即时落盘 `DEADLOCK` 并 HOLD，触发 UC-7 P1 人工接管（`HUMAN_OVERRIDE_REQUEST`，daemon 不自行裁定）；
+  - 全体弃权 $\implies E_N=0 \implies$ 必然 `DEADLOCK` $\implies$ UC-7。
 
 ### e. 诊断报告（Layer 3，只给管理员）
 
 超时席位附 `ui_hint` 级旁证（PTY 空闲/权限弹窗/进程崩溃重启），写入审计 detail 与管理员通知；**不据此推断任何业务结论**。
 
-### f. 幂等与去重
+### f. 幂等与迟到票边界
 
-同一席位同轮只记一次 ABSTAIN（重扫描不重复注入）；崩溃重启后已记弃权不重复、已收合法票优先于弃权标记（票到即覆盖 pending 弃权，先到先得按时间戳）。
+- 同一席位同轮只记一次 ABSTAIN（重扫描不重复注入）；
+- 崩溃重启后已记弃权不重复；
+- **迟到票边界**：在 `vote_result.json` 尚未生成前（即尚未触发 E3 计票落盘），若收到合法评审票，可替换 pending 状态的超时弃权标记（按时间戳记录）；**一旦 `vote_result.json` 生成落盘（不可变终局），任何迟到票一律视为 `LATE_REVIEW_ISOLATED` 隔离审计存档，严禁改写已落盘的投票结果或状态机判定**。
 
 ## 3. 备选流
 

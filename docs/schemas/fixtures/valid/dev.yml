@@ -1,9 +1,16 @@
 version: "1.0"
-timestamp: "2024-01-15T10:30:45Z"
+timestamp: "2026-09-01T10:30:45Z"
+task_id: "task-123"
+checkpoint_ref: "a1b2c3d"
+review_round: 1
 executor:
   id: "cc-ds4"
   role: "executor"
   cli: "claude-code"
+full_document:
+  path: "docs/reviews/2026-09-01-task-123.md"
+  evidence_commit: "a1b2c3d"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 development:
   description: "Refactored database connection pooling with timeout config"
   quality_metrics:
@@ -19,6 +26,5 @@ development:
     files_changed: 5
   review_focus:
     - "Thread safety in connection pool"
-review_round: 1
 status: "ready_for_review"
 signal: "EXPLICIT"

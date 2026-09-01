@@ -3,19 +3,31 @@
   "$id": "https://macao.dev/schemas/v2.5/review_context.schema.json",
   "title": "MACAO REVIEW_REQUEST review_context（唯一权威结构，见 PRD §5.2）",
   "type": "object",
-  "required": ["dev_checkpoint", "repository", "task_info", "code_changes", "quality_snapshot"],
+  "required": [
+    "repository",
+    "dev_checkpoint",
+    "evidence",
+    "task_info",
+    "code_changes",
+    "quality_snapshot",
+    "executor_self_assessment",
+    "review_guidelines",
+    "history",
+    "references"
+  ],
   "properties": {
     "dev_checkpoint": {
       "type": "object",
+      "required": ["path", "commit", "sha256", "base_commit", "head_commit", "review_round"],
       "properties": {
         "path": { "type": "string" },
         "commit": { "type": "string" },
         "sha256": { "type": "string" },
         "base_commit": { "type": "string" },
         "head_commit": { "type": "string" },
-        "review_round": { "type": "integer" },
-        "content_base64": { "type": "string" }
-      }
+        "review_round": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
     },
     "repository": {
       "type": "object",
@@ -24,18 +36,31 @@
         "workspace_path": { "type": "string", "minLength": 1 },
         "remote_name": { "type": "string", "minLength": 1 },
         "fetch_policy": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "evidence": {
       "type": "object",
+      "required": ["ref", "commit", "dev_manifest"],
       "properties": {
         "ref": { "type": "string" },
         "commit": { "type": "string" },
-        "dev_manifest": { "type": "object" }
-      }
+        "dev_manifest": {
+          "type": "object",
+          "required": ["path", "commit", "sha256"],
+          "properties": {
+            "path": { "type": "string" },
+            "commit": { "type": "string" },
+            "sha256": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     },
     "task_info": {
       "type": "object",
+      "required": ["description", "source", "path", "commit", "sha256"],
       "properties": {
         "description": { "type": "string" },
         "source": { "type": "string" },
@@ -49,7 +74,7 @@
     },
     "code_changes": {
       "type": "object",
-      "required": ["refs"],
+      "required": ["refs", "diff_policy"],
       "properties": {
         "refs": {
           "type": "object",
@@ -57,7 +82,8 @@
           "properties": {
             "base_commit": { "type": "string", "minLength": 1 },
             "head_commit": { "type": "string", "minLength": 1 }
-          }
+          },
+          "additionalProperties": false
         },
         "diff_policy": { "type": "string" },
         "diff_command": { "type": "string" },
@@ -87,6 +113,7 @@
     },
     "quality_snapshot": {
       "type": "object",
+      "required": ["source"],
       "properties": {
         "source": { "type": "string" },
         "tests": {
@@ -103,6 +130,7 @@
     },
     "executor_self_assessment": {
       "type": "object",
+      "required": ["source"],
       "properties": {
         "source": { "type": "string" },
         "anchor": { "type": "string" },
@@ -113,11 +141,13 @@
     },
     "review_guidelines": {
       "type": "object",
+      "required": ["path", "commit", "sha256"],
       "properties": {
         "path": { "type": "string" },
         "commit": { "type": "string" },
         "sha256": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "history": {
       "type": ["array", "object"]
@@ -125,5 +155,6 @@
     "references": {
       "type": ["array", "object"]
     }
-  }
+  },
+  "additionalProperties": false
 }

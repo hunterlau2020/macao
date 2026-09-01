@@ -5,6 +5,7 @@ import json
 import yaml
 import hashlib
 import datetime
+import math
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
@@ -169,14 +170,44 @@ class VoteAggregator:
             "review_round": review_round,
             "reviewers_total": configured_reviewers,
             "reviewers_responded": len(votes_list),
+            "reviewers_accounted": len(votes_list),
             "votes": votes_list,
-            "input_artifacts": input_artifacts,
-            "consensus_rule": "2/3_majority",
+            "policy_snapshot": {
+                "rule": "weighted_2/3_v1",
+                "configured_seats": configured_reviewers,
+                "configured_weight": configured_reviewers,
+                "seat_quorum_required": math.ceil(2 * configured_reviewers / 3) if configured_reviewers > 0 else 1,
+                "weight_quorum_required": math.ceil(2 * configured_reviewers / 3) if configured_reviewers > 0 else 1,
+                "decision_threshold_numerator": 2,
+                "decision_threshold_denominator": 3,
+                "minimum_winning_seats": 1 if configured_reviewers == 1 else 2
+            },
+            "consensus_rule": "weighted_2/3_v1",
             "vote_breakdown": {
                 "approve": breakdown.get("approve", breakdown.get("yes_approve", 0)),
                 "reject": breakdown.get("reject", breakdown.get("no_approve", 0)),
-                "abstain": breakdown.get("abstain", 0)
+                "abstain": breakdown.get("abstain", 0),
+                "effective_seats": len([v for v in votes_list if v.get("vote") != "ABSTAIN"]),
+                "effective_weight": sum(v.get("weight", 1) for v in votes_list if v.get("vote") != "ABSTAIN"),
+                "approve_seats": breakdown.get("approve", breakdown.get("yes_approve", 0)),
+                "approve_weight": sum(v.get("weight", 1) for v in votes_list if v.get("vote") == "YES_APPROVE"),
+                "reject_seats": breakdown.get("reject", breakdown.get("no_approve", 0)),
+                "reject_weight": sum(v.get("weight", 1) for v in votes_list if v.get("vote") == "NO_APPROVE"),
+                "abstain_seats": breakdown.get("abstain", 0),
+                "abstain_weight": sum(v.get("weight", 1) for v in votes_list if v.get("vote") == "ABSTAIN")
             },
+            "input_artifacts": input_artifacts,
+            "issues_index": [
+                {
+                    "issue_id": f"ISSUE-{idx+1}",
+                    "disposition_class": "BLOCKING" if itm.get("severity") in ("critical", "major") else "ADVISORY",
+                    "severity": itm.get("severity", "minor"),
+                    "title": itm.get("issue") or itm.get("title") or itm.get("description") or "Review issue"
+                }
+                for idx, itm in enumerate(issues_to_fix)
+            ],
+            "issues_index_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "requires_disposition": len(issues_to_fix) > 0,
             "decision": decision.value,
             "decision_confidence": confidence,
             "resolution": resolution_type,
@@ -193,10 +224,6 @@ class VoteAggregator:
                 "action": next_action,
                 "issues_to_fix": issues_to_fix
             }
-
-        # PRD §3.3 E3 Rule: If decision is DEADLOCK, DO NOT write to disk
-        if decision == Decision.DEADLOCK:
-            return result
 
         # Fail-closed: validate schema first before writing to disk
         is_valid, err = validate_vote_result(result)

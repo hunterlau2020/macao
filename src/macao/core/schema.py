@@ -98,3 +98,9 @@ def validate_aep_envelope(data: Any) -> Tuple[bool, Optional[str]]:
 
 def validate_config(data: Any) -> Tuple[bool, Optional[str]]:
     return SchemaValidator().validate("macao_config", data)
+
+def validate_review_disposition(data: Any) -> Tuple[bool, Optional[str]]:
+    return SchemaValidator().validate("review_disposition", data)
+
+def validate_admin_override(data: Any) -> Tuple[bool, Optional[str]]:
+    return SchemaValidator().validate("admin_override", data)
