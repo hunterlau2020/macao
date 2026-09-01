@@ -3,14 +3,14 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-02（全量对账 `5583bdd` Grok 独立评审报告并完成全部阻断闭环，重新提交至 commit `HEAD`；报告总计数 **108**、申请 **21**）
+- **最新更新时间**：2026-09-02（全量对账 `5583bdd` Grok 独立评审报告并完成全部阻断闭环，正式切出 Round 2 评审申请文件；报告总计数 **108**、申请 **23**）
 - **当前并行评审轨道**：
   - **文档轨（进行中，两份申请并行复审）**：
-    1. [`2026-09-01-review-request-PRD-v2.5-Design-Sync.md`](2026-09-01-review-request-PRD-v2.5-Design-Sync.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **HEAD**
-    2. [`2026-09-01-review-request-UseCases-v2.5-Alignment.md`](2026-09-01-review-request-UseCases-v2.5-Alignment.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **HEAD**
+    1. [`2026-09-02-review-request-PRD-v2.5-Design-Sync-r2.md`](2026-09-02-review-request-PRD-v2.5-Design-Sync-r2.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`6e35a71`**
+    2. [`2026-09-02-review-request-UseCases-v2.5-Alignment-r2.md`](2026-09-02-review-request-UseCases-v2.5-Alignment-r2.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`6e35a71`**
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**）
+  - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**，受审基线 `6e35a71`）
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中
 
 
