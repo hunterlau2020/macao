@@ -132,7 +132,7 @@ Schema 必须通过 `allOf` 条件约束表达以下规则：
 
 1. **DEADLOCK 覆盖为 APPROVED**：管理员提交 override，指定 `exempt_issue_ids` 与 note，系统生成 `override_id` 并记录独立 `admin_override.json`。Executor 据此将相关 issue 标记为 `EXEMPTED_BY_ADMIN` 并产出 FINAL disposition，满足 E4 进入 `MERGING`。
 2. **处置超时覆盖为 APPROVED**：管理员提交 override 附带 `exempt_issue_ids` 与 note，系统生成独立 `admin_override.json`（含 `override_id`）；执行者在 `.macao/.dispositions/r<round>/executor.disposition.yml` 中将对应 issue 标记为 `EXEMPTED_BY_ADMIN`+`override_id` 并提交 FINAL disposition，编排器校验满足 E4 进入 `MERGING`。严格保持执行者对 disposition 的单一垄断写者权，严禁管理员代写 disposition。
-3. **REWORK_REQUIRED 覆盖为 APPROVED**：E7 源状态包含 `REWORK` 与 `CONSENSUS_CHECK`。当在 `REWORK` 状态下管理员决定豁免合并时，通过 E7 转移直接推进至 `MERGING`（守卫：FINAL disposition 中所有未修复 BLOCKING issue 均显式标记为 `EXEMPTED_BY_ADMIN` 且绑定合法 `override_id`）。
+3. **REWORK_REQUIRED / 门禁失败覆盖为 APPROVED**：当发生 DEADLOCK 或 REWORK 轮次耗尽进入 HOLD 时，管理员若决定豁免推进，出具独立 `admin_override.json`（含 `override_id` 与 `exempt_issue_ids`）；系统解除 HOLD 并将执行者角色投影置为 `SHOULD_DISPOSE`；执行者据此出具带有 `EXEMPTED_BY_ADMIN`+`override_id` 且 `requires_new_checkpoint: false` 的 FINAL disposition；编排器双重校验合法后经 E4 转移推进至 `MERGING`（严格遵守单写者垄断，严禁无 FINAL disposition 直跳 `MERGING`）。
 4. **`vote_result.json` 不可变**：任何 override 不修改原 `vote_result.json` 的 `decision` 字段，终局机器状态与人工裁定依据通过 `override_id` 与 SQLite 审计表链接。
 
 ### 4.3 disposition 产物与 Schema
@@ -455,7 +455,7 @@ policy:
    - §2.4：升级 AEP/1.1 与 16 KiB 字节预算；
    - §16：固化 `vote_result.json`（Orchestrator 单写）与 `review_disposition`（Executor 单写）边界，彻底废止 `issues_summary` 双写方案；
 4. **Context 与接管**：
-   - §5.2：9 大 context 语义块逐项映射；
+   - §5.2：10 大 context 语义块逐项映射；
    - §14：`init / doctor / reconcile / adopt` 边界、`role_view` 投影与 AI diagnostic-only 约束。
 
 ### 9.2 PRODUCT-FACTS、FAQ 与 UC-1～UC-10
@@ -486,7 +486,7 @@ policy:
 1. `macao_config.schema.json`：权重、五类门禁参数、AEP 字节预算、disposition 超时；
 2. `dev_manifest.schema.json`：review request 全文引用；
 3. `review_manifest.schema.json`：三值票、显式弃权理由、`BLOCKING/ADVISORY` 分类、全文引用、`allOf` 条件互锁；
-4. `review_context.schema.json`：9 大必需块 locator/ref 集合；
+4. `review_context.schema.json`：10 大必需块 locator/ref 集合；
 5. `vote_result.schema.json`：策略快照、breakdown、原始 `issues_index`、`decision: DEADLOCK`、`resolution` 枚举；
 6. `review_disposition.schema.json`（新增）：round、revision、状态、精确覆盖、决定枚举、`requires_new_checkpoint`；
 7. AEP Schema：新增 `DISPOSITION_REQUIRED` payload。

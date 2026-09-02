@@ -42,9 +42,10 @@ class ConfigManager:
         derived_quorum = math.ceil(2 * num_reviewers / 3) if num_reviewers > 0 else 2
 
         policy = content.setdefault("policy", {})
-        configured_quorum = policy.get("min_effective_votes")
+        configured_quorum = policy.get("seat_quorum_required", policy.get("min_effective_votes"))
         if configured_quorum is None or configured_quorum < derived_quorum:
-            policy["min_effective_votes"] = derived_quorum
+            policy["seat_quorum_required"] = derived_quorum
+        policy["min_effective_votes"] = policy.get("seat_quorum_required", derived_quorum)
 
         self.data = content
         self.is_loaded = True
@@ -133,7 +134,7 @@ class ConfigManager:
     @property
     def min_effective_votes(self) -> int:
         policy = self.data.get("policy", {})
-        return policy.get("min_effective_votes", 2)
+        return policy.get("seat_quorum_required", policy.get("min_effective_votes", 2))
 
     @property
     def max_rework_rounds(self) -> int:

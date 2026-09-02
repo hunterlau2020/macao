@@ -1,7 +1,13 @@
 """Unit tests for SchemaValidator, docs/schemas/ and src/macao/schemas/."""
 
+import glob
+import json
+import os
 import unittest
+import yaml
+
 from macao.core.schema import (
+    SchemaValidator,
     validate_dev_manifest,
     validate_review_manifest,
     validate_vote_result,
@@ -101,7 +107,8 @@ class TestSchemaValidation(unittest.TestCase):
                 "weight_quorum_required": 2,
                 "decision_threshold_numerator": 2,
                 "decision_threshold_denominator": 3,
-                "minimum_winning_seats": 2
+                "minimum_winning_seats": 2,
+                "dictator_cap_enabled": True
             },
             "vote_breakdown": {
                 "effective_seats": 2,
@@ -203,6 +210,55 @@ class TestSchemaValidation(unittest.TestCase):
         }
         is_valid, err = validate_aep_envelope(msg)
         self.assertTrue(is_valid, f"Expected valid AEP envelope, got: {err}")
+
+    def test_all_fixtures_conformance(self):
+        """Verify all valid fixtures pass and all invalid fixtures are rejected."""
+        sv = SchemaValidator()
+        schema_map = {
+            "dev.yml": "dev_manifest",
+            "review.yml": "review_manifest",
+            "vote_result.json": "vote_result",
+            "disposition.yml": "review_disposition",
+            "admin_override.json": "admin_override",
+            "aep_review_request.json": "aep_envelope",
+            "review_context_full.json": "review_context",
+            "review_context_minimal.json": "review_context",
+            "macao_config.yaml": "macao_config",
+            "macao_config_local_only.yaml": "macao_config",
+        }
+        for vf in sorted(glob.glob("docs/schemas/fixtures/valid/*")):
+            fname = os.path.basename(vf)
+            s_name = schema_map[fname]
+            with open(vf) as f:
+                content = yaml.safe_load(f) if vf.endswith((".yml", ".yaml")) else json.load(f)
+            valid, err = sv.validate(s_name, content)
+            self.assertTrue(valid, f"Valid fixture {fname} failed {s_name} validation: {err}")
+
+        invalid_map = {
+            "admin_override_invalid_choice.json": "admin_override",
+            "aep_unknown_type.json": "aep_envelope",
+            "aep_type_a_empty_payload.json": "aep_envelope",
+            "aep_type_b_empty_payload.json": "aep_envelope",
+            "aep_payload_oversized.json": "aep_envelope",
+            "context_missing_refs.json": "review_context",
+            "dev_missing_core_fields.yml": "dev_manifest",
+            "disposition_deferred_with_new_checkpoint.yml": "review_disposition",
+            "disposition_final_with_needs_admin.yml": "review_disposition",
+            "disposition_rejected_with_new_checkpoint.yml": "review_disposition",
+            "macao_config_missing_policy.yaml": "macao_config",
+            "macao_config_minimum_seats_one.yaml": "macao_config",
+            "macao_config_dictator_cap_false.yaml": "macao_config",
+            "review_abstain_invalid.yml": "review_manifest",
+            "review_status_vote_conflict.yml": "review_manifest",
+            "vote_result_cancelled_decision.json": "vote_result",
+        }
+        for ivf in sorted(glob.glob("docs/schemas/fixtures/invalid/*")):
+            fname = os.path.basename(ivf)
+            s_name = invalid_map[fname]
+            with open(ivf) as f:
+                content = yaml.safe_load(f) if ivf.endswith((".yml", ".yaml")) else json.load(f)
+            valid, err = sv.validate(s_name, content)
+            self.assertFalse(valid, f"Invalid fixture {fname} was expected to fail {s_name} but passed!")
 
 
 if __name__ == "__main__":

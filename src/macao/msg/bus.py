@@ -76,7 +76,7 @@ class MessageBus:
                 recipients = json.loads(row["to_agent"])
                 payload = json.loads(row["payload"])
                 msg = {
-                    "protocol": "AEP/1.0",
+                    "protocol": "AEP/1.1",
                     "message_id": row["message_id"],
                     "timestamp": row["created_at"],
                     "type": row["type"],

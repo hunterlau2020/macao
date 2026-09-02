@@ -42,7 +42,7 @@ class TestP0P1Rectification(unittest.TestCase):
                     msg_type="STATE_CHANGED",
                     from_agent="test",
                     to_agent="all",
-                    payload={"index": i}
+                    payload={"index": i, "state": "CODING"}
                 )
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
@@ -672,7 +672,6 @@ team:
 policy:
   consensus_rule: "weighted_2/3_v1"
   dictator_cap_enabled: true
-  min_effective_votes: 2
   minimum_winning_seats: 2
   seat_quorum_required: 2
   weight_quorum_required: 2

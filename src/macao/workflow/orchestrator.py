@@ -703,9 +703,10 @@ class Orchestrator:
                     to_agent=exec_id,
                     payload={
                         "task_id": task_id,
+                        "checkpoint_ref": ref or "c1a2b3d",
+                        "round": rnd + 1,
                         "review_round": rnd + 1,
-                        "summary": f"Rework required: reject={breakdown.get('reject')}",
-                        "vote_breakdown": breakdown
+                        "summary": f"Rework required: reject={breakdown.get('reject')}"
                     }
                 )
                 return change, vdata
@@ -746,11 +747,17 @@ class Orchestrator:
 
         if success:
             change = self.fsm.transition(task_id, AgentState.DONE, "E4a", {"commit": commit})
+            chk_ref = task.get("checkpoint_ref") or commit or "c1a2b3d"
             self.msg_bus.publish(
                 msg_type=AEPType.MERGE_COMPLETED,
                 from_agent="macao",
                 to_agent="all",
-                payload={"task_id": task_id, "merged_commit": commit, "target_branch": target_branch}
+                payload={
+                    "task_id": task_id,
+                    "checkpoint_ref": chk_ref,
+                    "merged_commit": commit,
+                    "target_branch": target_branch
+                }
             )
             return True, msg, change
         else:
@@ -895,10 +902,9 @@ class Orchestrator:
             to_agent="all",
             payload={
                 "task_id": task_id,
-                "action": "OVERRIDE_RESOLVED",
-                "choice": choice_enum.value,
-                "new_state": target_state.value,
-                "note": note
+                "state": target_state.value,
+                "to_state": target_state.value,
+                "detail": f"Override resolved: choice={choice_enum.value}, note={note}"
             }
         )
 

@@ -38,7 +38,7 @@
       "required": ["workspace_path", "remote_name"],
       "properties": {
         "workspace_path": { "type": "string", "minLength": 1 },
-        "remote_name": { "type": "string", "minLength": 1 },
+        "remote_name": { "type": ["string", "null"] },
         "fetch_policy": { "type": "string" }
       },
       "additionalProperties": false

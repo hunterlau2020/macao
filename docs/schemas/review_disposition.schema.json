@@ -39,6 +39,15 @@
         "sha256": { "type": "string" }
       }
     },
+    "vote_result_ref": {
+      "type": "object",
+      "required": ["path", "evidence_commit", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "evidence_commit": { "type": "string" },
+        "sha256": { "type": "string" }
+      }
+    },
     "issues_index_sha256": { "type": "string", "minLength": 1 },
     "disposition_status": { "enum": ["DRAFT", "FINAL", "PENDING_ADMIN"] },
     "dispositions": {

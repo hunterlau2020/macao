@@ -569,7 +569,6 @@ team:
 policy:
   consensus_rule: weighted_2/3_v1
   dictator_cap_enabled: true
-  min_effective_votes: 2
   minimum_winning_seats: 2
   seat_quorum_required: 2
   weight_quorum_required: 2

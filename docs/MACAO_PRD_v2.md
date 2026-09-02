@@ -384,6 +384,12 @@ AEP v1.1 共定义 **8 种消息类型（Type A 到 Type H）**：
     "task_id": "task-1",
     "source_branch": "feature/db-refactor",
     "target_branch": "main",
+    "specification_summary": "Refactor database connection pooling with configurable timeout",
+    "acceptance_criteria": [
+      "Thread safety in connection acquisition and release",
+      "Configurable pool timeout with default fallback",
+      "All unit and integration tests pass cleanly"
+    ],
     "task_description": "Refactor database connection pooling with configurable timeout",
     "expected_output": {
       "code_path": "src/db/connection.py",
@@ -417,25 +423,37 @@ AEP v1.1 共定义 **8 种消息类型（Type A 到 Type H）**：
     "review_round": 1,
 
     "review_context": {
-      "dev_checkpoint": {
-        "path": ".macao/.dev.yml",
-        "commit": "e5f6a7b",
-        "sha256": "<sha256>"
-      },
-
       "repository": {
         "workspace_path": ".macao/worktrees/codex/task-1/r1",
         "remote_name": "origin",
         "fetch_policy": "fetch_source_and_evidence_before_diff"
       },
 
+      "dev_checkpoint": {
+        "path": ".macao/.dev.yml",
+        "commit": "e5f6a7b",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "base_commit": "b2c3d4e",
+        "head_commit": "a1b2c3d",
+        "review_round": 1
+      },
+
+      "evidence": {
+        "ref": "refs/macao/evidence/task-1/r1",
+        "commit": "e5f6a7b",
+        "dev_manifest": {
+          "path": ".macao/.dev.yml",
+          "commit": "e5f6a7b",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+
       "task_info": {
         "description": "Refactored database connection pooling with timeout config",
-        "review_focus": [
-          "Thread safety in connection pool",
-          "Timeout configuration correctness",
-          "Backward compatibility"
-        ]
+        "source": "review_request",
+        "path": "docs/reviews/2026-09-01-review-request-task-1.md",
+        "commit": "e5f6a7b",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       },
 
       "code_changes": {
@@ -451,14 +469,13 @@ AEP v1.1 共定义 **8 种消息类型（Type A 到 Type H）**：
       },
 
       "executor_self_assessment": {
-        "source": "task_info",
-        "anchor": "#self-assessment"
+        "source": "task_info"
       },
 
       "review_guidelines": {
         "path": "docs/MACAO_REVIEW_GUIDELINES.md",
         "commit": "a1b2c3d",
-        "sha256": "<sha256>"
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       },
 
       "history": [],
@@ -549,14 +566,13 @@ AEP v1.1 共定义 **8 种消息类型（Type A 到 Type H）**：
     "task_id": "task-1",
     "checkpoint_ref": "a1b2c3d",
     "review_round": 1,
-    "vote_result": {
+    "vote_result_ref": {
       "path": ".macao/vote_result.json",
       "evidence_commit": "b1c2d3e",
-      "sha256": "<sha256>",
-      "decision": "APPROVED",
-      "issues_count": 1
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "issues_index_sha256": "<sha256>",
+    "issues_index_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timeout_deadline": "2026-09-01T11:20:00Z",
     "deadline": "2026-09-01T11:20:00Z",
     "expected_output": ".macao/.dispositions/r1/executor.disposition.yml"
   }
@@ -655,8 +671,14 @@ executor:
 full_document:
   path: "docs/reviews/2026-09-01-review-disposition-task-1-r1.md"
   evidence_commit: "c2d3e4f"
-  sha256: "<sha256>"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
+vote_result_ref:
+  path: ".macao/vote_result.json"
+  evidence_commit: "c2d3e4f"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+issues_index_sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 disposition_status: "FINAL"  # DRAFT | FINAL | PENDING_ADMIN
 
 dispositions:
@@ -856,14 +878,14 @@ def recognize_agent_state(agent_id: str, project: str) -> AgentState:
 | E5 | `CONSENSUS_CHECK` | 产物 | 决策 = `REWORK_REQUIRED` 且 round < max_rework_rounds | `REWORK` | 发送 `REWORK_REQUEST`（round+1）与 `DISPOSITION_REQUIRED`；本轮产物归档至 evidence ref |
 | E5a | `CONSENSUS_CHECK` | 产物 | **v2.5 新增**：决策 = `APPROVED`，FINAL disposition 精确覆盖全部 issue，且**至少一项 `requires_new_checkpoint=true`** | `REWORK` | 发送 `REWORK_REQUEST`（round+1，附处置决定）；本轮产物归档 |
 | E6 | `REWORK` | 产物 | 前一轮 FINAL disposition 已覆盖全部 issue；新一轮 `.dev.yml` 有效（round+1、新 source commit != 上一轮，且为上一轮 checkpoint_ref 之拓扑子孙） | `READY_FOR_REVIEW` | 更新当前 checkpoint_ref |
-| E7 | `HOLD`（`CONSENSUS_CHECK` 或 `REWORK`） | 命令 | 管理员人工裁定（`--choice APPROVED \| REWORK \| RETRY_REVIEW \| CANCEL \| EXTEND`），支持带 `exempt_issue_ids` 与 note 豁免 | 见伴随动作 | 落盘独立 `admin_override.json` 与审计事件，生成 `override_id`。按 choice 转移：APPROVED（解除 HOLD，执行者角色投影 `SHOULD_DISPOSE`，待执行者出具带 `EXEMPTED_BY_ADMIN`+`override_id` 的 FINAL disposition 校验通过后分流 E4 `MERGING` 或 E5a `REWORK`）；REWORK（触发 E5 → `REWORK`）；RETRY_REVIEW（触发 E9 → `WAITING_REVIEW`，重试当前轮评审）；CANCEL（触发 E10 → `CANCELLED`）；EXTEND（重置超时倒计时，保持当前状态）。 |
+| E7 | `HOLD`（`CONSENSUS_CHECK`） | 命令 | 管理员人工裁定（`--choice APPROVED \| REWORK \| RETRY_REVIEW \| CANCEL \| EXTEND`），支持带 `exempt_issue_ids` 与 note 豁免 | 见伴随动作 | 落盘独立 `admin_override.json` 与审计事件，生成 `override_id`。按 choice 转移：APPROVED（解除 HOLD，执行者角色投影 `SHOULD_DISPOSE`，待执行者出具带 `EXEMPTED_BY_ADMIN`+`override_id` 的 FINAL disposition 校验通过后分流 E4 `MERGING` 或 E5a `REWORK`）；REWORK（触发 E5 → `REWORK`）；RETRY_REVIEW（触发 E9 → `WAITING_REVIEW`，重试当前轮评审）；CANCEL（触发 E10 → `CANCELLED`）；EXTEND（重置超时倒计时，保持当前状态）。 |
 | E9 | `CONSENSUS_CHECK` | 命令 | 用户裁定 RETRY_REVIEW（重试当前轮评审，round 不变） | `WAITING_REVIEW` | 本轮已收意见作废归档；重新发送 `REVIEW_REQUEST`（全新 message_id 与 deadline） |
 | E10 | `*`（任意活动态，即除 DONE/CANCELLED 外） | 命令 | 用户执行 `macao cancel <task>`，或 override 裁定 `--choice CANCEL`（E7） | `CANCELLED`（终态） | 通知全体 Agent；现场归档；审计记录 |
 | E8 | `*`（任意） | 诊断 | 60min 无进展 + Layer 3 置信度 <0.7 | `UNKNOWN` | HUMAN_OVERRIDE，等待用户裁定 |
 
 > 状态说明：
 > - 业务状态共 **10 个**：`IDLE` / `CODING` / `READY_FOR_REVIEW` / `WAITING_REVIEW` / `CONSENSUS_CHECK` / `MERGING` / `DONE` / `REWORK` / `CANCELLED` / `UNKNOWN`；其中 `DONE` 与 `CANCELLED` 为终态；
-> - `HOLD` 为受控暂停子状态（任务处于 `CONSENSUS_CHECK` 或 `REWORK` 等待处置/人工介入）；
+> - `HOLD` 为受控暂停子状态（任务处于 `CONSENSUS_CHECK` 等待处置/人工介入）；
 > - 除本表所列来源外，任何实现不得引入其他状态转移路径。
 
 ### 3.4 产物生命周期与场景推演
@@ -1368,6 +1390,7 @@ cancel(reason)                            # 取消当前任务并回收子进程
 位置：仓库根目录 `macao.yaml`。正文出现的全部数值（超时/阈值/法定人数/轮次上限）均为该文件的默认值。
 
 ```yaml
+version: "2.5"
 project:
   name: "macao-demo"
   repository:
@@ -1479,7 +1502,9 @@ CLI 版本超出支持矩阵 → preflight 告警并要求显式确认；某 Rev
 
 E4 进入 `MERGING` 后，Merge Controller 顺序执行：
 
-1. **Pre-merge Evidence Push 校验**：Orchestrator 校验 `refs/macao/evidence/<task_id>/r<round>` 已成功推送到远端（经 `ls-remote` 校验）；
+1. **Pre-merge Evidence 校验（远端共享 / 纯本地两模式）**：
+   - **远端共享模式**（`repository.remote_name` 配置非空，默认 `origin`）：Orchestrator 通过 `git ls-remote --exit-code <remote> refs/macao/evidence/<task_id>/r<round>` 严格校验证据引用已成功同步至远端；若远端不可达或推送失败，100% fail-closed 拦截并触发 E4b；
+   - **纯本地模式**（`repository.remote_name: null` 显式声明）：跳过远端 `ls-remote` 校验与推送，仅强校验本地 `refs/macao/evidence/<task_id>/r<round>` 引用存在性与不可篡改哈希；
 2. **检出与校验**：检出 target 分支。
    - 在 `merge.strategy == "ff_only"` 策略下：fast-forward 合并，最终 remote tip 必须精确等于 `vote_result.checkpoint_ref`；
    - 在 `merge.strategy == "no_ff"` 策略下：创建 merge commit，其第二父必须精确等于 `vote_result.checkpoint_ref`；

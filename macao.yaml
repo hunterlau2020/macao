@@ -1,3 +1,4 @@
+version: "2.5"
 project:
   name: "macao-demo"
   repository:
@@ -16,23 +17,29 @@ team:
       cli: "opencode"
       adapter: "pty-wrapper"
       model: "Qwen3.8 max"
+      vote_weight: 1
     - id: "cursor"
       cli: "agent"
       adapter: "pty-wrapper"
       model: "claude-3-5-sonnet"
+      vote_weight: 1
     - id: "antigravity"
       cli: "agy"
       adapter: "pty-wrapper"
       model: "gemini-2.0-pro"
+      vote_weight: 1
     - id: "codex"
       cli: "codex"
       adapter: "pty-wrapper"
       model: "o3-mini"
-
+      vote_weight: 1
 
 policy:
-  consensus_rule: "2/3_majority"
-  min_effective_votes: 2
+  consensus_rule: "weighted_2/3_v1"
+  dictator_cap_enabled: true
+  minimum_winning_seats: 2
+  seat_quorum_required: 2
+  weight_quorum_required: 2
   max_rework_rounds: 3
   review_strategy: "delta_plus_focus"
 

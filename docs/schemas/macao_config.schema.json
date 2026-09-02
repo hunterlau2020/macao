@@ -16,7 +16,7 @@
           "required": ["workspace_path", "remote_name"],
           "properties": {
             "workspace_path": { "type": "string", "minLength": 1 },
-            "remote_name": { "type": "string", "minLength": 1 },
+            "remote_name": { "type": ["string", "null"] },
             "default_branch": { "type": "string" }
           }
         }
@@ -62,7 +62,6 @@
       "type": "object",
       "required": [
         "consensus_rule",
-        "min_effective_votes",
         "dictator_cap_enabled",
         "minimum_winning_seats",
         "seat_quorum_required",
@@ -70,9 +69,8 @@
       ],
       "properties": {
         "consensus_rule": { "enum": ["weighted_2/3_v1"] },
-        "min_effective_votes": { "type": "integer", "minimum": 1 },
-        "dictator_cap_enabled": { "type": "boolean" },
-        "minimum_winning_seats": { "type": "integer", "minimum": 1 },
+        "dictator_cap_enabled": { "type": "boolean", "const": true },
+        "minimum_winning_seats": { "type": "integer", "minimum": 2 },
         "seat_quorum_required": { "type": "integer", "minimum": 1 },
         "weight_quorum_required": { "type": "integer", "minimum": 1 },
         "max_rework_rounds": { "type": "integer", "minimum": 1 },

@@ -250,7 +250,7 @@ CREATE TABLE IF NOT EXISTS agent_registry (
 | # | 场景 | 行为 |
 |---|---|---|
 | A1 | 无 `--agteam` 参数 | 退化为现行 setup 流程（本机 CLI 探测 → 默认 3 Reviewer 建议），并提示"检测到 agmsg 团队 `<available_teams>`，可用 `--agteam` 绑定"——两条入口合一 |
-| A2 | 团队成员数 < 3 | 角色建议降级为"1 Executor + 全部其余为 Reviewer"，警告法定人数风险（`policy.min_effective_votes`） |
+| A2 | 团队成员数 < 3 | 角色建议降级为"1 Executor + 全部其余为 Reviewer"，警告法定人数风险（`policy.seat_quorum_required`） |
 | A3 | 同一 CLI 多个成员 | 允许（靠 `agmsg_member_id` / `id` 区分席位），模型可各异；h2 按席位分别投影产物（同一二进制、两张票） |
 | A4 | 部分席位 `dispatchable=false` | 不改 `next_action`；该席位标阻塞，提示 `doctor`；其余席位照常投影 |
 | A5 | 确认席位未入队（`identities.sh` 无本项目记录） | `dispatchable=false`；提示 `join.sh <team> <name> <type> "$(pwd)"`（与 f5 编排者入队分开） |

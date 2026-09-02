@@ -198,7 +198,6 @@ def generate_smart_config(
             "minimum_winning_seats": 2,
             "seat_quorum_required": quorum_votes,
             "weight_quorum_required": quorum_votes,
-            "min_effective_votes": quorum_votes,
             "max_rework_rounds": 3,
             "review_strategy": "delta_plus_focus"
         },

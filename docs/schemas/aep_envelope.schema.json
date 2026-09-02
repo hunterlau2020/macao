@@ -27,7 +27,7 @@
         { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
       ]
     },
-    "payload": { "type": "object" }
+    "payload": { "type": "object", "minProperties": 1 }
   },
   "additionalProperties": false,
   "allOf": [
@@ -39,13 +39,19 @@
             "type": "object",
             "required": ["task_id", "specification_summary", "acceptance_criteria"],
             "properties": {
+              "project": { "type": "string" },
               "task_id": { "type": "string", "minLength": 1 },
+              "source_branch": { "type": "string" },
+              "target_branch": { "type": "string" },
               "specification_summary": { "type": "string", "maxLength": 2048, "minLength": 1 },
               "acceptance_criteria": {
                 "type": "array",
                 "items": { "type": "string", "maxLength": 2048 },
                 "minItems": 1
-              }
+              },
+              "task_description": { "type": "string", "maxLength": 2048 },
+              "expected_output": { "type": "object" },
+              "success_criteria": { "type": "object" }
             }
           }
         }
@@ -59,9 +65,95 @@
             "type": "object",
             "required": ["checkpoint_ref", "review_round", "review_context"],
             "properties": {
+              "project": { "type": "string" },
+              "executor": { "type": "string" },
               "checkpoint_ref": { "type": "string", "minLength": 1 },
               "review_round": { "type": "integer", "minimum": 1 },
-              "review_context": { "$ref": "review_context.schema.json" }
+              "review_context": { "$ref": "review_context.schema.json" },
+              "review_deadline": { "type": "string" },
+              "expected_output": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "REVIEW_RESPONSE" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["checkpoint_ref", "review_round"],
+            "properties": {
+              "project": { "type": "string" },
+              "checkpoint_ref": { "type": "string", "minLength": 1 },
+              "review_round": { "type": "integer", "minimum": 1 },
+              "review_file": {
+                "type": "object",
+                "properties": {
+                  "path": { "type": "string" },
+                  "evidence_commit": { "type": "string" },
+                  "sha256": { "type": "string" }
+                }
+              },
+              "manifest_ref": {
+                "type": "object",
+                "properties": {
+                  "path": { "type": "string" },
+                  "evidence_commit": { "type": "string" },
+                  "sha256": { "type": "string" }
+                }
+              },
+              "vote_summary": {
+                "type": "object",
+                "properties": {
+                  "vote": { "type": "string" },
+                  "issues_count": { "type": "integer" },
+                  "blocking_count": { "type": "integer" }
+                }
+              },
+              "vote": { "enum": ["YES_APPROVE", "NO_APPROVE", "ABSTAIN"] },
+              "opinion_status": { "type": "string" },
+              "confidence": { "type": "number" },
+              "issues_count": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "REWORK_REQUEST" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["checkpoint_ref"],
+            "properties": {
+              "project": { "type": "string" },
+              "task_id": { "type": "string" },
+              "checkpoint_ref": { "type": "string", "minLength": 1 },
+              "round": { "type": "integer", "minimum": 1 },
+              "review_round": { "type": "integer", "minimum": 1 },
+              "next_round": { "type": "integer", "minimum": 1 },
+              "disposition_reference": {
+                "type": "object",
+                "properties": {
+                  "path": { "type": "string" },
+                  "evidence_commit": { "type": "string" },
+                  "sha256": { "type": "string" }
+                }
+              },
+              "disposition_ref": {
+                "type": "object",
+                "properties": {
+                  "path": { "type": "string" },
+                  "evidence_commit": { "type": "string" },
+                  "sha256": { "type": "string" }
+                }
+              },
+              "issues_index_sha256": { "type": "string" },
+              "next_checkpoint_deadline": { "type": "string" },
+              "summary": { "type": "string", "maxLength": 2048 }
             }
           }
         }
@@ -73,21 +165,77 @@
         "properties": {
           "payload": {
             "type": "object",
-            "required": ["task_id", "checkpoint_ref", "review_round", "vote_result_ref", "timeout_deadline"],
+            "required": ["checkpoint_ref", "review_round"],
             "properties": {
-              "task_id": { "type": "string", "minLength": 1 },
+              "project": { "type": "string" },
+              "task_id": { "type": "string" },
               "checkpoint_ref": { "type": "string", "minLength": 1 },
               "review_round": { "type": "integer", "minimum": 1 },
+              "vote_result": {
+                "type": "object",
+                "properties": {
+                  "path": { "type": "string" },
+                  "evidence_commit": { "type": "string" },
+                  "sha256": { "type": "string" },
+                  "decision": { "type": "string" },
+                  "issues_count": { "type": "integer" }
+                }
+              },
               "vote_result_ref": {
                 "type": "object",
-                "required": ["path", "evidence_commit", "sha256"],
                 "properties": {
                   "path": { "type": "string" },
                   "evidence_commit": { "type": "string" },
                   "sha256": { "type": "string" }
                 }
               },
-              "timeout_deadline": { "type": "string" }
+              "issues_index_sha256": { "type": "string" },
+              "deadline": { "type": "string" },
+              "timeout_deadline": { "type": "string" },
+              "expected_output": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "MERGE_COMPLETED" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["checkpoint_ref"],
+            "properties": {
+              "project": { "type": "string" },
+              "task_id": { "type": "string" },
+              "checkpoint_ref": { "type": "string", "minLength": 1 },
+              "merged_commit": { "type": "string" },
+              "merge_commit": { "type": "string" },
+              "target_branch": { "type": "string" },
+              "vote_result_path": { "type": "string" },
+              "vote_result_ref": { "type": "object" },
+              "merge_strategy": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "STATE_CHANGED" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["state"],
+            "properties": {
+              "project": { "type": "string" },
+              "task_id": { "type": "string" },
+              "state": { "type": "string", "minLength": 1 },
+              "from_state": { "type": "string" },
+              "to_state": { "type": "string" },
+              "detail": { "type": "string", "maxLength": 2048 },
+              "event": { "type": "string" },
+              "attachments": { "type": "array" }
             }
           }
         }
@@ -101,8 +249,9 @@
             "type": "object",
             "required": ["trigger"],
             "properties": {
-              "task_id": { "type": "string", "minLength": 1 },
-              "checkpoint_ref": { "type": "string", "minLength": 1 },
+              "project": { "type": "string" },
+              "task_id": { "type": "string" },
+              "checkpoint_ref": { "type": "string" },
               "review_round": { "type": "integer", "minimum": 1 },
               "trigger": { "type": "string", "minLength": 1 },
               "context": { "type": "string", "maxLength": 2048 },
@@ -116,16 +265,15 @@
                 "items": { "type": "string" }
               },
               "deadline": { "type": "string" },
+              "timeout_deadline": { "type": "string" },
               "vote_result_ref": {
                 "type": "object",
-                "required": ["path", "evidence_commit", "sha256"],
                 "properties": {
                   "path": { "type": "string" },
                   "evidence_commit": { "type": "string" },
                   "sha256": { "type": "string" }
                 }
-              },
-              "timeout_deadline": { "type": "string" }
+              }
             }
           }
         }

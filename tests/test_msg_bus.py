@@ -21,9 +21,76 @@ class TestMessageBus(unittest.TestCase):
                 "acceptance_criteria": ["Pass all tests"]
             }
         )
-        self.assertEqual(env["protocol"], "AEP/1.0")
+        self.assertEqual(env["protocol"], "AEP/1.1")
         self.assertEqual(env["type"], "DEVELOPMENT_STARTED")
         self.assertTrue(env["message_id"].startswith("msg-"))
+
+    def test_aep_disposition_required_type(self):
+        self.assertEqual(AEPType.DISPOSITION_REQUIRED.value, "DISPOSITION_REQUIRED")
+        env = AEPEnvelope.create(
+            msg_type=AEPType.DISPOSITION_REQUIRED,
+            from_agent="macao",
+            to_agent="cc-ds4",
+            payload={
+                "task_id": "task-1",
+                "checkpoint_ref": "c1a2b3d",
+                "review_round": 1,
+                "vote_result_ref": {
+                    "path": ".macao/vote_result.json",
+                    "evidence_commit": "c1a2b3d",
+                    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "timeout_deadline": "2026-09-01T12:00:00Z"
+            }
+        )
+        self.assertEqual(env["type"], "DISPOSITION_REQUIRED")
+        self.assertEqual(env["protocol"], "AEP/1.1")
+
+    def test_aep_byte_budget_enforcement(self):
+        # 1. Total envelope exceeds 16384 bytes -> MUST raise ValueError
+        large_summary = "A" * 15000
+        # Field over 2048 bytes -> MUST raise ValueError
+        with self.assertRaises(ValueError):
+            AEPEnvelope.create(
+                msg_type=AEPType.DEVELOPMENT_STARTED,
+                from_agent="macao",
+                to_agent="cc-ds4",
+                payload={
+                    "task_id": "task-1",
+                    "specification_summary": "A" * 2049,
+                    "acceptance_criteria": ["Pass all tests"]
+                }
+            )
+
+        # CJK multi-byte boundary: 700 chinese chars is 2100 bytes (> 2048 bytes) -> MUST raise ValueError
+        with self.assertRaises(ValueError):
+            AEPEnvelope.create(
+                msg_type=AEPType.DEVELOPMENT_STARTED,
+                from_agent="macao",
+                to_agent="cc-ds4",
+                payload={
+                    "task_id": "task-1",
+                    "specification_summary": "中" * 700,
+                    "acceptance_criteria": ["Pass all tests"]
+                }
+            )
+
+    def test_aep_backward_compatible_parse(self):
+        msg_v1 = {
+            "protocol": "AEP/1.0",
+            "message_id": "msg-20260901-00000001",
+            "timestamp": "2026-09-01T10:00:00Z",
+            "type": "DEVELOPMENT_STARTED",
+            "from": "macao",
+            "to": "cc-ds4",
+            "payload": {
+                "task_id": "task-1",
+                "specification_summary": "Legacy AEP 1.0 message",
+                "acceptance_criteria": ["Pass tests"]
+            }
+        }
+        valid, err = AEPEnvelope.parse(msg_v1)
+        self.assertTrue(valid, f"Failed to parse AEP/1.0 legacy message: {err}")
 
     def test_message_bus_fanout_independent_ack(self):
         """Verify that multiple recipients receiving a broadcast have independent ACK states."""

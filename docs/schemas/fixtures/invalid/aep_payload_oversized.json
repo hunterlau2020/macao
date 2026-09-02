@@ -1,0 +1,13 @@
+{
+  "protocol": "AEP/1.1",
+  "message_id": "msg-20260901-00000001",
+  "timestamp": "2026-09-01T10:00:00Z",
+  "type": "DEVELOPMENT_STARTED",
+  "from": "macao",
+  "to": "dev-01",
+  "payload": {
+    "task_id": "task-01",
+    "specification_summary": "too_long_summary_exceeding_length_constraint",
+    "acceptance_criteria": []
+  }
+}

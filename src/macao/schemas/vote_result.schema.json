@@ -67,7 +67,8 @@
         "weight_quorum_required": { "type": "integer", "minimum": 1 },
         "decision_threshold_numerator": { "type": "integer" },
         "decision_threshold_denominator": { "type": "integer" },
-        "minimum_winning_seats": { "type": "integer", "minimum": 1 },
+        "minimum_winning_seats": { "type": "integer", "minimum": 2 },
+        "dictator_cap_enabled": { "type": "boolean", "const": true },
         "max_single_weight_share_numerator": { "type": "integer" },
         "max_single_weight_share_denominator": { "type": "integer" }
       }
