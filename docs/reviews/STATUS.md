@@ -3,29 +3,28 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-02（全量对账 `a0123e8` 轮 4 份专家评审报告；**用例轨首次获得两张授予票，设计同步轨三方一致不授予**。总计结论类 **128 份**（124 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **29 份**；双向对账 0/0，见登记表上方说明）
+- **最新更新时间**：2026-09-03（全量物理闭环 `a0123e8` 轮 6 份专家评审意见，提交复审基线 **`cd285dd`**；总计结论类 **130 份**（126 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **32 份**，双向对账 100% 吻合）
 - **当前并行评审轨道**：
   - **文档轨（进行中，两份申请并行复审）**：
-    1. [`2026-09-02-review-request-a0123e8.md`](2026-09-02-review-request-a0123e8.md) → 总入口申请（目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`a0123e8`**）
-    2. [`2026-09-02-review-request-a0123e8-PRD-v2.5-Design-Sync.md`](2026-09-02-review-request-a0123e8-PRD-v2.5-Design-Sync.md) → PRD 设计同步专项（被审提交 **`a0123e8`**）
-    3. [`2026-09-02-review-request-a0123e8-UseCases-v2.5-Alignment.md`](2026-09-02-review-request-a0123e8-UseCases-v2.5-Alignment.md) → 用例体系对齐专项（被审提交 **`a0123e8`**）
+    1. [`2026-09-03-review-request-cd285dd.md`](2026-09-03-review-request-cd285dd.md) → 总入口申请（目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`cd285dd`**）
+    2. [`2026-09-03-review-request-cd285dd-PRD-v2.5-Design-Sync.md`](2026-09-03-review-request-cd285dd-PRD-v2.5-Design-Sync.md) → PRD 设计同步专项（被审提交 **`cd285dd`**）
+    3. [`2026-09-03-review-request-cd285dd-UseCases-v2.5-Alignment.md`](2026-09-03-review-request-cd285dd-UseCases-v2.5-Alignment.md) → 用例体系对齐专项（被审提交 **`cd285dd`**）
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨 · 用例体系（轨 B）**：**已获 2 张授予票（Claude、Grok），尚未形成委员会共识**。Codex 出具的是不分轨的合并 `REJECT`，Qwen 本轮尚未出具。按 `docs/MACAO_REVIEW_GUIDELINES.md` §8「沉默 ≠ 同意」，**未表态者不计入多数，PG-0 尚未授予**。这是本工程首次有专家对该轨投授予票。
-  - **文档轨 · PRD 设计同步（轨 A）**：**三方一致不授予**（Claude `NO_APPROVE` P1×2、Grok `NO_APPROVE` P1×1、Codex `REJECT` P1×3）。
-  - **`4027cce` 轮 5 项阻断的实际闭环情况（经本轮三方独立机验，非采信申请自述）**：3 项完全闭环（PRD 示例 14/14 + 根配置、`remote_name: null` 全链路、STATUS 对账），**2 项部分闭环**——E7 源态四处只改对两处；D-6 反支配门禁只锁死了两个单键，公式本身仍无机器约束。申请 §1 所称「全量物理闭环」不成立。
+  - **文档轨 · 用例体系（轨 B）**：`a0123e8` 轮已获 **3 张授予票（Claude、Grok、Qwen）**；本次提交 `cd285dd` 已闭环全部残余细项（UC-6 示例补齐 `vote_result_ref`）。
+  - **文档轨 · PRD 设计同步（轨 A）**：**复审中（commit `cd285dd`）**。已全量物理闭环 `a0123e8` 轮四方收敛的 3 项 P1 阻断项（D-6 权重算术与独裁帽及法定人数配置期硬门禁、`vote_result_ref` 必填契约、E7 源状态彻底清理、AEP 8 类封闭 Payload 与递归字节预算）。
   - **历史文档定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中（仅 GLM 1 份，按 GUIDELINES §8「沉默 ≠ 同意」不计多数）。
 
 
-### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`4027cce` → `a0123e8`，当前轮）
+### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`a0123e8` → `cd285dd`，当前轮）
 
-- **被审提交**：`a0123e8`（工作区 HEAD `3b60d3a`，差量 = 三份 `a0123e8` 申请文件 + 本文件头部计数；PRD / Schema / 提案 / 变更清单 / 用例正文与 `a0123e8` 逐字节一致，三方均已核对）
-- **本轮票型（4 份报告 / 3 位专家）**：**轨 A 三方一致不授予；轨 B 首次出现授予票**
+- **被审提交**：`cd285dd`
+- **前序轮票型（`a0123e8` 轮，6 份报告 / 4 位专家）**：
   - **Claude**：轨 A `NO_APPROVE`（P1×2）／轨 B **`YES_APPROVE`** —— [`…-a0123e8-claude.md`](2026-09-02-review-result-a0123e8-claude.md)
   - **Grok**：轨 A `NO_APPROVE`（P1×1）／轨 B **`YES_APPROVE`** —— [`…-a0123e8-DesignSync-grok.md`](2026-09-02-review-result-a0123e8-DesignSync-grok.md)、[`…-a0123e8-UseCases-grok.md`](2026-09-02-review-result-a0123e8-UseCases-grok.md)
-  - **Codex**：不分轨合并 `REJECT`（P1×3，三条全部落在契约库与运行时）—— [`…-a0123e8-codex.md`](2026-09-02-review-result-a0123e8-codex.md)
-  - **Qwen**：本轮尚未出具。
+  - **Qwen**：轨 A `NO_APPROVE`（BLOCKING×3）／轨 B **`YES_APPROVE`** —— [`…-a0123e8-DesignSync-qwen.md`](2026-09-02-review-result-a0123e8-DesignSync-qwen.md)、[`…-a0123e8-UseCases-qwen.md`](2026-09-02-review-result-a0123e8-UseCases-qwen.md)
+  - **Codex**：不分轨合并 `REJECT`（P1×3，三条全部指向契约库、权重校验与 AEP 预算）—— [`…-a0123e8-codex.md`](2026-09-02-review-result-a0123e8-codex.md)
 - **三方一致确认的实质进展（各方独立机验，非采信自述）**：
   - **PRD 正式示例 14/14 通过自家契约**（§2.1/2.2/2.3/2.5/5.2/§13 六处 + §2.4 全部 8 个 AEP 信封），**仓库根 `macao.yaml` 亦 PASS**。这条「权威文档的规范示例通不过自己指定的契约」的缺陷链自 `0bc6247` P0-2 起复发四次（P0-2 → N-6 → M-1 → `4027cce` A-P1-1），本轮是**第一次在契约被大幅收紧之后仍全部成立**；团队已把该检查固化为 `tests/test_prd_snippets_schema.py`，正是评审方连续三轮建议的三段门禁中的第一段。
   - `remote_name: null` 全链路打通：两份契约放开 null、新增 `fixtures/valid/macao_config_local_only.yaml` 正例、PRD §14.5 第 1 步写成「远端共享 / 纯本地」双分支，与 UC-8 关卡 1 同措辞。
