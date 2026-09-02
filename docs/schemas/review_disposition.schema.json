@@ -9,6 +9,7 @@
     "checkpoint_ref",
     "review_round",
     "executor",
+    "vote_result_ref",
     "disposition_status",
     "dispositions",
     "full_document",
@@ -46,7 +47,8 @@
         "path": { "type": "string" },
         "evidence_commit": { "type": "string" },
         "sha256": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "issues_index_sha256": { "type": "string", "minLength": 1 },
     "disposition_status": { "enum": ["DRAFT", "FINAL", "PENDING_ADMIN"] },

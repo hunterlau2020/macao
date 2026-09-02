@@ -34,12 +34,17 @@ executor:
   cli: "claude-code"
 disposition_status: "FINAL"  # DRAFT | FINAL | PENDING_ADMIN (仅 FINAL 触发 FSM 守卫)
 generated_at: "2026-09-01T12:10:00Z"
-issues_index_sha256: "<sha256>"
+issues_index_sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 full_document:
   path: "docs/reviews/2026-09-01-review-disposition-task-1-r1.md"
   evidence_commit: "c2d3e4f"
-  sha256: "<sha256>"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+vote_result_ref:
+  path: ".macao/vote_result.json"
+  evidence_commit: "c2d3e4f"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 dispositions:
   - issue_id: "codex/SEC-01"

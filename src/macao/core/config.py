@@ -36,16 +36,23 @@ class ConfigManager:
         if not is_valid:
             raise ValueError(f"Invalid macao.yaml schema: {error}")
 
-        # Compute derived defaults (e.g. min_effective_votes = ceil(2 * N / 3))
+        # Compute derived defaults (seat_quorum_required = ceil(2N/3), weight_quorum_required = ceil(2W/3))
         reviewers = content.get("team", {}).get("reviewers", [])
         num_reviewers = len(reviewers)
-        derived_quorum = math.ceil(2 * num_reviewers / 3) if num_reviewers > 0 else 2
+        total_weight = sum(r.get("vote_weight", 1) for r in reviewers) if reviewers else num_reviewers
+        derived_seat_quorum = math.ceil(2 * num_reviewers / 3) if num_reviewers > 0 else 2
+        derived_weight_quorum = math.ceil(2 * total_weight / 3) if total_weight > 0 else 2
 
         policy = content.setdefault("policy", {})
-        configured_quorum = policy.get("seat_quorum_required", policy.get("min_effective_votes"))
-        if configured_quorum is None or configured_quorum < derived_quorum:
-            policy["seat_quorum_required"] = derived_quorum
-        policy["min_effective_votes"] = policy.get("seat_quorum_required", derived_quorum)
+        configured_seat_quorum = policy.get("seat_quorum_required", policy.get("min_effective_votes"))
+        if configured_seat_quorum is None or configured_seat_quorum < derived_seat_quorum:
+            policy["seat_quorum_required"] = derived_seat_quorum
+
+        configured_weight_quorum = policy.get("weight_quorum_required")
+        if configured_weight_quorum is None or configured_weight_quorum < derived_weight_quorum:
+            policy["weight_quorum_required"] = derived_weight_quorum
+
+        policy["min_effective_votes"] = policy.get("seat_quorum_required", derived_seat_quorum)
 
         self.data = content
         self.is_loaded = True

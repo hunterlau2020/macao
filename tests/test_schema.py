@@ -153,6 +153,11 @@ class TestSchemaValidation(unittest.TestCase):
                 "evidence_commit": "a1b2c3d",
                 "sha256": "abc"
             },
+            "vote_result_ref": {
+                "path": ".macao/vote_result.json",
+                "evidence_commit": "a1b2c3d",
+                "sha256": "abc"
+            },
             "issues_index_sha256": "3a7b1c4e9f0d2a8b5c6e7f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c",
             "disposition_status": "FINAL",
             "dispositions": [
@@ -167,7 +172,13 @@ class TestSchemaValidation(unittest.TestCase):
         is_valid, err = validate_review_disposition(valid_disp)
         self.assertTrue(is_valid, f"Expected valid review disposition, got: {err}")
 
-        # Negative test: FINAL with unresolved NEEDS_ADMIN must fail
+        # Negative test 1: Missing vote_result_ref must fail
+        no_ref = dict(valid_disp)
+        no_ref.pop("vote_result_ref")
+        is_valid, _ = validate_review_disposition(no_ref)
+        self.assertFalse(is_valid, "Disposition without vote_result_ref must fail schema")
+
+        # Negative test 2: FINAL with unresolved NEEDS_ADMIN must fail
         invalid_disp = dict(valid_disp)
         invalid_disp["dispositions"] = [
             {
@@ -179,6 +190,61 @@ class TestSchemaValidation(unittest.TestCase):
         ]
         is_valid, _ = validate_review_disposition(invalid_disp)
         self.assertFalse(is_valid, "FINAL disposition with NEEDS_ADMIN must fail schema")
+
+    def test_dictator_cap_and_quorum_semantic_validation(self):
+        """Verify D-6 dictator cap and quorum formulas are strictly enforced in validate_config."""
+        valid_cfg = {
+            "version": "2.5",
+            "project": {"name": "p", "repository": {"workspace_path": ".", "remote_name": "origin", "default_branch": "main"}},
+            "team": {
+                "executor": {"id": "dev", "cli": "opencode", "adapter": "pty-wrapper"},
+                "reviewers": [
+                    {"id": "r1", "cli": "codex", "adapter": "pty-wrapper", "vote_weight": 1},
+                    {"id": "r2", "cli": "opencode", "adapter": "pty-wrapper", "vote_weight": 1},
+                    {"id": "r3", "cli": "antigravity", "adapter": "pty-wrapper", "vote_weight": 1},
+                ]
+            },
+            "policy": {
+                "consensus_rule": "weighted_2/3_v1",
+                "dictator_cap_enabled": True,
+                "minimum_winning_seats": 2,
+                "seat_quorum_required": 2,
+                "weight_quorum_required": 2,
+                "max_rework_rounds": 3,
+                "review_strategy": "delta_plus_focus"
+            }
+        }
+        is_valid, err = validate_config(valid_cfg)
+        self.assertTrue(is_valid, f"Expected valid config, got: {err}")
+
+        # Violation 1: Dictator cap violation (3*5=15 >= 2*7=14)
+        dictator_cfg = json.loads(json.dumps(valid_cfg))
+        dictator_cfg["team"]["reviewers"][0]["vote_weight"] = 5
+        dictator_cfg["policy"]["weight_quorum_required"] = 5
+        is_valid, err = validate_config(dictator_cfg)
+        self.assertFalse(is_valid)
+        self.assertIn("Dictator cap violation", str(err))
+
+        # Violation 2: Low seat quorum (< ceil(2*3/3)=2)
+        low_sq_cfg = json.loads(json.dumps(valid_cfg))
+        low_sq_cfg["policy"]["seat_quorum_required"] = 1
+        is_valid, err = validate_config(low_sq_cfg)
+        self.assertFalse(is_valid)
+        self.assertIn("seat_quorum_required", str(err))
+
+        # Violation 3: Low weight quorum (< ceil(2*3/3)=2)
+        low_wq_cfg = json.loads(json.dumps(valid_cfg))
+        low_wq_cfg["policy"]["weight_quorum_required"] = 1
+        is_valid, err = validate_config(low_wq_cfg)
+        self.assertFalse(is_valid)
+        self.assertIn("weight_quorum_required", str(err))
+
+        # Violation 4: minimum_winning_seats > number of reviewers
+        excess_mws_cfg = json.loads(json.dumps(valid_cfg))
+        excess_mws_cfg["policy"]["minimum_winning_seats"] = 5
+        is_valid, err = validate_config(excess_mws_cfg)
+        self.assertFalse(is_valid)
+        self.assertIn("minimum_winning_seats", str(err))
 
     def test_admin_override_schema(self):
         valid_ovr = {
@@ -194,7 +260,7 @@ class TestSchemaValidation(unittest.TestCase):
         is_valid, err = validate_admin_override(valid_ovr)
         self.assertTrue(is_valid, f"Expected valid admin override, got: {err}")
 
-    def test_aep_envelope_schema(self):
+    def test_aep_envelope_schema_and_recursive_budget(self):
         msg = {
             "protocol": "AEP/1.1",
             "message_id": "msg-20260901-001",
@@ -210,6 +276,29 @@ class TestSchemaValidation(unittest.TestCase):
         }
         is_valid, err = validate_aep_envelope(msg)
         self.assertTrue(is_valid, f"Expected valid AEP envelope, got: {err}")
+
+        # Test recursive budget check rejects nested 3000-char string
+        from macao.msg.envelope import AEPEnvelope
+        nested_msg = {
+            "protocol": "AEP/1.1",
+            "message_id": "msg-20260901-002",
+            "timestamp": "2026-09-01T00:00:00Z",
+            "type": "REVIEW_REQUEST",
+            "from": "macao",
+            "to": "codex",
+            "payload": {
+                "checkpoint_ref": "c1",
+                "review_round": 1,
+                "review_context": {
+                    "task_info": {
+                        "description": "A" * 3000
+                    }
+                }
+            }
+        }
+        is_valid, err = AEPEnvelope.validate_budget(nested_msg)
+        self.assertFalse(is_valid, "Nested 3000-byte string must be rejected by budget validation")
+        self.assertIn("exceeds inline limit", str(err))
 
     def test_all_fixtures_conformance(self):
         """Verify all valid fixtures pass and all invalid fixtures are rejected."""
@@ -231,7 +320,10 @@ class TestSchemaValidation(unittest.TestCase):
             s_name = schema_map[fname]
             with open(vf) as f:
                 content = yaml.safe_load(f) if vf.endswith((".yml", ".yaml")) else json.load(f)
-            valid, err = sv.validate(s_name, content)
+            if s_name == "macao_config":
+                valid, err = validate_config(content)
+            else:
+                valid, err = sv.validate(s_name, content)
             self.assertTrue(valid, f"Valid fixture {fname} failed {s_name} validation: {err}")
 
         invalid_map = {
@@ -244,20 +336,33 @@ class TestSchemaValidation(unittest.TestCase):
             "dev_missing_core_fields.yml": "dev_manifest",
             "disposition_deferred_with_new_checkpoint.yml": "review_disposition",
             "disposition_final_with_needs_admin.yml": "review_disposition",
+            "disposition_missing_vote_result_ref.yml": "review_disposition",
             "disposition_rejected_with_new_checkpoint.yml": "review_disposition",
             "macao_config_missing_policy.yaml": "macao_config",
             "macao_config_minimum_seats_one.yaml": "macao_config",
             "macao_config_dictator_cap_false.yaml": "macao_config",
+            "macao_config_dictator_weight_violation.yaml": "macao_config",
+            "macao_config_low_seat_quorum.yaml": "macao_config",
+            "macao_config_low_weight_quorum.yaml": "macao_config",
             "review_abstain_invalid.yml": "review_manifest",
             "review_status_vote_conflict.yml": "review_manifest",
             "vote_result_cancelled_decision.json": "vote_result",
         }
         for ivf in sorted(glob.glob("docs/schemas/fixtures/invalid/*")):
             fname = os.path.basename(ivf)
+            self.assertIn(fname, invalid_map, f"Unmapped invalid fixture: {fname}")
             s_name = invalid_map[fname]
             with open(ivf) as f:
                 content = yaml.safe_load(f) if ivf.endswith((".yml", ".yaml")) else json.load(f)
-            valid, err = sv.validate(s_name, content)
+            if s_name == "macao_config":
+                valid, err = validate_config(content)
+            elif s_name == "aep_envelope":
+                valid, err = sv.validate(s_name, content)
+                if valid:
+                    from macao.msg.envelope import AEPEnvelope
+                    valid, err = AEPEnvelope.validate_budget(content)
+            else:
+                valid, err = sv.validate(s_name, content)
             self.assertFalse(valid, f"Invalid fixture {fname} was expected to fail {s_name} but passed!")
 
 

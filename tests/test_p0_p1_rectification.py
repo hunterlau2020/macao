@@ -42,7 +42,7 @@ class TestP0P1Rectification(unittest.TestCase):
                     msg_type="STATE_CHANGED",
                     from_agent="test",
                     to_agent="all",
-                    payload={"index": i, "state": "CODING"}
+                    payload={"task_id": "test-task", "detail": f"index {i}", "state": "CODING"}
                 )
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)

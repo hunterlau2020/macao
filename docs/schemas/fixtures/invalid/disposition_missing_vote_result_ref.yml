@@ -5,21 +5,14 @@ checkpoint_ref: "a1b2c3d"
 review_round: 1
 executor:
   id: "cc-ds4"
-  role: "executor"
-  cli: "claude-code"
 full_document:
   path: "docs/reviews/2026-09-01-disposition.md"
-  evidence_commit: "a1b2c3d"
-  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-vote_result_ref:
-  path: ".macao/vote_result.json"
   evidence_commit: "a1b2c3d"
   sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 issues_index_sha256: "3a7b1c4e9f0d2a8b5c6e7f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c"
 disposition_status: "FINAL"
 dispositions:
   - issue_id: "gemini/ISSUE-01"
-    reviewer_id: "gemini"
     disposition_type: "ADOPTED"
     requires_new_checkpoint: true
-    rationale: "Added docstring for timeout configuration in database connection pool"
+    rationale: "Added docstring"

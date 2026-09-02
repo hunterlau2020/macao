@@ -161,6 +161,7 @@ class VoteAggregator:
             Decision.RETRY_REVIEW: "RETRY_REVIEW"
         }
         next_action = next_action_map.get(decision)
+        total_weight = sum(v.get("weight", 1) for v in votes_list)
 
         result: Dict[str, Any] = {
             "version": "1.0",
@@ -175,12 +176,13 @@ class VoteAggregator:
             "policy_snapshot": {
                 "rule": "weighted_2/3_v1",
                 "configured_seats": configured_reviewers,
-                "configured_weight": configured_reviewers,
+                "configured_weight": total_weight if total_weight > 0 else configured_reviewers,
                 "seat_quorum_required": math.ceil(2 * configured_reviewers / 3) if configured_reviewers > 0 else 1,
-                "weight_quorum_required": math.ceil(2 * configured_reviewers / 3) if configured_reviewers > 0 else 1,
+                "weight_quorum_required": math.ceil(2 * (total_weight if total_weight > 0 else configured_reviewers) / 3),
                 "decision_threshold_numerator": 2,
                 "decision_threshold_denominator": 3,
-                "minimum_winning_seats": 1 if configured_reviewers == 1 else 2
+                "minimum_winning_seats": 2,
+                "dictator_cap_enabled": True
             },
             "consensus_rule": "weighted_2/3_v1",
             "vote_breakdown": {

@@ -41,6 +41,7 @@
             "properties": {
               "project": { "type": "string" },
               "task_id": { "type": "string", "minLength": 1 },
+              "title": { "type": "string", "maxLength": 2048 },
               "source_branch": { "type": "string" },
               "target_branch": { "type": "string" },
               "specification_summary": { "type": "string", "maxLength": 2048, "minLength": 1 },
@@ -52,7 +53,8 @@
               "task_description": { "type": "string", "maxLength": 2048 },
               "expected_output": { "type": "object" },
               "success_criteria": { "type": "object" }
-            }
+            },
+            "additionalProperties": false
           }
         }
       }
@@ -66,13 +68,17 @@
             "required": ["checkpoint_ref", "review_round", "review_context"],
             "properties": {
               "project": { "type": "string" },
+              "task_id": { "type": "string" },
               "executor": { "type": "string" },
               "checkpoint_ref": { "type": "string", "minLength": 1 },
               "review_round": { "type": "integer", "minimum": 1 },
               "review_context": { "$ref": "review_context.schema.json" },
+              "isolated_worktree_path": { "type": "string" },
+              "deadline": { "type": "string" },
               "review_deadline": { "type": "string" },
               "expected_output": { "type": "object" }
-            }
+            },
+            "additionalProperties": false
           }
         }
       }
@@ -94,7 +100,8 @@
                   "path": { "type": "string" },
                   "evidence_commit": { "type": "string" },
                   "sha256": { "type": "string" }
-                }
+                },
+                "additionalProperties": false
               },
               "manifest_ref": {
                 "type": "object",
@@ -102,7 +109,8 @@
                   "path": { "type": "string" },
                   "evidence_commit": { "type": "string" },
                   "sha256": { "type": "string" }
-                }
+                },
+                "additionalProperties": false
               },
               "vote_summary": {
                 "type": "object",
@@ -110,13 +118,15 @@
                   "vote": { "type": "string" },
                   "issues_count": { "type": "integer" },
                   "blocking_count": { "type": "integer" }
-                }
+                },
+                "additionalProperties": false
               },
               "vote": { "enum": ["YES_APPROVE", "NO_APPROVE", "ABSTAIN"] },
               "opinion_status": { "type": "string" },
               "confidence": { "type": "number" },
               "issues_count": { "type": "integer" }
-            }
+            },
+            "additionalProperties": false
           }
         }
       }
@@ -141,7 +151,8 @@
                   "path": { "type": "string" },
                   "evidence_commit": { "type": "string" },
                   "sha256": { "type": "string" }
-                }
+                },
+                "additionalProperties": false
               },
               "disposition_ref": {
                 "type": "object",
@@ -149,12 +160,14 @@
                   "path": { "type": "string" },
                   "evidence_commit": { "type": "string" },
                   "sha256": { "type": "string" }
-                }
+                },
+                "additionalProperties": false
               },
               "issues_index_sha256": { "type": "string" },
               "next_checkpoint_deadline": { "type": "string" },
               "summary": { "type": "string", "maxLength": 2048 }
-            }
+            },
+            "additionalProperties": false
           }
         }
       }
@@ -165,10 +178,17 @@
         "properties": {
           "payload": {
             "type": "object",
-            "required": ["checkpoint_ref", "review_round"],
+            "required": [
+              "task_id",
+              "checkpoint_ref",
+              "review_round",
+              "vote_result_ref",
+              "issues_index_sha256",
+              "timeout_deadline"
+            ],
             "properties": {
               "project": { "type": "string" },
-              "task_id": { "type": "string" },
+              "task_id": { "type": "string", "minLength": 1 },
               "checkpoint_ref": { "type": "string", "minLength": 1 },
               "review_round": { "type": "integer", "minimum": 1 },
               "vote_result": {
@@ -179,21 +199,25 @@
                   "sha256": { "type": "string" },
                   "decision": { "type": "string" },
                   "issues_count": { "type": "integer" }
-                }
+                },
+                "additionalProperties": false
               },
               "vote_result_ref": {
                 "type": "object",
+                "required": ["path", "evidence_commit", "sha256"],
                 "properties": {
                   "path": { "type": "string" },
                   "evidence_commit": { "type": "string" },
                   "sha256": { "type": "string" }
-                }
+                },
+                "additionalProperties": false
               },
-              "issues_index_sha256": { "type": "string" },
+              "issues_index_sha256": { "type": "string", "minLength": 1 },
               "deadline": { "type": "string" },
-              "timeout_deadline": { "type": "string" },
+              "timeout_deadline": { "type": "string", "minLength": 1 },
               "expected_output": { "type": "string" }
-            }
+            },
+            "additionalProperties": false
           }
         }
       }
@@ -213,9 +237,18 @@
               "merge_commit": { "type": "string" },
               "target_branch": { "type": "string" },
               "vote_result_path": { "type": "string" },
-              "vote_result_ref": { "type": "object" },
+              "vote_result_ref": {
+                "type": "object",
+                "properties": {
+                  "path": { "type": "string" },
+                  "evidence_commit": { "type": "string" },
+                  "sha256": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
               "merge_strategy": { "type": "string" }
-            }
+            },
+            "additionalProperties": false
           }
         }
       }
@@ -236,7 +269,8 @@
               "detail": { "type": "string", "maxLength": 2048 },
               "event": { "type": "string" },
               "attachments": { "type": "array" }
-            }
+            },
+            "additionalProperties": false
           }
         }
       }
@@ -264,6 +298,9 @@
                 "type": "array",
                 "items": { "type": "string" }
               },
+              "vote_breakdown": {
+                "type": "object"
+              },
               "deadline": { "type": "string" },
               "timeout_deadline": { "type": "string" },
               "vote_result_ref": {
@@ -272,9 +309,11 @@
                   "path": { "type": "string" },
                   "evidence_commit": { "type": "string" },
                   "sha256": { "type": "string" }
-                }
+                },
+                "additionalProperties": false
               }
-            }
+            },
+            "additionalProperties": false
           }
         }
       }

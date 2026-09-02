@@ -1,6 +1,7 @@
 """JSON Schema Validator for MACAO Artifacts and Messages."""
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Dict, Any, Tuple, Optional
@@ -103,10 +104,63 @@ def validate_aep_envelope(data: Any) -> Tuple[bool, Optional[str]]:
     return SchemaValidator().validate("aep_envelope", data)
 
 def validate_config(data: Any) -> Tuple[bool, Optional[str]]:
-    return SchemaValidator().validate("macao_config", data)
+    is_valid, err = SchemaValidator().validate("macao_config", data)
+    if not is_valid:
+        return False, err
+    if not isinstance(data, dict):
+        return True, None
+
+    # D-6 Anti-Dominance & Quorum Semantic Validation
+    team = data.get("team", {})
+    reviewers = team.get("reviewers", [])
+    if isinstance(reviewers, list) and reviewers:
+        n_seats = len(reviewers)
+        weights = []
+        for r in reviewers:
+            if isinstance(r, dict):
+                w = r.get("vote_weight", 1)
+                if isinstance(w, int):
+                    weights.append((r.get("id", "unknown"), w))
+        total_w = sum(w for _, w in weights)
+
+        # 1. Dictator cap: forall i, 3*w_i < 2*W
+        for r_id, w in weights:
+            if 3 * w >= 2 * total_w:
+                return False, f"Dictator cap violation: reviewer '{r_id}' weight {w} violates 3*w_i < 2*W (3*{w}={3*w} >= 2*{total_w}={2*total_w})"
+
+        policy = data.get("policy", {})
+        if isinstance(policy, dict):
+            # 2. Minimum winning seats bound: 2 <= minimum_winning_seats <= N
+            mws = policy.get("minimum_winning_seats")
+            if isinstance(mws, int):
+                if mws < 2:
+                    return False, f"minimum_winning_seats ({mws}) must be at least 2"
+                if mws > n_seats:
+                    return False, f"minimum_winning_seats ({mws}) cannot exceed number of reviewers ({n_seats})"
+
+            # 3. Seat quorum: >= ceil(2N/3)
+            min_sq = math.ceil(2 * n_seats / 3)
+            sq = policy.get("seat_quorum_required")
+            if isinstance(sq, int) and sq < min_sq:
+                return False, f"seat_quorum_required ({sq}) is less than required minimum ceil(2N/3) = {min_sq}"
+
+            # 4. Weight quorum: >= ceil(2W/3)
+            min_wq = math.ceil(2 * total_w / 3)
+            wq = policy.get("weight_quorum_required")
+            if isinstance(wq, int) and wq < min_wq:
+                return False, f"weight_quorum_required ({wq}) is less than required minimum ceil(2W/3) = {min_wq}"
+
+            # 5. Dictator cap enabled must be True
+            if policy.get("dictator_cap_enabled") is not True:
+                return False, "dictator_cap_enabled must be true"
+
+    return True, None
+
 
 def validate_review_disposition(data: Any) -> Tuple[bool, Optional[str]]:
     return SchemaValidator().validate("review_disposition", data)
 
+
 def validate_admin_override(data: Any) -> Tuple[bool, Optional[str]]:
     return SchemaValidator().validate("admin_override", data)
+

@@ -15,13 +15,15 @@ class TestPRDSnippetsSchema(unittest.TestCase):
         cls.schemas = {}
         cls.store = {}
         for p in glob.glob("docs/schemas/*.schema.json"):
-            d = json.load(open(p))
+            with open(p, "r", encoding="utf-8") as f:
+                d = json.load(f)
             name = os.path.basename(p).replace(".schema.json", "")
             cls.schemas[name] = d
             cls.store[d.get("$id", name)] = d
             cls.store[os.path.basename(p)] = d
 
-        cls.lines = open("docs/MACAO_PRD_v2.md").read().split("\n")
+        with open("docs/MACAO_PRD_v2.md", "r", encoding="utf-8") as f:
+            cls.lines = f.read().split("\n")
 
     def get_validator(self, name):
         s = self.schemas[name]

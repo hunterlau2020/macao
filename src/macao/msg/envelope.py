@@ -28,7 +28,7 @@ class AEPEnvelope:
 
     @classmethod
     def validate_budget(cls, msg: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
-        """Validates envelope and field byte budgets."""
+        """Validates envelope and field byte budgets recursively across all nested structures."""
         try:
             serialized = json.dumps(msg, ensure_ascii=False).encode("utf-8")
         except Exception as e:
@@ -36,19 +36,27 @@ class AEPEnvelope:
         if len(serialized) > cls.MAX_MESSAGE_BYTES:
             return False, f"AEP message exceeds max budget of {cls.MAX_MESSAGE_BYTES} bytes (got {len(serialized)} bytes)"
 
+        def _check_val(path: str, val: Any) -> Optional[str]:
+            if isinstance(val, str):
+                b_len = len(val.encode("utf-8"))
+                if b_len > cls.MAX_INLINE_FIELD_BYTES:
+                    return f"Payload field '{path}' exceeds inline limit of {cls.MAX_INLINE_FIELD_BYTES} bytes (got {b_len} bytes)"
+            elif isinstance(val, dict):
+                for sub_k, sub_v in val.items():
+                    res = _check_val(f"{path}.{sub_k}" if path else str(sub_k), sub_v)
+                    if res:
+                        return res
+            elif isinstance(val, (list, tuple)):
+                for idx, item in enumerate(val):
+                    res = _check_val(f"{path}[{idx}]", item)
+                    if res:
+                        return res
+            return None
+
         payload = msg.get("payload", {})
-        if isinstance(payload, dict):
-            for k, v in payload.items():
-                if isinstance(v, str):
-                    b_len = len(v.encode("utf-8"))
-                    if b_len > cls.MAX_INLINE_FIELD_BYTES:
-                        return False, f"Payload field '{k}' exceeds inline limit of {cls.MAX_INLINE_FIELD_BYTES} bytes (got {b_len} bytes)"
-                elif isinstance(v, list):
-                    for idx, item in enumerate(v):
-                        if isinstance(item, str):
-                            b_len = len(item.encode("utf-8"))
-                            if b_len > cls.MAX_INLINE_FIELD_BYTES:
-                                return False, f"Payload field '{k}[{idx}]' exceeds inline limit of {cls.MAX_INLINE_FIELD_BYTES} bytes (got {b_len} bytes)"
+        err = _check_val("", payload)
+        if err:
+            return False, err
         return True, None
 
     @classmethod

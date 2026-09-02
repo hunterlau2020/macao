@@ -3,7 +3,7 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-02（全量物理闭环 `4027cce` 轮 5 份专家评审意见，提交复审基线 **`a0123e8`**；总计结论类 **124 份**（120 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **29 份**，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-02（全量对账 `a0123e8` 轮 4 份专家评审报告；**用例轨首次获得两张授予票，设计同步轨三方一致不授予**。总计结论类 **128 份**（124 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **29 份**；双向对账 0/0，见登记表上方说明）
 - **当前并行评审轨道**：
   - **文档轨（进行中，两份申请并行复审）**：
     1. [`2026-09-02-review-request-a0123e8.md`](2026-09-02-review-request-a0123e8.md) → 总入口申请（目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`a0123e8`**）
@@ -11,11 +11,45 @@
     3. [`2026-09-02-review-request-a0123e8-UseCases-v2.5-Alignment.md`](2026-09-02-review-request-a0123e8-UseCases-v2.5-Alignment.md) → 用例体系对齐专项（被审提交 **`a0123e8`**）
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨**：**复审中（commit `a0123e8`）**。已全量物理闭环 `4027cce` 轮 5 项跨专家收敛 P1 阻断项（PRD 示例校验、D-6 反支配契约硬门禁、E7 源态精准固化、`remote_name: null` 纯本地支持、AEP 16 KiB 字节预算与 8 类封闭 Payload）。
+  - **文档轨 · 用例体系（轨 B）**：**已获 2 张授予票（Claude、Grok），尚未形成委员会共识**。Codex 出具的是不分轨的合并 `REJECT`，Qwen 本轮尚未出具。按 `docs/MACAO_REVIEW_GUIDELINES.md` §8「沉默 ≠ 同意」，**未表态者不计入多数，PG-0 尚未授予**。这是本工程首次有专家对该轨投授予票。
+  - **文档轨 · PRD 设计同步（轨 A）**：**三方一致不授予**（Claude `NO_APPROVE` P1×2、Grok `NO_APPROVE` P1×1、Codex `REJECT` P1×3）。
+  - **`4027cce` 轮 5 项阻断的实际闭环情况（经本轮三方独立机验，非采信申请自述）**：3 项完全闭环（PRD 示例 14/14 + 根配置、`remote_name: null` 全链路、STATUS 对账），**2 项部分闭环**——E7 源态四处只改对两处；D-6 反支配门禁只锁死了两个单键，公式本身仍无机器约束。申请 §1 所称「全量物理闭环」不成立。
+  - **历史文档定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中（仅 GLM 1 份，按 GUIDELINES §8「沉默 ≠ 同意」不计多数）。
 
 
-### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`6e35a71` → `4027cce`，当前轮）
+### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`4027cce` → `a0123e8`，当前轮）
+
+- **被审提交**：`a0123e8`（工作区 HEAD `3b60d3a`，差量 = 三份 `a0123e8` 申请文件 + 本文件头部计数；PRD / Schema / 提案 / 变更清单 / 用例正文与 `a0123e8` 逐字节一致，三方均已核对）
+- **本轮票型（4 份报告 / 3 位专家）**：**轨 A 三方一致不授予；轨 B 首次出现授予票**
+  - **Claude**：轨 A `NO_APPROVE`（P1×2）／轨 B **`YES_APPROVE`** —— [`…-a0123e8-claude.md`](2026-09-02-review-result-a0123e8-claude.md)
+  - **Grok**：轨 A `NO_APPROVE`（P1×1）／轨 B **`YES_APPROVE`** —— [`…-a0123e8-DesignSync-grok.md`](2026-09-02-review-result-a0123e8-DesignSync-grok.md)、[`…-a0123e8-UseCases-grok.md`](2026-09-02-review-result-a0123e8-UseCases-grok.md)
+  - **Codex**：不分轨合并 `REJECT`（P1×3，三条全部落在契约库与运行时）—— [`…-a0123e8-codex.md`](2026-09-02-review-result-a0123e8-codex.md)
+  - **Qwen**：本轮尚未出具。
+- **三方一致确认的实质进展（各方独立机验，非采信自述）**：
+  - **PRD 正式示例 14/14 通过自家契约**（§2.1/2.2/2.3/2.5/5.2/§13 六处 + §2.4 全部 8 个 AEP 信封），**仓库根 `macao.yaml` 亦 PASS**。这条「权威文档的规范示例通不过自己指定的契约」的缺陷链自 `0bc6247` P0-2 起复发四次（P0-2 → N-6 → M-1 → `4027cce` A-P1-1），本轮是**第一次在契约被大幅收紧之后仍全部成立**；团队已把该检查固化为 `tests/test_prd_snippets_schema.py`，正是评审方连续三轮建议的三段门禁中的第一段。
+  - `remote_name: null` 全链路打通：两份契约放开 null、新增 `fixtures/valid/macao_config_local_only.yaml` 正例、PRD §14.5 第 1 步写成「远端共享 / 纯本地」双分支，与 UC-8 关卡 1 同措辞。
+  - `STATUS.md` 双向对账在被审基线上为 **0/0/0**（`4027cce` 轮 Claude A-P1-4 闭环）。
+  - 用例侧：UC-7 的 P1–P4 与 PRD 修正后的 E7 源态一致；13 份用例的 3 处内嵌围栏对全部 8 份契约交叉验证全部 PASS；§6 反例库 **11/11** 可唯一推导，无回退。
+  - 申请 §3/§4 机验各方复跑成立：正例 10/10、反例 16/16、双副本（含 fixtures 目录）0 diff、92/92 PASS、0 控制字符。**92/92 不构成 L2 证据**——其覆盖的仍是 v2.3.1 引擎主体。
+- **轨 A 未获授予的阻断项**：
+
+  | # | 阻断项 | 收敛方 |
+  |---|---|---|
+  | 1 | **E7 源态四处权威位置只改对两处**：PRD `:881` 与提案 `:135` 已收敛为 `HOLD`（`CONSENSUS_CHECK`），但**提案 `:226`（§4.5 状态转移表修订）与 `v2.5_CODE_CHANGE_INVENTORY.md:85`（交付物 #4，Phase 1 施工图）仍写 `CONSENSUS_CHECK 或 REWORK`**。PRD `:889` 明文「除本表所列来源外，任何实现不得引入其他状态转移路径」——按清单施工会实现一条被禁止的边，且现有代码本来是对的。申请 §1.3 称「PRD §3.3 状态机表与提案彻底清理」不成立 | **两方**（Claude A-P1-1 / Grok P1-1） |
+  | 2 | **D-6 的独裁帽与两个 quorum 公式从未成为机器约束**：`dictator_cap_enabled: {"const": true}` 锁死的是「这面旗子必须写 true」，不校验任何权重。实测权重 `[5,1,1]`（$3\cdot5=15 \ge 2\cdot7=14$，违反 $\forall i, 3w_i < 2W$）被契约与产品自身 `validate_config()` **同时放行**；`seat_quorum_required` / `weight_quorum_required` 可声明为低于 $\lceil 2N/3 \rceil$ / $\lceil 2W/3 \rceil$ 的值。`ConfigManager.load()` 只上调 seat quorum，不校验独裁帽与权重 quorum。提案 `:410` 的措辞是「不满足则**拒绝启动**」。申请 §1.2 称「D-6 反支配门禁 Schema 物理锁死」不成立 | **两方**（Codex P1-1 / Claude A-P1-2） |
+  | 3 | `vote_result_ref` 加为 property 但未进 `required`，提案 `:193`「disposition **必须**反向引用冻结的 vote result」仍未编码；valid fixture 亦不含该字段 | 两方（Codex P1-2 / Claude P2-3，严重度判定不同） |
+  | 4 | 「8 类封闭 Payload + 2048 字节双向严格校验」不是实际契约：8 个分支均未设 `additionalProperties: false`，`protocol` 仍接受 `AEP/1.0`；反例 `aep_payload_oversized.json` 名不副实（44 字符 / 298 字节，拒因是空数组，补齐该维后被接受）。16 KiB 与逐字段预算已在 `src/macao/msg/envelope.py` 实现并接入 `create()`/`parse()`，Draft-07 无法表达整文档字节长度，落运行时属正确分工 | 两方（Codex P1-3 / Claude P2-2+P2-4，严重度判定不同） |
+  | 5 | `aep_envelope.schema.json:72` 的 `$ref` 仍解析为网络 URL，契约库不自包含；`schemas/README.md:26` 宣称禁 base64 但 `diff_policy` 无枚举实际不拦；`macao_config` 的 `policy`/根级未设 `additionalProperties: false` | 单方（Claude P2-1 / P2-6 / P2-7） |
+
+- **轨 B 获得授予票的依据（两方各自独立给出）**：轨 B 申请 §2 列出的 13 份交付物全部在 `docs/usercases/` 之内；两方均未在其中找出与 PRD、契约或 D-1～D-9 的机器可证不一致。上表阻断项 1 的冲突不在 13 份用例正文内（UC-7 与 PRD 同句），阻断项 2～5 全部落在契约库与运行时（轨 A 交付物 #2）。**两方均按 F-17 明确声明该票不是「有条件通过」。**
+- **跨轨依赖（两方均已写明，不作为轨 B 的投票条件）**：UC-5 §2.b、UC-1 h0(3)、UC-10 §2.b 正确写下了 D-6 五重公式，但当前实现中独裁帽与双 quorum 三道门禁**并不存在**（阻断项 2）。轨 B 若最终获授予并用作 Phase 1~5 操作基准，照它验收将验不出这三道门禁。**建议把阻断项 2 的闭环列为 Phase 1 编码启动的前置条件。**
+- **本轮结构性观察**：连续三轮出现的「修复动作本身是新缺陷的成因」模式，**本轮未再出现**——`a0123e8` 改动 4 份契约、PRD 69 行、提案、变更清单与 6 个源文件，三方逐项复跑后未发现新引入的机器可证缺陷；两条阻断均为旧项未改净。这是六轮以来第一次。合理推断与团队把第一段门禁（PRD 示例 × 契约）固化进 CI 有关；另两段（「用例/提案判据 × 契约与 §3.3 转移表」「`reviews/` 双向对账」）仍未入 CI，而本轮阻断项 1 恰是第二段能自动捕获的类型。
+- **一处评审方自我更正（GUIDELINES §9 记录）**：Claude 初稿把上轮 A-P1-2（D-6）判为「完全闭环」，仅复测了自己上轮写下的两个探针；经 Codex P1-1 提示后本机复验推翻该判定，轨 A 的 P1 计数由 1 更正为 2。该更正已写入其报告 §0.1b。
+
+---
+
+### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`6e35a71` → `4027cce`，已被 `a0123e8` 轮取代）
 
 - **被审提交**：`4027cce`（工作区 HEAD `be5ee25`，差量仅为申请文件改名 + `MACAO_REVIEW_GUIDELINES.md` §1.3 命名条款 + 本文件；交付物正文与 `4027cce` 一致，四方均已核对）
 - **本轮票型（5 份报告 / 4 位专家，两轨合计）**：**四方一致不通过，无一方投赞成**——`caf3473` 以来首次全体否决。
@@ -140,18 +174,15 @@
 
 ---
 
-## 评审申请记录全量对账表 (Review Registry - 124 份结论类文件 + 26 份申请全量对账)
+## 评审申请记录全量对账表 (Review Registry - 128 份结论类文件 + 29 份申请全量对账)
 
-> **本轮全量对账（2026-09-02，按 `docs/MACAO_REVIEW_GUIDELINES.md` §1.3 与本文件治理规则执行）**：
+> **本轮全量对账（2026-09-02，`a0123e8` 轮，按 `docs/MACAO_REVIEW_GUIDELINES.md` §1.3 与本文件第 4 行治理规则执行）**：
 >
-> - **登记但文件不存在 —— 0 份**；**存在但未登记 —— 19 份**（结论类 17 + 申请类 2），已于本次全部补入。
-> - 补入的结论类 17 份：`5583bdd` ×1（grok）、`caf3473` ×2（qwen 双轨）、**`6e35a71` ×7**（claude 双轨、grok 双轨、qwen 双轨、codex）、**`4027cce` ×5**（claude、codex、grok、qwen 双轨）、方法论评审 ×2（`REVIEW_METHODOLOGY_review_cc.md`、`REVIEW_METHODOLOGY_review_glm.md`）。
-> - 补入的申请类 2 份：`2026-09-02-review-request-6e35a71-PRD-v2.5-Design-Sync.md` 与 `2026-09-02-review-request-6e35a71-UseCases-v2.5-Alignment.md`（`be5ee25` 按新命名规范归档的副本）。（此处逐份写全而不用花括号缩写：缩写形式会被对账脚本当成一个不存在的文件名，本次自查已复现该误报。）
-> - **计数更正**：结论类由 **107** 更正为 **124**（`review-result-*` 120 + `review-2.5-*` 2 + `REVIEW_METHODOLOGY_*` 2）；申请类由 **21** 更正为 **26**。头部先前所记「115 / 26」中的 115 亦一并更正。
+> - **登记但文件不存在 —— 0 份**；**存在但未登记 —— 4 份**（均为本轮 `a0123e8` 新产出：claude ×1、grok 双轨 ×2、codex ×1），已于本次全部补入下表末行。
+> - **计数更正**：结论类由 **124** 更正为 **128**（`review-result-*` 124 + `review-2.5-*` 2 + `REVIEW_METHODOLOGY_*` 2）；申请类由 **26** 更正为 **29**（`a0123e8` 三份申请，头部先前已更正为 29，本次同步表标题）。
+> - 上一轮（`4027cce`）遗留的 19 份漏登已在上次更新中全部补齐并保持在册，本轮无历史欠账。
 >
-> **本次对账即 `4027cce` 轮 Claude A-P1-4 的闭环动作。** 该项此前连续两轮未平：`6e35a71` 时未登记 3 份，`4027cce` 时升至 12 份，其中 7 份正是本轮申请据以论证「已修复」的 `6e35a71` 轮全部专家报告——申请以一个不含这些文件的登记表作为闭环边界，恰是本文件第 4 行治理规则所禁止的做法。
->
-> 历史勘误保留：上一轮补入的 `2766c69` 四份仍在册；前次将「已在 `2c40cd5` 实装」记为 PRD 三项整改落点，经 `git log` 复核实为 **`caf3473`**，已更正。
+> **对账口径提示**：本表用文件名全称登记，**不使用 `{A,B}` 花括号缩写**——缩写会被各方的对账脚本当成一个不存在的文件名而产生误报（上次更新时已复现该误报并改正）。
 
 | 申请日期 | 申请文件 / 历史轮次 | 待审对象 / Commit | 目标等级 | 评审专家与文件清单 | 结论与状态 |
 |---|---|---|---|---|---|
@@ -189,49 +220,45 @@
 | 2026-09-01 | `2026-09-01-review-request-UseCases-v2.5-Alignment.md`（Qwen 补登） | `caf3473` | **L1 / PG-0** | `2026-09-01-review-result-caf3473-qwen.md`<br>`2026-09-01-review-result-caf3473-DesignSync-r2-qwen.md` (2 份) | **未获授予**。Qwen 双轨 `NO_APPROVE`，BLOCKING×6：B-1 disposition 路径分裂、B-2 AEP Type 字母错位、B-3 `issues[]` vs `items[]`、B-4 UC-8 缺 Pre-merge Evidence 关卡且顺序倒置、B-5 UC-3/UC-1-gemini 示例不过契约、B-6 D-1～D-9 编号错位。六项在 `6e35a71` 中闭环。 |
 | 2026-09-02 | `2026-09-02-review-request-6e35a71-PRD-v2.5-Design-Sync.md`<br>`2026-09-02-review-request-6e35a71-UseCases-v2.5-Alignment.md` | `5583bdd` .. `6e35a71` | **L1 / PG-0** | `2026-09-02-review-result-6e35a71-DesignSync-claude.md`<br>`2026-09-02-review-result-6e35a71-UseCases-claude.md`<br>`2026-09-02-review-result-6e35a71-DesignSync-grok.md`<br>`2026-09-02-review-result-6e35a71-UseCases-grok.md`<br>`2026-09-02-review-result-6e35a71-DesignSync-r2-qwen.md`<br>`2026-09-02-review-result-6e35a71-qwen.md`<br>`2026-09-02-review-result-6e35a71-codex.md` (7 份) | **未获授予，未达成共识**。票型 **2 授予（Grok 双轨、Qwen 双轨）+ 2 拒绝（Claude 双轨 `NO_APPROVE`、Codex `REJECT`）**。四方一致确认 `caf3473`/`5583bdd` 轮阻断实质闭环（disposition 路径、Type 字母、`items[]`、UC-8 Pre-merge 关卡、示例过契约、D-1～D-9 对齐、§6 反例库 11/11）。Claude 双轨 P1×5 / P1×4（policy 配置面与 D-6 冲突、E4 关卡顺序与 §14.5 倒置、拓扑守卫四种强度、STATUS 对账、`DEFERRED`/`REJECTED` 枚举联动；UC-7 触发无 E7 可达边、UC-6/7 缺模板小节、UC-8 远端不可达双结果）；Codex P1×8（AEP payload 与字节预算、`dev_manifest` 必填、`macao_config` 封闭、disposition 联动、E7 唯一出口、UC-7 起态混塞、UC-8 远端模式、SRS 7 类）。**多数项已在 `4027cce` 闭环，但闭环动作引入新阻断，见下一行。** |
 | 2026-09-02 | `2026-09-02-review-request-4027cce.md`（总入口）<br>`2026-09-02-review-request-4027cce-PRD-v2.5-Design-Sync.md`<br>`2026-09-02-review-request-4027cce-UseCases-v2.5-Alignment.md` | `6e35a71` .. `4027cce` | **L1 / PG-0** | `2026-09-02-review-result-4027cce-claude.md`<br>`2026-09-02-review-result-4027cce-codex.md`<br>`2026-09-02-review-result-4027cce-grok.md`<br>`2026-09-02-review-result-4027cce-DesignSync-qwen.md`<br>`2026-09-02-review-result-4027cce-UseCases-qwen.md` (5 份) | **未获授予。四方一致否决（`caf3473` 以来首次全体不通过）**：Claude `NO_APPROVE`×2 轨、Codex `REJECT`、Grok `NO_APPROVE`（前轮 APPROVE 改判）、Qwen `NO_APPROVE`×2 轨（前两轮 APPROVE 改判）。四方一致确认上轮 Claude 9 条 P1 中 **7 条真实闭环**、Codex 多条闭环、申请 §3/§4 机验全部复跑成立。**未获授予的阻断（按收敛方数）**：①UC-8 `remote_name: null` 通不过 `macao_config` 契约、PRD §14.5 无该模式（**四方全体**，本轮修复引入）；②PRD §2.5/§13/§2.4 Type A·B·E 五处示例 + 仓库根 `macao.yaml` 通不过自家契约（三方）；③D-6 两道反支配门禁契约层仍可关，反例可单席位批准合并（三方）；④E7 源态 `REWORK` 下 3/5 选项无可达边 + 提案 `:135` 互斥边（三方）；⑤AEP 16 KiB 预算与 8 类 payload 未完成（三方）；⑥STATUS 双向对账不平（Claude，**已于本次更新闭环**）；⑦`aep_envelope` `$ref` 指向网络 URL 致契约库不自包含（Claude）；⑧AEP 实现层不可用（Codex，属 L2 不计入）。 |
+| 2026-09-02 | `2026-09-02-review-request-a0123e8.md`（总入口）<br>`2026-09-02-review-request-a0123e8-PRD-v2.5-Design-Sync.md`<br>`2026-09-02-review-request-a0123e8-UseCases-v2.5-Alignment.md` | `4027cce` .. `a0123e8` | **L1 / PG-0** | `2026-09-02-review-result-a0123e8-claude.md`<br>`2026-09-02-review-result-a0123e8-DesignSync-grok.md`<br>`2026-09-02-review-result-a0123e8-UseCases-grok.md`<br>`2026-09-02-review-result-a0123e8-codex.md` (4 份) | **轨 B 首获两张授予票，轨 A 三方一致不授予；委员会共识尚未形成**。票型：Claude（轨 A `NO_APPROVE` P1×2 / 轨 B **`YES_APPROVE`**）、Grok（轨 A `NO_APPROVE` P1×1 / 轨 B **`YES_APPROVE`**）、Codex（不分轨合并 `REJECT` P1×3）；Qwen 未出具，按 §8「沉默 ≠ 同意」不计。三方一致确认实质进展：**PRD 正式示例 14/14 + 根 `macao.yaml` 过契约**（该缺陷链四次复发后首次在契约收紧下仍全部成立，已固化为 `tests/test_prd_snippets_schema.py`）、`remote_name: null` 全链路、STATUS 对账 0/0、§6 反例库 11/11、正例 10/10 反例 16/16、92/92 PASS。**轨 A 阻断**：①E7 源态四处只改对两处，提案 `:226` 与变更清单 `:85` 仍写 `或 REWORK`，与 PRD `:881`/`:889` 冲突（Claude + Grok 两方收敛）；②D-6 独裁帽与双 quorum 公式从未成为机器约束，权重 `[5,1,1]` 违反 $3w_i<2W$ 却被契约与 `validate_config()` 同时放行（Codex + Claude 两方收敛）；③`vote_result_ref` 未进 `required`；④AEP「8 类封闭 Payload」未设 `additionalProperties:false`、反例 fixture 名不副实；⑤`$ref` 网络 URL、base64 未拦等。**轨 B** 13 份用例正文未见机器可证不一致，阻断项均落在契约库与运行时。**Claude 本轮自我更正**：初稿误判 D-6「完全闭环」，经 Codex 提示复验后推翻，P1 由 1 改 2。 |
 | 2026-08~09 | 评审方法论横向评审（非定级轮） | `docs/MACAO_REVIEW_GUIDELINES.md` / `docs/reference/REVIEW_METHODOLOGY.md` | — | `REVIEW_METHODOLOGY_review_cc.md`<br>`REVIEW_METHODOLOGY_review_glm.md` (2 份) | 方法论本身的横向评审（cc / glm），不参与任何定级轮次；本次对账补登，避免再次落在登记表之外。 |
 
 ---
 
 ## 下一步行动
 
-> 依据 `4027cce` 轮四方报告。**排序原则**：先做四方/三方独立收敛的阻断项，再做单方项，最后做 P2/P3；门禁固化与第 1 项并行，因为本轮两条最严重的阻断都由「改了契约没回跑」直接造成。
+> 依据 `a0123e8` 轮三方报告。**本轮只剩两条阻断，且都是两方独立收敛的旧项未改净**——`4027cce` 轮的 8 项已闭 6 项。轨 B 已获两票授予，轨 A 只差第 1、2 两项。
 
-### 优先级 0 · 门禁固化（与下述修复并行执行，不可再推迟）
+### 优先级 0 · 轨 A 的两条阻断（两方收敛，闭环后轨 A 即可复审）
 
-1. **把三段检查落进 CI，作为交付前门禁**。这是本轮四方报告共同指向的根因：`4027cce` 收紧 4 份 Schema 时未回跑「PRD 示例 × 契约」，一次性打破 5 处规范示例 + 仓库根配置；引入 `remote_name: null` 时未回跑「用例判据 × 配置契约」，造出不可达分支。三段脚本合计约 60 行，已在 Claude `4027cce` 报告 §一 / §四 B-P1-1 / §三 A-P1-4 中给出可直接复用的实现：
-   - ① **PRD 与用例正文中一切可映射到 `docs/schemas/` 的示例** → validator 回放（含 §2.4 八个 AEP 信封）；
-   - ② **用例声明的每个判据/分支** → 是否可由 `macao_config.schema.json` 表达；**用例声明的每个入口/出口** → 是否在 PRD §3.3 转移表中存在对应边；
-   - ③ **`docs/reviews/` 双向对账** + 控制字符 + 悬空 `§x.y` 引用扫描。
-   *验收*：三段脚本在 CI 中全绿，且反例测试断言**拒因关键字**而非只断言被拒。**此项自 `2766c69` 轮 Codex P2-1 起已连续 5 轮登记未固化。**
+1. **[Claude A-P1-1 = Grok P1-1] E7 源态四处只改对两处**：`docs/PRD_CHANGE_PROPOSAL_v2.5.md:226` 与 `docs/v2.5_CODE_CHANGE_INVENTORY.md:85` 第 6 项删去「或 `REWORK`」，与 PRD `:881` 的 `HOLD`（`CONSENSUS_CHECK`）对齐。
+   *验收*：`grep -rn 'CONSENSUS_CHECK` 或 `REWORK' docs/ --include='*.md' | grep -v '/reviews/'` **零命中**（当前恰好命中这 2 处）。**这是两行的修改量。**
+2. **[Codex P1-1 = Claude A-P1-2] D-6 独裁帽与双 quorum 落到 Loader**：Draft-07 表达不了跨项求和，故 gate 1/2/3 应在 `ConfigManager.load()` 实现——加载时计算 $W=\sum w_i$，逐一校验 $\forall i, 3w_i < 2W$（不满足按提案 `:410` **拒绝启动**），并把 `seat_quorum_required` / `weight_quorum_required` 分别强制为 $\lceil 2N/3 \rceil$ / $\lceil 2W/3 \rceil$；同时修正 `src/macao/consensus/vote.py:180` 的 `weight_quorum_required` 分母（现用席位数 N，应为总权重 W）。`docs/schemas/README.md` 写明「gate 1/2/3 由 Config Loader 保证，契约不校验」，避免再把 `const: true` 表述为「物理锁死」。
+   *验收*：权重 `[5,1,1]` 与 quorum 低于公式的两份配置被 `ConfigManager.load()` 拒绝并打印拒因；两份反例进 Loader 层测试（非 Schema fixture）。
 
-### 优先级 1 · 四方 / 三方独立收敛的阻断项
+### 优先级 1 · 门禁固化（连续第 5 轮登记，本轮已完成三分之一）
 
-2. **[四方全体] UC-8 纯本地模式不可表达**：`macao_config.schema.json` 与 `review_context.schema.json` 的 `project.repository.remote_name` 放开 null（或移出 `required`）；PRD §14.5 第 1 步补「远端共享 / 纯本地」两分支，与 UC-8 关卡 1 同措辞；UC-8 §6 增纯本地 fixture 断言；`fixtures/valid/` 新增 `macao_config_local_only.yaml`。
-   *验收*：新正例通过契约；`ls-remote` 分支反例仍被拒；PRD §14.5 / UC-8 关卡 1 / A3 / P3 四处措辞一致。
-3. **[三方] PRD 正式示例与仓库根配置通不过收紧后的契约**（**先做此项，它挡住其余验收**）：PRD §2.5 补 `issues_index_sha256`；第十三部分补 `version` 与 `policy.min_effective_votes`（若采纳第 4 项的删键方案则改为同步删除）；§2.4 Type A/E 补新必填字段，Type B 的内嵌 `review_context` 直接改用 §5.2 的十块模型；仓库根 `macao.yaml` 补 `version` 与三处 `vote_weight`。
-   *验收*：第 1 项脚本①对 §2.1/2.2/2.3/2.5/5.2/§13 与 §2.4 八个信封全部输出 PASS；`validate_config(macao.yaml)` 返回 `(True, None)`。
-4. **[三方] D-6 两道反支配门禁在契约层仍可关闭**：`macao_config.schema.json` 与 `vote_result.schema.json` 的 `minimum_winning_seats` 下界由 `1` 改 `2`；`dictator_cap_enabled` 收 `{"const": true}` 或直接删键（推荐后者，D-6 明定其不可选）；`min_effective_votes` 从 `policy.required` 移出并删键，同步清理 PRD §13 示例、`UC1-init-gemini.md:167`、`UC1-init-glm.md:253`；`minimum_winning_seats <= N` 的上界写进 PRD §13 与 Loader（Draft-07 表达不了，属运行时）。
-   *验收*：`{"minimum_winning_seats":1}` 与 `{"dictator_cap_enabled":false}` 两个反例进 `fixtures/invalid/` 并被拒，且打印拒绝原因。
-5. **[三方] E7 源态与提案互斥边**：二选一——(a) 把 §3.3 E7 的「当前状态」收敛为 `CONSENSUS_CHECK`（与 UC-7 §1 的 P1–P4 一致）并删除提案 `:135` 的「直接推进至 `MERGING`」段；或 (b) 保留 `REWORK` 源态，则须为 E4/E5/E5a/E9 各补一条 `REWORK` 起态行，并让提案 `:135` 与 PRD/UC-7 的两步豁免流一致。
-   *验收*：脚本比对「E7 伴随动作提到的每个目标转移编号」×「该编号行的当前状态集合」⊇「E7 的当前状态集合」，无空缺。
-6. **[三方] AEP 字节预算与 payload 覆盖**：16 KiB 整信封预算落到运行时并在 `docs/schemas/README.md` 写明「契约不校验、由 X 模块保证」；per-type payload 补齐 Type C/D/F/G；`protocol` 是否继续接受 `AEP/1.0` 需给出明确裁定。
+3. **第一段已入 CI**（`tests/test_prd_snippets_schema.py`，PRD 示例 × 契约）——这很可能是本轮「修复未引入新缺陷」的直接原因。请**扩到用例与提案的全部围栏**。
+4. **补第二段**：用例 / 提案声明的每个判据、分支、状态转移边 ×「是否可由契约表达 / 是否在 PRD §3.3 转移表中存在对应边」。**本轮阻断项 1 正是这一段能自动捕获的类型。**
+5. **补第三段**：`docs/reviews/` 双向对账（脚本见 Claude `4027cce` 报告 §三 A-P1-4）。
+6. **反例 fixture 必须断言拒因关键字**，而非只断言被拒——`aep_payload_oversized.json` 就是缺这一条才让一个未超标（44 字符 / 298 字节）的样本冒充字节预算门禁的证据。
 
-### 优先级 2 · 单方阻断项与 P2
+### 优先级 2 · P2 批次（不阻断定级，Phase 1 前处理）
 
-7. **[Claude] `aep_envelope.schema.json:64` 的 `$ref` 指向网络 URL**：改用 `$defs` 内联或相对文件路径 `$ref`，使 `docs/schemas/` 契约库自包含；并在 `docs/schemas/README.md` 写明离线校验方法。当前无 store 的 stock `Draft7Validator` 会抛 `RefResolutionError` 并向 `macao.dev` 发起出站请求，使申请的「9/9 + 13/13」在仓库外复现不出。
-8. **[Codex，L2 判据，不阻断本轮 L1]** AEP/1.1 与 `DISPOSITION_REQUIRED` 在实现层不可用、现有测试固化旧协议——登记待 Phase 1 处理，本轮不计入 L1 定级。
-9. **存续 P2/P3（Claude `4027cce` 轮登记，多数为跨轮未闭）**：提案 `:458`/`:489` 「9 大 context 语义块」→ 10（PRD §2.4 Type B 内嵌实例亦为 9 块，缺 `evidence`）；`schemas/README.md:26` 宣称禁 base64 但 `diff_policy` 无枚举实际不拦；PRD §14.2 role_view 缺 override 后 `SHOULD_DISPOSE` 行（**四轮未闭**）；UC-5 §2.b 残留浮点「赞成加权占比」与 D-6 禁浮点抵触；悬空引用 UC-2 §11.4、UC-4 §12.5×3、UC-8「§14.5 三条件」；D-9 的 `reconcile` 在 `docs/usercases/` 零出现；`UC1-init-gemini.md` 五个可验收小节全缺；README「提升至 evidence ref」措辞；UC-3 同文三重复用 E1–E5 标识。
+7. **契约层**：`vote_result_ref` 进 `required` 并补进 valid fixture（Codex P1-2 / Claude P2-3）；8 类 payload 补 `additionalProperties: false`、裁定是否继续接受 `AEP/1.0`（Codex P1-3 / Claude P2-4）；`aep_envelope.schema.json:72` 的 `$ref` 改 `$defs` 内联或相对文件路径，使契约库自包含（Claude P2-1）；`macao_config` 的 `policy` 与根级补 `additionalProperties: false`，堵住已删的 `min_effective_votes` 被塞回（Claude P2-7）；`diff_policy` 收敛为枚举或改 `schemas/README.md:26` 措辞（Claude P2-6）。
+8. **用例层**：UC-8 §6 增纯本地模式断言（本轮新增分支尚无测试落点，Claude P2-5）；修 5 处悬空引用 UC-2 §11.4、UC-4 §12.5×3、UC-8「§14.5 三条件」（四轮未闭）；删 UC-5 §2.b 浮点「赞成加权占比」旁注；补 `reconcile` 分册（D-9 四命令中唯一无用例者）；`UC1-init-gemini.md` 补五个可验收小节。
+9. **PRD**：§14.2 `role_view` 表补「override APPROVED 且待 FINAL → `SHOULD_DISPOSE`」行（五轮未闭）。
 
 ### 跨轨治理
 
-10. **申请文件的自动化声明必须写明命令与口径，而非写一个数**。本轮申请 §3.1 称 md 文档 169 / 175 份，实测 179 / 180 / 193（末者跟随软链），四份口径无一相符；此前三轮亦分别出现 179 / 181 / 186 的分歧。计数漂移本身不影响「0 控制字符」的结论为真，但它反复消耗各方交叉核验的注意力。
-11. **申请不得以「上一轮专家已确认」作为免检理由**。本轮两份申请的 §1 均引用 Qwen 上轮的「9/9 物理闭环」原话，而 Qwen 本轮在发现新证据后已自行改判 `NO_APPROVE`；Grok 亦由 APPROVE 改判。按 GUIDELINES §8「真理不等于投票」，前票不构成后轮的证据。
+10. **申请正文不得把「部分闭环」写成「全量物理闭环」**。本轮申请 §1.2 称「D-6 反支配门禁 Schema 物理锁死」、§1.3 称「提案彻底清理」，两处经三方独立机验均不成立——而其余 6 项闭环是真实且高质量的。把未尽项如实标注，比整体宣称「100%」更有利于快速通过：本轮两条阻断合计不过数行修改量。
+11. **申请的自动化声明须写明命令与口径**。本轮 §3.2 称 188 份 Markdown，实测 `git ls-tree -r a0123e8` = 184、`git ls-files` = 187、`find docs` = 187、`find -L docs` = 200，四份口径无一相符；「0 控制字符」的结论各方复现为真。此项已连续五轮出现。
+12. **轨 B 若获委员会共识授予，Phase 1 编码启动前须先闭环优先级 0 第 2 项**：用例正确写下了 D-6 五重公式，但当前实现中独裁帽与双 quorum 三道门禁并不存在，照用例验收将验不出这三道门禁。
 
 ### 代码轨（L4 / PG-3）
 
-12. **`42b5c07` 终局定级认证仍在复审中**：目前仅 GLM 1 份报告，Claude / Codex / Grok / Kimi / Qwen / ZCode 尚未出具。按 GUIDELINES §8「沉默 ≠ 同意」，未表态者不计入多数，**维持 L3 / PG-2**。
+13. **`42b5c07` 终局定级认证仍在复审中**：目前仅 GLM 1 份报告，Claude / Codex / Grok / Kimi / Qwen / ZCode 尚未出具。按 §8「沉默 ≠ 同意」，**维持 L3 / PG-2**。
 
 ### 登记与治理
 
-13. **本文件对账已于本次执行并闭环 Claude A-P1-4**（详见登记表上方说明）：补入结论类 17 份 + 申请类 2 份，计数由 107/21 更正为 **124/26**，头部 115 一并更正，登记但文件不存在 0 份。**下一轮申请复审前须再次全量对账**——按本文件第 4 行治理规则，申请方不得以 STATUS 的登记子集作为闭环核验边界。
+14. **本文件对账已于本次执行**：补入 `a0123e8` 轮 4 份结论，计数由 124/26 更正为 **128/29**，双向均为 0。**下一轮申请复审前须再次全量对账**；申请方不得以 STATUS 的登记子集作为闭环核验边界（本文件第 4 行）。

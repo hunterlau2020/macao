@@ -157,11 +157,15 @@ executor:
   cli: "claude-code"
 disposition_status: "FINAL"  # DRAFT | FINAL | PENDING_ADMIN
 generated_at: "2026-09-01T12:10:00Z"
-issues_index_sha256: "<sha256>"
+issues_index_sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 full_document:
   path: "docs/reviews/2026-09-01-review-disposition-task-1-r1.md"
   evidence_commit: "c2d3e4f"
-  sha256: "<sha256>"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+vote_result_ref:
+  path: ".macao/vote_result.json"
+  evidence_commit: "c2d3e4f"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 dispositions:
   - issue_id: "codex/SEC-01"
     reviewer_id: "codex"
@@ -211,7 +215,7 @@ deadline: "2026-09-01T12:30:00Z"
 - `timeouts.review_disposition` 默认 30 分钟，进入等待时持久化绝对 deadline；
 - Orchestrator 按统一 timeout scanner 发送 ping，并在 deadline 后发送 `HUMAN_OVERRIDE_REQUEST`；
 - 超时不会自动创建 disposition、自动忽略 issue 或进入 `MERGING`；
-- `APPROVED` 场景继续停在 `CONSENSUS_CHECK`，`REWORK_REQUIRED` 场景继续停在 `REWORK`；
+- 超时停留在 `CONSENSUS_CHECK`（HOLD 态等待管理员介入）；
 - `NEEDS_ADMIN` 处置：管理员在 override 中对单条 issue 提供明确答复（记录独立 `admin_override.json` 与 `override_id`），执行者读取 override 后提交带 `EXEMPTED_BY_ADMIN` + `override_id` 的 FINAL disposition（严禁管理员代写 disposition）。
 
 ### 4.5 状态转移表修订（E3 ～ E7）
@@ -223,7 +227,7 @@ deadline: "2026-09-01T12:30:00Z"
 | **E5** | `CONSENSUS_CHECK` → `REWORK` | 机器决策为 `REWORK_REQUIRED`（且未发生即时 E7 覆盖） |
 | **E5a** | `CONSENSUS_CHECK` → `REWORK` | 机器决策为 `APPROVED`，FINAL disposition 精确覆盖全部 issue，且至少一项 `requires_new_checkpoint=true` |
 | **E6** | `REWORK` → `READY_FOR_REVIEW` | 前一轮 FINAL disposition 已覆盖全部 issue；新 source commit（不等于上一轮）、新 `.dev.yml`、新 review request 和 round 均有效 |
-| **E7** | `HOLD`（`CONSENSUS_CHECK` 或 `REWORK`） → 管理员指定目标状态 | override 选项（`APPROVED | REWORK | RETRY_REVIEW | CANCEL | EXTEND`）、note、操作者、issue 级豁免与 `override_id` 完整并审计 |
+| **E7** | `HOLD`（`CONSENSUS_CHECK`） → 管理员指定目标状态 | override 选项（`APPROVED | REWORK | RETRY_REVIEW | CANCEL | EXTEND`）、note、操作者、issue 级豁免与 `override_id` 完整并审计 |
 
 ### 4.6 `vote_result.json` 完整示例
 
