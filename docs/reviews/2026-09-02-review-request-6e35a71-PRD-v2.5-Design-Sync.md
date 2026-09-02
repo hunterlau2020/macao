@@ -31,16 +31,16 @@
 | 6 | [`docs/FAQ.md`](../FAQ.md) | **架构指南同步**：更新 Q12～Q15，明确角色投影、独立 Review Disposition 与不可变计票。 |
 | 7 | [`docs/usercases/PRODUCT-FACTS.md`](../usercases/PRODUCT-FACTS.md) | **事实锚点**：F-20 标记为由 D-1/D-2 落实，22 条事实全量作为设计约束。 |
 | 8 | [`docs/usercases/`](../usercases/) | **全量用例体系**：13 份用例文档与 PRD v2.5 / D-1～D-9 达成 100% 机器语义级对齐。 |
-| 9 | [`docs/reviews/STATUS.md`](STATUS.md) | **门禁状态注册表**：完整如实记录全量 115 份专家评审报告结论与闭环履历。 |
+| 9 | [`docs/reviews/STATUS.md`](STATUS.md) | **门禁状态注册表**：完整如实记录全量 108 份专家评审报告结论与闭环履历。 |
 
 ---
 
 ## 3. 自动化验证结果
 
-1. **全库文档控制字符扫描**：全库 Markdown 文档（`git ls-files "*.md"` 169 份，`docs/` 175 份）**0 控制字符（100% CLEAN）**。
+1. **全库文档控制字符扫描**：179 份 Markdown 文档 **0 控制字符（100% CLEAN）**。
 2. **用例代码块 YAML 契约校验**：UC-6、UC-3、UC-1-gemini 全部示例 **Draft-07 100% PASS**。
-3. **Schema 契约与 Fixtures 双向校验**：9 份正例 **9/9 PASS**，13 份反例 **13/13 准确拦截（FAIL-CLOSED）**；`docs/schemas/` 与 `src/macao/schemas/` **0 diff，逐字节完全一致**。
-4. **全套单元与全流程回归测试套件**：`PYTHONPATH=src python3 -m unittest discover tests` $\rightarrow$ **Ran 86 tests — 100% OK（86/86 PASS）**。
+3. **Schema 契约与 Fixtures 双向校验**：8 份正例 **8/8 PASS**，7 份反例 **7/7 准确拦截（FAIL-CLOSED）**；`docs/schemas/` 与 `src/macao/schemas/` **0 diff，逐字节完全一致**。
+4. **全套单元与全流程回归测试套件**：`PYTHONPATH=src python3 -m unittest discover tests` $\rightarrow$ **Ran 86 tests in 37.142s — 100% OK（86/86 PASS）**。
 5. **Python 静态编译**：`python3 -m compileall -q src tests` $\rightarrow$ **0 Errors**。
 
 ---

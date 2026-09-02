@@ -3,11 +3,12 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-02（全量对账 `6e35a71` 7 份专家评审报告并完成全量阻断闭环，重新提交至 commit `HEAD`；报告总计数 **115**、申请 **23**）
+- **最新更新时间**：2026-09-02（全量对账 `6e35a71` 7 份专家评审报告并完成全量阻断闭环，申请文件全面按 `<commit id>` 命名规范归档；报告总计数 **115**、申请 **26**）
 - **当前并行评审轨道**：
   - **文档轨（进行中，两份申请并行复审）**：
-    1. [`2026-09-02-review-request-PRD-v2.5-Design-Sync-r2.md`](2026-09-02-review-request-PRD-v2.5-Design-Sync-r2.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **HEAD**
-    2. [`2026-09-02-review-request-UseCases-v2.5-Alignment-r2.md`](2026-09-02-review-request-UseCases-v2.5-Alignment-r2.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **HEAD**
+    1. [`2026-09-02-review-request-4027cce.md`](2026-09-02-review-request-4027cce.md) → 总入口申请（目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`4027cce`**）
+    2. [`2026-09-02-review-request-4027cce-PRD-v2.5-Design-Sync.md`](2026-09-02-review-request-4027cce-PRD-v2.5-Design-Sync.md) → PRD 设计同步专项（被审提交 **`4027cce`**）
+    3. [`2026-09-02-review-request-4027cce-UseCases-v2.5-Alignment.md`](2026-09-02-review-request-4027cce-UseCases-v2.5-Alignment.md) → 用例体系对齐专项（被审提交 **`4027cce`**）
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
   - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**）

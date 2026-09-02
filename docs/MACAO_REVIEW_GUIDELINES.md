@@ -41,12 +41,13 @@ MACAO 现阶段（docs 对齐评审）不涉及金融语义、SEC、DuckDB 等�
 本文件只保存稳定评审标准。以下内容必须另存，不得写入本文件正文：
 
 ```text
-docs/reviews/STATUS.md                              当前文档版本/门禁状态（如需要）
+docs/reviews/STATUS.md                                        当前文档版本/门禁状态（如需要）
+docs/reviews/<yyyy-MM-dd>-review-request-<mid>[-<topic>].md   评审申请文件（含 commit ID，不可变归档，防覆盖）
 docs/reviews/<yyyy-MM-dd>-review-result-<mid>-<reviewer>.md   单次评审结论
-docs/reviews/meta_<yyyy-mm>.md                       reviewer 连续漏审复盘（如需要）
+docs/reviews/meta_<yyyy-mm>.md                                reviewer 连续漏审复盘（如需要）
 ```
 
-`<mid>` 使用被评审内容对应的短 commit SHA；`<reviewer>` 使用执行评审的角色/模型标识（如 `claude`、`codex`）。
+`<mid>` 使用被评审内容对应的短 commit SHA（如 `4027cce`、`6e35a71`）；`<reviewer>` 使用执行评审的角色/模型标识（如 `claude`、`codex`、`grok`、`qwen`）。**每次评审申请必须在文件名中携带 `<mid>`**，严禁跨轮次同名覆盖。
 
 ---
 
