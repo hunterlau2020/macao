@@ -20,7 +20,8 @@
 
 ### 关卡 1：Pre-merge Evidence Push 校验（§14.5 第 1 步）
 
-Orchestrator 通过 `git ls-remote` 校验 `refs/macao/evidence/<task_id>/r<round>` 已成功推送到远端；若未推送或校验失败，**fail-closed 拦截**，不得进入后续合并步骤，从机制上杜绝「源码已合入、证据未落地」的审计断裂。
+- **远端共享模式**（`repository.remote_name` 配置非空，默认 `origin`）：Orchestrator 执行 `git ls-remote --exit-code <remote> refs/macao/evidence/<task_id>/r<round>` 校验评审证据已成功推送到远端；若未推送、远端不可达或校验非零，**100% fail-closed 拦截**并触发 E4b，严格杜绝「源码已合入、证据未落地」的审计断裂。
+- **纯本地模式**（`repository.remote_name: null` 显式声明）：跳过远端 `ls-remote`，仅强校验本地 `refs/macao/evidence/<task_id>/r<round>` 引用存在性。
 
 ### 关卡 2：检出与上游同步
 
@@ -28,7 +29,7 @@ Orchestrator 通过 `git ls-remote` 校验 `refs/macao/evidence/<task_id>/r<roun
 
 ### 关卡 3：技术合并
 
-`ff_only`（默认）合并；**Git Conflict** → 不自动解冲突（解冲突产生的改动=新变更=未评审），转 UC-7 P6 管理员裁定：人工解冲突后按新 commit 走 E4b 增量复审，或 CANCEL。
+`ff_only`（默认）合并；**Git Conflict** → 不自动解冲突（解冲突产生的改动=新变更=未评审），触发 `E4b` $\rightarrow$ `REWORK`（注明冲突现场）由执行者在分支重新 rebase/解决并提交新检查点。若连续返工超过上限则进入 `CONSENSUS_CHECK` HOLD 待管理员裁定。
 
 ### 关卡 4：CI gate
 
@@ -52,7 +53,7 @@ push 前**最终硬校验**：待推对象 == `vote_result.checkpoint_ref`（字
 |---|---|---|
 | A1 | 签字人同时是 executor 席位 | 允许（管理员身份）；审计区分 `signer` 身份来源；`require_human_signoff` 语义是"人类放行"而非"第三方放行" |
 | A2 | CI gate 可选且未配置 | 跳过关卡 4，其余不变 |
-| A3 | 远端不可达（本地/个人仓库场景） | push 关卡降级为本地 merge 完成 + 审计 `PUSH_SKIPPED_LOCAL`；共享仓库场景（分支保护）不在 MVP（PRD §14.5） |
+| A3 | 纯本地仓库模式（`remote_name: null`） | 关卡 1 校验本地 evidence ref；关卡 6 跳过远端 push，执行本地 merge 与归档封存，审计记录 `PUSH_SKIPPED_LOCAL` |
 | A4 | 已 push 后发现事故 | git revert 回滚；事件入审计（PRD §14.5 第 6 步）；不撤销 DONE |
 
 ## 4. 异常流

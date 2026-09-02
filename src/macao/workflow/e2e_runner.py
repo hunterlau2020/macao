@@ -47,7 +47,8 @@ class ControlledE2ERunner:
         gitignore.write_text(".macao/\n__pycache__/\n*.pyc\n", encoding="utf-8")
 
         # Default macao.yaml
-        cfg_content = """project:
+        cfg_content = """version: "2.5"
+project:
   name: "macao-micro-calc"
   repository:
     workspace_path: "."
@@ -63,16 +64,23 @@ team:
     - id: "codex"
       cli: "codex"
       adapter: "pty-wrapper"
+      vote_weight: 1
     - id: "opencode"
       cli: "opencode"
       adapter: "pty-wrapper"
+      vote_weight: 1
     - id: "antigravity"
       cli: "agy"
       adapter: "pty-wrapper"
+      vote_weight: 1
 
 policy:
   consensus_rule: "weighted_2/3_v1"
+  dictator_cap_enabled: true
   min_effective_votes: 2
+  minimum_winning_seats: 2
+  seat_quorum_required: 2
+  weight_quorum_required: 2
   max_rework_rounds: 3
   review_strategy: "delta_plus_focus"
 

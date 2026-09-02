@@ -5,11 +5,14 @@
   "type": "object",
   "required": [
     "version",
-    "executor",
-    "development",
+    "task_id",
     "status",
     "signal",
-    "review_round"
+    "review_round",
+    "executor",
+    "checkpoint_ref",
+    "full_document",
+    "development"
   ],
   "properties": {
     "version": { "type": "string" },

@@ -141,7 +141,7 @@ class TestConfigAndComposition(unittest.TestCase):
     def test_opencode_agy_cursor_role_and_model_specification_config(self):
         """Verify macao.yaml schema allows model specification on executor and reviewers and flexible roles."""
         from macao.adapter.cursor import CursorAgentAdapter
-        custom_yaml = """
+        custom_yaml = """version: "2.5"
 project:
   name: "macao-flexible-roles"
   repository:
@@ -162,16 +162,27 @@ team:
       cli: "opencode"
       adapter: "pty-wrapper"
       model: "Qwen3.8 max"
+      vote_weight: 1
     - id: "cursor-rev"
       agmsg_member_id: "kimi"
       cli: "agent"
       adapter: "pty-wrapper"
       model: "claude-3-7-sonnet"
+      vote_weight: 1
     - id: "claude-rev"
       agmsg_member_id: "cc-glm"
       cli: "claude-code"
       adapter: "claude-hook"
       model: "claude-3-5-sonnet"
+      vote_weight: 1
+policy:
+  consensus_rule: "weighted_2/3_v1"
+  dictator_cap_enabled: true
+  min_effective_votes: 2
+  minimum_winning_seats: 2
+  seat_quorum_required: 2
+  weight_quorum_required: 2
+  max_rework_rounds: 3
 """
         parsed = yaml.safe_load(custom_yaml)
         is_valid, error = validate_config(parsed)

@@ -146,6 +146,7 @@ class TestSchemaValidation(unittest.TestCase):
                 "evidence_commit": "a1b2c3d",
                 "sha256": "abc"
             },
+            "issues_index_sha256": "3a7b1c4e9f0d2a8b5c6e7f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c",
             "disposition_status": "FINAL",
             "dispositions": [
                 {
@@ -191,10 +192,14 @@ class TestSchemaValidation(unittest.TestCase):
             "protocol": "AEP/1.1",
             "message_id": "msg-20260901-001",
             "timestamp": "2026-09-01T00:00:00Z",
-            "type": "DISPOSITION_REQUIRED",
+            "type": "DEVELOPMENT_STARTED",
             "from": "macao",
             "to": "cc-ds4",
-            "payload": {"task": "test"}
+            "payload": {
+                "task_id": "task-123",
+                "specification_summary": "Implement feature X",
+                "acceptance_criteria": ["All unit tests pass"]
+            }
         }
         is_valid, err = validate_aep_envelope(msg)
         self.assertTrue(is_valid, f"Expected valid AEP envelope, got: {err}")

@@ -179,6 +179,7 @@ def generate_smart_config(
         r.setdefault("vote_weight", 1)
 
     config_data = {
+        "version": "2.5",
         "project": {
             "name": proj_name,
             "repository": {

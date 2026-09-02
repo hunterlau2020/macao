@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "override_id": "ovr-20260901-001",
+  "timestamp": "2026-09-01T10:15:00Z",
+  "task_id": "task-123",
+  "checkpoint_ref": "a1b2c3d",
+  "review_round": 1,
+  "admin_identity": "admin@macao.local",
+  "trigger": "consensus_deadlock",
+  "choice": "APPROVED",
+  "exempt_issue_ids": ["gemini/ISSUE-01"],
+  "note": "Exempting minor advisory docstring issue and approving checkpoint"
+}

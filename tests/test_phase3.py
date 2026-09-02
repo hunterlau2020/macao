@@ -194,6 +194,8 @@ timeouts:
             (proj / ".macao").mkdir(parents=True, exist_ok=True)
             (proj / ".macao" / ".dev.yml").write_text(yaml.safe_dump({
                 "version": "1.0", "status": "ready_for_review", "signal": "EXPLICIT",
+                "task_id": t_id, "checkpoint_ref": head,
+                "full_document": {"path": "docs/reviews/req.md", "evidence_commit": head, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
                 "review_round": 1, "executor": {"id": "dev", "cli": "opencode"},
                 "development": {"git": {"latest_commit": head}, "quality_metrics": {"tests_passed": True}}
             }), encoding="utf-8")
@@ -392,6 +394,8 @@ opinion:
             (proj / ".macao").mkdir(parents=True, exist_ok=True)
             (proj / ".macao" / ".dev.yml").write_text(yaml.safe_dump({
                 "version": "1.0", "status": "ready_for_review", "signal": "EXPLICIT",
+                "task_id": t_id, "checkpoint_ref": dev_commit,
+                "full_document": {"path": "docs/reviews/req.md", "evidence_commit": dev_commit, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
                 "review_round": 1, "executor": {"id": "dev", "cli": "opencode"},
                 "development": {"git": {"latest_commit": dev_commit}, "quality_metrics": {"tests_passed": True}}
             }), encoding="utf-8")
@@ -536,15 +540,14 @@ opinion:
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
 
             # 2. Write valid macao.yaml with 0s reviewer timeout
-            cfg_content = f"""project:
+            cfg_content = f"""version: "2.5"
+project:
   name: ops-project
   repository:
     workspace_path: .
     remote_name: origin
     default_branch: main
 team:
-
-
   executor:
     id: opencode-dev
     cli: opencode
@@ -553,16 +556,23 @@ team:
     - id: rev-1
       cli: mock-cli
       adapter: pty-wrapper
+      vote_weight: 1
     - id: rev-2
       cli: mock-cli
       adapter: pty-wrapper
+      vote_weight: 1
     - id: rev-3
       cli: mock-cli
       adapter: pty-wrapper
+      vote_weight: 1
 
 policy:
   consensus_rule: weighted_2/3_v1
+  dictator_cap_enabled: true
   min_effective_votes: 2
+  minimum_winning_seats: 2
+  seat_quorum_required: 2
+  weight_quorum_required: 2
   max_rework_rounds: 3
 merge:
   strategy: ff_only
@@ -595,6 +605,12 @@ security:
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{dev_commit}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{dev_commit}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1

@@ -7,22 +7,24 @@
 
 ---
 
-## 1. 前置条件（接管触发条件，全部枚举闭合）
+## 1. 前置条件（运行时接管触发条件，全部枚举闭合）
 
-| # | 触发场景 | 进入态 |
-|---|---|---|
-| P1 | 计票 DEADLOCK（E3 即时落盘 `decision: DEADLOCK`，进入 `CONSENSUS_CHECK` HOLD） | `CONSENSUS_CHECK` |
-| P2 | `round ≥ max_rework_rounds` 仍返工 | `CONSENSUS_CHECK` |
-| P3 | init 无法唯一识别 10 态（UC-1 h5；本用例复用同一选项集） | init 上下文 |
-| P4 | Disposition 超时未交（`timeouts.review_disposition` 到期触发 HOLD） | `CONSENSUS_CHECK` |
-| P5 | 执行者声明 `NEEDS_ADMIN` 处置 | `CONSENSUS_CHECK` |
-| P6 | Git Conflict / MERGING 内不可自动恢复失败（UC-8 E4b 边界裁定） | `MERGING` |
+| # | 触发场景 | 进入态 | 接管机制说明 |
+|---|---|---|---|
+| P1 | 计票 DEADLOCK（E3 即时落盘 `decision: DEADLOCK`，进入 `CONSENSUS_CHECK` HOLD） | `CONSENSUS_CHECK` | 机器计票无多数派，Orchestrator 保持不可变 `vote_result.json` 并发出 Type H 信封进入 HOLD |
+| P2 | 返工轮次超限（`round ≥ max_rework_rounds` 仍需返工） | `CONSENSUS_CHECK` | 达到最大返工轮次阈值，自动进入 HOLD 申请管理员裁定 |
+| P3 | Disposition 超时未交（`timeouts.review_disposition` 到期） | `CONSENSUS_CHECK` | 执行者未在规定窗口内提交处置产物，触发超时保护进入 HOLD |
+| P4 | 执行者声明 `NEEDS_ADMIN` 处置 | `CONSENSUS_CHECK` | 执行者在处置草稿中对特定争议 issue 标记 `NEEDS_ADMIN` 并请求管理员裁决 |
+
+> **边界说明**：
+> - **初始化歧义（Init Ambiguity）**：属于 `macao init` 向导交互流程（UC-1 步骤 3），通过交互式终端选择 10 态之一并记录 `ADMIN_STATE_RESOLVED`，不属于运行期 E7 接管。
+> - **合并冲突（Git Conflict）**：合并流水线关卡 3 失败直接触发 `E4b` $\rightarrow$ `REWORK`（round+1）由执行者在工作分支解决；仅当连续解决失败达到 `max_rework_rounds` 时转入 P2 触发接管。
 
 ## 2. 主成功场景
 
 ### a. 系统呈现证据（`macao override list`）
 
-`HUMAN_OVERRIDE_REQUEST`（Type H，时限默认 10m）已发；`override list` 展示：任务态/ref/round、票面（含权重）、`issues_index`、诊断报告（Layer 2/3 预警、`ui_hint`）、冲突详情（P6 时 diff 摘要）。**只呈现，不推荐**——界面不得预选或排序暗示选项。
+`HUMAN_OVERRIDE_REQUEST`（Type H，时限默认 10m）已发；`override list` 展示：任务态/ref/round、票面（含权重）、`issues_index`、诊断报告（Layer 2/3 预警、`ui_hint`）。**只呈现，不推荐**——界面不得预选或排序暗示选项。
 
 ### b. 管理员裁定
 
@@ -58,15 +60,14 @@
 |---|---|---|
 | A1 | 裁定发生在 daemon 扫描间隙 | HOLD 态幂等：重复扫描不重复发 `HUMAN_OVERRIDE_REQUEST` |
 | A2 | 多管理员并发裁定 | 先到者生效（State Store 事务串行化）；后到者收到"已裁定"回执；均入审计 |
-| A3 | UC-1 h5 init 歧义 | 同一选项集（P3）；裁定写 `ADMIN_STATE_RESOLVED`；仅显式确认才写 `tasks.state` |
-| A4 | 裁定 CANCEL 但 worktree 内有未回收会话 | E10 归档前强制 `adapter.stop` + worktree 清理；清理失败入审计 `CLEANUP_LEAKED`（不阻断终态） |
+| A3 | 裁定 CANCEL 但 worktree 内有未回收会话 | E10 归档前强制 `adapter.stop` + worktree 清理；清理失败入审计 `CLEANUP_LEAKED`（不阻断终态） |
 
 ## 4. 异常流
 
 | # | 场景 | 行为 |
 |---|---|---|
-| E1 | 非接管态调用 `override resolve` | 拒绝（闭合触发条件 P1–P6）；提示当前态与 `next_action` |
-| E2 | choice 非法 / note 超长 | 拒绝；note 截断上限（建议 4KB） |
+| E1 | 非接管态调用 `override resolve` | 拒绝（闭合触发条件 P1–P4）；提示当前态与 `next_action` |
+| E2 | choice 非法 / note 超长 | 拒绝；note 截断上限（4KB） |
 | E3 | 执行者席位调用 | 拒绝（自裁禁令）；审计 `OVERRIDE_DENIED` |
 | E4 | 裁定后落盘失败（Schema/磁盘） | 事务回滚：裁定不生效、保持 HOLD；审计 `OVERRIDE_PERSIST_FAILED`，可重试 |
 
@@ -77,7 +78,7 @@
 
 ## 6. 验收标准（可测）
 
-1. P1–P6 各触发一次 $\implies$ `override list` 证据字段齐备；五选项各自转移正确（E4/E5/E9/E10/EXTEND 映射）；
+1. P1–P4 各触发一次 $\implies$ `override list` 证据字段齐备；五选项各自转移正确（E4/E5/E9/E10/EXTEND 映射）；
 2. DEADLOCK HOLD 期间 `vote_result.json` 已经存在且 `decision=DEADLOCK`；裁定后生成独立 `admin_override.json`，`vote_result.json` 内容与哈希无任何改写；
 3. 10m 超时无裁定 $\implies$ 仍 HOLD（不静默继续，GUIDELINES §6 反例场景锁死）；
 4. 执行者调用 $\implies$ E3 拒绝；非法 choice $\implies$ E2 拒绝；并发裁定 $\implies$ A2 先到生效；
@@ -88,5 +89,11 @@
 | 位置 | 变更 |
 |---|---|
 | `src/macao/cli/main.py:override` | `list`/`resolve` 补证据视图、超时升级、A2 并发语义、`--exempt-issue-ids` |
-| `src/macao/workflow/orchestrator.py` | P1–P6 触发闭合校验、生成独立 `admin_override.json`、不可变 `vote_result.json` 保持、审计 |
+| `src/macao/workflow/orchestrator.py` | P1–P4 触发闭合校验、生成独立 `admin_override.json`、不可变 `vote_result.json` 保持、审计 |
 | `tests/` | 复用 `test_manual_override_resolution` 扩展 |
+
+## 8. 设计自审（Design Self-Review）
+
+- **单写者垄断**：管理员独占 `admin_override.json`，严禁代写 `executor.disposition.yml`；
+- **两步转移边自洽**：`APPROVED` 裁定仅解除 HOLD 并置执行者视角为 `SHOULD_DISPOSE`，必须由执行者出具 FINAL disposition 并经校验通过后方由编排器推进 E4 $\rightarrow$ `MERGING`；
+- **反例防御**：非法 `choice`、非管理员执行、执行中落盘失败均触发 fail-closed 拦截，保持 HOLD。

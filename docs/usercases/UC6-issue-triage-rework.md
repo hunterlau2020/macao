@@ -69,17 +69,41 @@ dispositions:
 ### d. 返工上限与人工接管
 `round ≥ max_rework_rounds` 仍 `REWORK_REQUIRED` $\implies$ 触发 E7 交管理员人工裁定（支持 issue 级豁免 `exempt_issue_ids`）。
 
-## 3. 备选流与异常流
+## 4. 异常流
 
-- **A1 执行者拒绝意见**：合法（`REJECTED` + `requires_new_checkpoint: false` + `rationale`）；若为 BLOCKING 则下一轮 Reviewer 仍可能投反对票。
-- **A2 管理员豁免接管流**：管理员通过 `macao override resolve --choice APPROVED --exempt-issue-ids [...]` 生成独立 `.macao/admin_override.json`（含 `override_id`）；执行者读取该裁定件，在 `.macao/.dispositions/r<round>/executor.disposition.yml` 中将对应 issue 的处置类型写为 `EXEMPTED_BY_ADMIN` 并填入 `override_id`（`requires_new_checkpoint: false`），将 `disposition_status` 标记为 `FINAL`；编排器校验通过后触发 E4 放行至 `MERGING`。
 - **E1 清单遗漏或包含未知 id**：拒收（fail-closed），维持当前状态并告警。
 - **E2 缺失 requires_new_checkpoint**：Schema 校验失败拒收。
+- **E3 FINAL 遗留 NEEDS_ADMIN**：Schema 校验失败拒收，要求进入管理员裁定或得出确定处置。
+- **E4 非法 requires_new_checkpoint 组合**：`DEFERRED`、`REJECTED` 或 `EXEMPTED_BY_ADMIN` 配 `true` 被 Schema 拒绝。
 
-## 4. 实现落点
+## 5. 后置条件
+
+- **成功**：独立 `.macao/.dispositions/r<round>/executor.disposition.yml` 落地并校验通过（100% 覆盖率，FINAL 状态），依据 `requires_new_checkpoint` 布尔值准确分流至 E4 `MERGING` 或 E5a `REWORK`；
+- **失败**：维持原状态（`CONSENSUS_CHECK` HOLD 或 `REWORK`），不发生非法状态转移。
+
+## 6. 验收标准（可测）
+
+1. **覆盖率 100% 强检验**：缺任一 `issue_id` 或包含未登记 `issue_id` $\implies$ 100% fail-closed 拦截；
+2. **三态枚举与布尔守卫互锁**：
+   - `DEFERRED` + `requires_new_checkpoint: true` $\implies$ Schema 校验拒绝；
+   - `REJECTED` + `requires_new_checkpoint: true` $\implies$ Schema 校验拒绝；
+   - `EXEMPTED_BY_ADMIN` 缺 `override_id` 或 `requires_new_checkpoint: true` $\implies$ Schema 校验拒绝；
+   - `disposition_status: "FINAL"` 包含 `NEEDS_ADMIN` $\implies$ Schema 校验拒绝；
+3. **E4 / E5a 分流确定性**：
+   - `decision == APPROVED` 且所有 issue `requires_new_checkpoint == false` $\implies$ 唯一转移至 E4 `MERGING`；
+   - `decision == APPROVED` 且任一 issue `requires_new_checkpoint == true` $\implies$ 唯一转移至 E5a `REWORK`；
+4. **返工拓扑守卫**：E6 转移必须校验当前 commit 为前序 `checkpoint_ref` 之严格拓扑子孙。
+
+## 7. 实现落点
 
 | 位置 | 变更 |
 |---|---|
 | `src/macao/workflow/orchestrator.py` | Disposition 100% 覆盖率校验、E4/E5/E5a/E6 守卫判定 |
-| `src/macao/core/schema.py` | `review_disposition` Schema v1.0 |
+| `src/macao/core/schema.py` | `review_disposition` Schema v1.0 验证器与条件约束 |
 | `tests/` | 覆盖 E5a、E6、遗漏/未知 id 校验、issue 豁免测试 |
+
+## 8. 设计自审（Design Self-Review）
+
+- **单写者垄断**：执行者独占 `.macao/.dispositions/r<round>/executor.disposition.yml`，严禁编排器或管理员代写；
+- **零自然语言猜测**：Orchestrator 仅依循机器字段 `requires_new_checkpoint` 布尔值与 `decision` 做确定性 FSM 转移；
+- **不可变审计链**：`issues_index_sha256` 保证对本轮不可变 `vote_result.json` 的严格反向锚定。

@@ -1,0 +1,9 @@
+{
+  "protocol": "AEP/1.1",
+  "message_id": "msg-20260901-001",
+  "timestamp": "2026-09-01T10:00:00Z",
+  "type": "DEVELOPMENT_STARTED",
+  "from": "macao",
+  "to": "dev",
+  "payload": {}
+}

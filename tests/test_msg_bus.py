@@ -15,7 +15,11 @@ class TestMessageBus(unittest.TestCase):
             msg_type=AEPType.DEVELOPMENT_STARTED,
             from_agent="macao",
             to_agent="cc-ds4",
-            payload={"task_description": "Build FSM"}
+            payload={
+                "task_id": "task-1",
+                "specification_summary": "Build FSM",
+                "acceptance_criteria": ["Pass all tests"]
+            }
         )
         self.assertEqual(env["protocol"], "AEP/1.0")
         self.assertEqual(env["type"], "DEVELOPMENT_STARTED")
@@ -29,10 +33,14 @@ class TestMessageBus(unittest.TestCase):
 
             # Publish to 2 reviewers
             published = bus.publish(
-                msg_type=AEPType.REVIEW_REQUEST,
+                msg_type=AEPType.DEVELOPMENT_STARTED,
                 from_agent="macao",
                 to_agent=["cc-glm", "kimi"],
-                payload={"checkpoint_ref": "c1"}
+                payload={
+                    "task_id": "task-1",
+                    "specification_summary": "Build FSM",
+                    "acceptance_criteria": ["Pass all tests"]
+                }
             )
             msg_id = published["message_id"]
 

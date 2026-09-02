@@ -1,0 +1,21 @@
+version: "2.5"
+project:
+  name: "stockdb"
+  repository:
+    workspace_path: "."
+    remote_name: "origin"
+    default_branch: "main"
+
+team:
+  name: "stockdb"
+  executor:
+    id: "stockdb-dev"
+    cli: "opencode"
+    adapter: "pty-wrapper"
+  reviewers:
+    - id: "stockdb-arch"
+      cli: "claude-code"
+      adapter: "pty-wrapper"
+    - id: "stockdb-sec"
+      cli: "codex"
+      adapter: "pty-wrapper"

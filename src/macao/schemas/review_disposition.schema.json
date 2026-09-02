@@ -11,7 +11,8 @@
     "executor",
     "disposition_status",
     "dispositions",
-    "full_document"
+    "full_document",
+    "issues_index_sha256"
   ],
   "properties": {
     "version": { "type": "string" },
@@ -38,7 +39,7 @@
         "sha256": { "type": "string" }
       }
     },
-    "issues_index_sha256": { "type": "string" },
+    "issues_index_sha256": { "type": "string", "minLength": 1 },
     "disposition_status": { "enum": ["DRAFT", "FINAL", "PENDING_ADMIN"] },
     "dispositions": {
       "type": "array",
@@ -74,6 +75,28 @@
                 "requires_new_checkpoint": { "const": false }
               },
               "required": ["override_id"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "disposition_type": { "const": "DEFERRED" } },
+              "required": ["disposition_type"]
+            },
+            "then": {
+              "properties": {
+                "requires_new_checkpoint": { "const": false }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "disposition_type": { "const": "REJECTED" } },
+              "required": ["disposition_type"]
+            },
+            "then": {
+              "properties": {
+                "requires_new_checkpoint": { "const": false }
+              }
             }
           }
         ]

@@ -3,8 +3,9 @@
   "$id": "https://macao.dev/schemas/v2.5/macao_config.schema.json",
   "title": "MACAO macao.yaml Configuration",
   "type": "object",
-  "required": ["project", "team"],
+  "required": ["version", "project", "team", "policy"],
   "properties": {
+    "version": { "type": "string" },
     "project": {
       "type": "object",
       "required": ["name", "repository"],
@@ -43,7 +44,7 @@
           "minItems": 2,
           "items": {
             "type": "object",
-            "required": ["id", "cli", "adapter"],
+            "required": ["id", "cli", "adapter", "vote_weight"],
             "properties": {
               "id": { "type": "string" },
               "cli": { "type": "string" },
@@ -60,7 +61,12 @@
     "policy": {
       "type": "object",
       "required": [
-        "consensus_rule"
+        "consensus_rule",
+        "min_effective_votes",
+        "dictator_cap_enabled",
+        "minimum_winning_seats",
+        "seat_quorum_required",
+        "weight_quorum_required"
       ],
       "properties": {
         "consensus_rule": { "enum": ["weighted_2/3_v1"] },

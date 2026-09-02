@@ -13,22 +13,22 @@
 ## 主旅程（对 PRD §14.1）
 
 ```text
-UC-1 init ──► UC-2 task create ──► UC-3 开发/检查点 (E1/E6)
-                                      │
-                                      ▼
-                               UC-4 评审派发/审查 (E2)
-                                      │
-                                      ▼
-                               UC-5 共识计票 (E3)
-                          ┌────────────┼────────────┐
-                          ▼            ▼            ▼
-                   UC-6 意见处置   UC-7 人工接管   UC-8 合并签字
-                     (E5/E5a)        (E7/E9)         (E4/E4a)
-                          │                         │
-                          └──────────► UC-3 ◄───────┘
-                                      │
-                                      ▼
-                                   归档 / 下一单
+UC-1 init ──► UC-2 task create (E1) ──► UC-3 开发/检查点
+                                          │
+                                          ▼
+                                   UC-4 评审派发/审查 (E2)
+                                          │
+                                          ▼
+                                   UC-5 共识计票 (E3)
+                              ┌────────────┼────────────┐
+                              ▼            ▼            ▼
+                       UC-6 意见处置   UC-7 人工接管   UC-8 合并签字
+                         (E5/E5a)        (E7/E9)         (E4/E4a)
+                              │                         │
+                              └──────────► UC-3 (E6) ◄──┘
+                                          │
+                                          ▼
+                                       归档 / 下一单
 ```
 
 守护与接入不在主链上，但与主旅程并行：`UC-9` 超时守护、`UC-10` doctor/既有项目诊断。
@@ -41,7 +41,7 @@ UC-1 init ──► UC-2 task create ──► UC-3 开发/检查点 (E1/E6)
 |---|---|---|---|---|---|
 | **UC-1** | 初始化项目配置 | 管理员 | `macao init --agteam`；探测 FSM 投影；歧义问管理员 | [UC1-init-glm.md](UC1-init-glm.md)（主稿）；[UC1-init-gemini.md](UC1-init-gemini.md)（对照稿） | 设计稿 (v2.5) |
 | **UC-2** | 任务受理 | 管理员或执行者 | `IDLE` → `CODING`（E1）；`macao task create`；下发 Type A 信封 | [UC2-task-create.md](UC2-task-create.md) | 设计稿 (v2.5) |
-| **UC-3** | 开发与检查点 | 执行者 | `CODING` / `REWORK` → `READY_FOR_REVIEW`（E1/E6）；写 `docs/reviews/*-review-request-*.md` + `.dev.yml` 摘要 | [UC3-dev-checkpoint.md](UC3-dev-checkpoint.md) | 设计稿 (v2.5) |
+| **UC-3** | 开发与检查点 | 执行者 | `CODING` / `REWORK` → `READY_FOR_REVIEW`（首轮产物触发 / 返工轮 E6）；写 `docs/reviews/*-review-request-*.md` + `.dev.yml` 摘要 | [UC3-dev-checkpoint.md](UC3-dev-checkpoint.md) | 设计稿 (v2.5) |
 | **UC-4** | 评审派发与审查 | 编排器（邮差）+ 各评审专家 | `READY_FOR_REVIEW` → `WAITING_REVIEW`（E2）；下发 Type B；专家写全文 + `.review.yml` | [UC4-review-dispatch.md](UC4-review-dispatch.md) | 设计稿 (v2.5) |
 | **UC-5** | 共识计票 | 编排器（规则机） | `WAITING_REVIEW` → `CONSENSUS_CHECK`（E3）；纯整数加权五重门禁；写不可变 `vote_result.json` | [UC5-consensus-tally.md](UC5-consensus-tally.md) | 设计稿 (v2.5) |
 | **UC-6** | 意见处置与返工 | 执行者 | `CONSENSUS_CHECK` / `REWORK`；写独立 `.macao/.dispositions/r<round>/executor.disposition.yml` 意见处置；按 `requires_new_checkpoint` 分流 E4 / E5a | [UC6-issue-triage-rework.md](UC6-issue-triage-rework.md) | 设计稿 (v2.5) |
@@ -61,7 +61,7 @@ UC-1 init ──► UC-2 task create ──► UC-3 开发/检查点 (E1/E6)
 编排器不规划、不拆 WBS。人（或执行者 CLI）提交标题、可测验收判据、分支；缺字段原子拒绝。编排器建 `tasks` 行并投递 `DEVELOPMENT_STARTED`（Type A）信封。
 
 ### UC-3 开发与检查点
-执行者独占业务 commit 与评审申请**全文**。`.macao/.dev.yml` 仅摘要 + 指针 + sha256 + `signal: EXPLICIT`。返工轮严格要求拓扑前进的新 commit（且未被消费）。Layer 1 产物型转移触发 `READY_FOR_REVIEW`（E1/E6）。
+执行者独占业务 commit 与评审申请**全文**。`.macao/.dev.yml` 仅摘要 + 指针 + sha256 + `signal: EXPLICIT`。返工轮严格要求拓扑前进的新 commit（必须为上轮 checkpoint 之严格拓扑子孙且未被消费）。Layer 1 产物型转移触发 `READY_FOR_REVIEW`（首轮产物触发 / 返工轮 E6）。
 
 ### UC-4 评审派发与审查
 编排器是邮差：E2 把执行者已有 manifest 原样放入 `REVIEW_REQUEST`（Type B，零 base64，10 个必需与语义块）并 agmsg ping。专家在独立 worktree（`.macao/worktrees/<agent_id>/<task_id>/r<round>`）取 diff，全文进 `docs/reviews/*-review-result-<mid>-<reviewer>.md`，`.review.yml` 含总票 + 问题索引。

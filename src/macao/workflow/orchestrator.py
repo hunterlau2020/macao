@@ -184,6 +184,7 @@ class Orchestrator:
             })
 
         # Broadcast DEVELOPMENT_STARTED AEP
+        crit_list = acceptance_criteria if isinstance(acceptance_criteria, list) and len(acceptance_criteria) > 0 else ["All unit tests pass", "Zero regression"]
         self.msg_bus.publish(
             msg_type=AEPType.DEVELOPMENT_STARTED,
             from_agent="macao",
@@ -191,6 +192,8 @@ class Orchestrator:
             payload={
                 "task_id": t_id,
                 "title": title,
+                "specification_summary": task_description or title,
+                "acceptance_criteria": crit_list,
                 "task_description": task_description,
                 "source_branch": src_branch,
                 "target_branch": target_branch
@@ -635,7 +638,7 @@ class Orchestrator:
                             "task_id": task_id,
                             "checkpoint_ref": ref,
                             "review_round": rnd,
-                            "reason": reason_code,
+                            "trigger": reason_code,
                             "summary": f"{reason_code}: approve={breakdown.get('approve')}, reject={breakdown.get('reject')}, abstain={breakdown.get('abstain')}",
                             "vote_breakdown": breakdown
                         }
@@ -661,7 +664,7 @@ class Orchestrator:
                             "task_id": task_id,
                             "checkpoint_ref": ref,
                             "review_round": rnd,
-                            "reason": "MAX_REWORK_ROUNDS_REACHED",
+                            "trigger": "MAX_REWORK_ROUNDS_REACHED",
                             "summary": f"Max rework rounds reached ({rnd}): reject={breakdown.get('reject')}",
                             "vote_breakdown": breakdown
                         }

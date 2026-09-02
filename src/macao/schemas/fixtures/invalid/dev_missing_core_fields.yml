@@ -1,0 +1,12 @@
+version: "1.0"
+timestamp: "2026-09-01T10:30:45Z"
+task_id: "task-123"
+review_round: 1
+executor:
+  id: "cc-ds4"
+  role: "executor"
+  cli: "claude-code"
+development:
+  description: "Refactored database connection pooling with timeout config"
+status: "ready_for_review"
+signal: "EXPLICIT"

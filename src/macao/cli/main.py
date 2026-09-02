@@ -24,6 +24,7 @@ from macao.cli.ui import console, print_banner, render_preflight_report, render_
 
 
 DEFAULT_CONFIG_TEMPLATE = """# MACAO macao.yaml Orchestration Configuration (PRD §13)
+version: "2.5"
 project:
   name: "macao-demo"
   repository:
@@ -40,16 +41,23 @@ team:
     - id: "codex"
       cli: "codex"
       adapter: "pty-wrapper"
+      vote_weight: 1
     - id: "opencode"
       cli: "opencode"
       adapter: "pty-wrapper"
+      vote_weight: 1
     - id: "antigravity"
       cli: "agy"
       adapter: "pty-wrapper"
+      vote_weight: 1
 
 policy:
   consensus_rule: "weighted_2/3_v1"
+  dictator_cap_enabled: true
   min_effective_votes: 2
+  minimum_winning_seats: 2
+  seat_quorum_required: 2
+  weight_quorum_required: 2
   max_rework_rounds: 3
   review_strategy: "delta_plus_focus"
 

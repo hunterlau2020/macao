@@ -35,6 +35,7 @@ class SchemaValidator:
 
     _instance: Optional["SchemaValidator"] = None
     _schemas: Dict[str, Dict[str, Any]] = {}
+    _schema_store: Dict[str, Dict[str, Any]] = {}
 
     def __new__(cls) -> "SchemaValidator":
         if cls._instance is None:
@@ -54,6 +55,10 @@ class SchemaValidator:
                     schema_data = json.load(f)
                     jsonschema.Draft7Validator.check_schema(schema_data)
                     self._schemas[name] = schema_data
+                    if "$id" in schema_data:
+                        self._schema_store[schema_data["$id"]] = schema_data
+                    self._schema_store[path.name] = schema_data
+                    self._schema_store[f"https://macao.dev/schemas/v2.5/{path.name}"] = schema_data
             except Exception as e:
                 # Keep loading others
                 pass
@@ -68,7 +73,8 @@ class SchemaValidator:
             return False, f"Schema '{schema_name}' not found in registry"
 
         try:
-            validator = jsonschema.Draft7Validator(schema)
+            resolver = jsonschema.RefResolver.from_schema(schema, store=self._schema_store)
+            validator = jsonschema.Draft7Validator(schema, resolver=resolver)
             errors = sorted(validator.iter_errors(instance), key=lambda e: e.path)
             if errors:
                 first_err = errors[0]

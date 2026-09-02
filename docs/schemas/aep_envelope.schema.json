@@ -29,5 +29,107 @@
     },
     "payload": { "type": "object" }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "DEVELOPMENT_STARTED" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["task_id", "specification_summary", "acceptance_criteria"],
+            "properties": {
+              "task_id": { "type": "string", "minLength": 1 },
+              "specification_summary": { "type": "string", "maxLength": 2048, "minLength": 1 },
+              "acceptance_criteria": {
+                "type": "array",
+                "items": { "type": "string", "maxLength": 2048 },
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "REVIEW_REQUEST" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["checkpoint_ref", "review_round", "review_context"],
+            "properties": {
+              "checkpoint_ref": { "type": "string", "minLength": 1 },
+              "review_round": { "type": "integer", "minimum": 1 },
+              "review_context": { "$ref": "review_context.schema.json" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "DISPOSITION_REQUIRED" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["task_id", "checkpoint_ref", "review_round", "vote_result_ref", "timeout_deadline"],
+            "properties": {
+              "task_id": { "type": "string", "minLength": 1 },
+              "checkpoint_ref": { "type": "string", "minLength": 1 },
+              "review_round": { "type": "integer", "minimum": 1 },
+              "vote_result_ref": {
+                "type": "object",
+                "required": ["path", "evidence_commit", "sha256"],
+                "properties": {
+                  "path": { "type": "string" },
+                  "evidence_commit": { "type": "string" },
+                  "sha256": { "type": "string" }
+                }
+              },
+              "timeout_deadline": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "HUMAN_OVERRIDE_REQUEST" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["trigger"],
+            "properties": {
+              "task_id": { "type": "string", "minLength": 1 },
+              "checkpoint_ref": { "type": "string", "minLength": 1 },
+              "review_round": { "type": "integer", "minimum": 1 },
+              "trigger": { "type": "string", "minLength": 1 },
+              "context": { "type": "string", "maxLength": 2048 },
+              "summary": { "type": "string", "maxLength": 2048 },
+              "options": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "exempt_issue_ids_available": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "deadline": { "type": "string" },
+              "vote_result_ref": {
+                "type": "object",
+                "required": ["path", "evidence_commit", "sha256"],
+                "properties": {
+                  "path": { "type": "string" },
+                  "evidence_commit": { "type": "string" },
+                  "sha256": { "type": "string" }
+                }
+              },
+              "timeout_deadline": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

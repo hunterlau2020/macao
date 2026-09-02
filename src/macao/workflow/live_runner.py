@@ -105,6 +105,13 @@ class LiveWorkflowRunner:
         # Create valid .dev.yml
         dev_manifest = {
             "version": "1.0",
+            "task_id": task_id,
+            "checkpoint_ref": dev_commit,
+            "full_document": {
+                "path": "docs/reviews/req.md",
+                "evidence_commit": dev_commit,
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+            },
             "status": "ready_for_review",
             "signal": "EXPLICIT",
             "review_round": 1,

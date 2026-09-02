@@ -609,8 +609,8 @@ messages
 
 # 7. Agent Communication Protocol
 
-> **[历史内容 · v2.0 已更名]** `TASK_ASSIGN` / `REVIEW_RESULT` 等消息名已废弃，
-> 统一为 7 类 AEP 消息（`DEVELOPMENT_STARTED` / `REVIEW_RESPONSE` 等），以 `MACAO_PRD_v2.md` §2.4 为准。
+> **[历史内容 · v2.5 已更名]** `TASK_ASSIGN` / `REVIEW_RESULT` 等消息名已废弃，
+> 统一为 8 类 AEP/1.1 消息（Type A～Type H，含 Type E `DISPOSITION_REQUIRED`），以 `MACAO_PRD_v2.md` §2.4 为准。
 
 ## 设计目标
 

@@ -65,19 +65,19 @@
 为确保全量用例文档无格式瑕疵、无非法控制字符且与机器代码契约 100% 互锁，已执行全套自动化验证：
 
 1. **全用例文档控制字符字节扫描**：
-   - 扫描范围：`docs/usercases/*.md`（全部 13 份文档）
+   - 扫描范围：`docs/usercases/*.md`（全部 13 份文档，跟随软链 `docs/usecases/`）
    - 结果：**全部 13 份文档 0 控制字符（100% CLEAN）**。
 2. **用例内嵌 YAML/JSON 示例契约校验**：
    - `UC6-issue-triage-rework.md` 处置示例 $\rightarrow$ `review_disposition.schema.json`：**PASS**
    - `UC3-dev-checkpoint.md` `.dev.yml` 示例 $\rightarrow$ `dev_manifest.schema.json`：**PASS**
    - `UC1-init-gemini.md` `macao.yaml` 规格示例 $\rightarrow$ `macao_config.schema.json`：**PASS**
 3. **Draft-07 Schema 与 Fixture 双向校验**：
-   - `docs/schemas/fixtures/valid/` 8 份正例 fixture：**8/8 PASS**
-   - `docs/schemas/fixtures/invalid/` 7 份反例 fixture（含 `admin_override_invalid_choice.json`、`disposition_final_with_needs_admin.yml`、`vote_result_cancelled_decision.json` 等）：**100% 准确拦截（FAIL-CLOSED）**
+   - `docs/schemas/fixtures/valid/` 9 份正例 fixture（覆盖全部 8 类 Schema 与配置文件）：**9/9 PASS**
+   - `docs/schemas/fixtures/invalid/` 13 份反例 fixture（覆盖 AEP 空 payload、dev 缺核心引用、disposition 非法 true/NEEDS_ADMIN、config 缺 policy、override 非法 choice 等）：**13/13 100% 准确拦截（FAIL-CLOSED）**
    - `docs/schemas/` 与 `src/macao/schemas/` 8 份同名契约：**0 diff，逐字节完全一致**。
 4. **全流程与回归测试套件**：
    - 测试执行：`PYTHONPATH=src python3 -m unittest discover tests`
-   - 结果：**Ran 86 tests in 37.142s — 100% OK（86/86 PASS，0 Failures，0 Errors）**。
+   - 结果：**Ran 86 tests — 100% OK（86/86 PASS，0 Failures，0 Errors）**。
 5. **Python 代码静态编译**：
    - `python3 -m compileall -q src tests`：**0 Errors**。
 

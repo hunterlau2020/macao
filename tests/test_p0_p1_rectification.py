@@ -87,6 +87,12 @@ class TestP0P1Rectification(unittest.TestCase):
             # Simulate dev manifest & dispatch
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -178,6 +184,12 @@ development:
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -269,6 +281,12 @@ development:
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -628,7 +646,8 @@ development:
         tmpdir = tempfile.mkdtemp()
         try:
             cfg_file = Path(tmpdir) / "macao.yaml"
-            cfg_content = """project:
+            cfg_content = """version: "2.5"
+project:
   name: "test-signoff"
   repository:
     workspace_path: "."
@@ -644,13 +663,19 @@ team:
     - id: "codex"
       cli: "codex"
       adapter: "pty-wrapper"
+      vote_weight: 1
     - id: "opencode"
       cli: "opencode"
       adapter: "pty-wrapper"
+      vote_weight: 1
 
 policy:
   consensus_rule: "weighted_2/3_v1"
+  dictator_cap_enabled: true
   min_effective_votes: 2
+  minimum_winning_seats: 2
+  seat_quorum_required: 2
+  weight_quorum_required: 2
   max_rework_rounds: 5
   review_strategy: "delta_plus_focus"
 
@@ -999,6 +1024,12 @@ merge:
             # Dispatch generation 1
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1102,6 +1133,12 @@ development:
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1160,6 +1197,12 @@ development:
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1264,6 +1307,12 @@ development:
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1310,6 +1359,12 @@ development:
 
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1472,6 +1527,12 @@ development:
 
             # Case 8: Valid manifest with tests_exempt: true -> MUST PASS
             dev_path.write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1494,6 +1555,12 @@ development:
 
             # Case 9: Fully valid manifest with tests_passed: true -> MUST PASS
             dev_path.write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1539,6 +1606,12 @@ development:
 
             # Round 1: produce dev.yml and dispatch reviews
             dev_path.write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head_r1}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head_r1}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1586,6 +1659,12 @@ development:
             # Case A: Executor submits Round 2 dev.yml with IDENTICAL commit (no code change)
             # MUST FAIL (return None, state stays in REWORK)
             dev_path.write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head_r1}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head_r1}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 2
@@ -1605,6 +1684,12 @@ development:
             # Case B: Executor submits an ancestor commit (rollback attempt, Grok P1-1 / Codex P1-1)
             # MUST FAIL (return None, state stays in REWORK)
             dev_path.write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head_r0}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head_r0}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 2
@@ -1627,6 +1712,12 @@ development:
             head_orphan = subprocess.run(["git", "commit-tree", tree_sha, "-m", "orphan commit"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
             dev_path.write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head_orphan}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head_orphan}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 2
@@ -1651,6 +1742,12 @@ development:
             self.assertNotEqual(head_r1, head_r2)
 
             dev_path.write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head_r2}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head_r2}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 2

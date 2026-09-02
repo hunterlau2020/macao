@@ -3,37 +3,44 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-02（全量对账 `5583bdd` Grok 独立评审报告并完成全部阻断闭环，正式切出 Round 2 评审申请文件；报告总计数 **108**、申请 **23**）
+- **最新更新时间**：2026-09-02（全量对账 `6e35a71` 7 份专家评审报告并完成全量阻断闭环，重新提交至 commit `HEAD`；报告总计数 **115**、申请 **23**）
 - **当前并行评审轨道**：
   - **文档轨（进行中，两份申请并行复审）**：
-    1. [`2026-09-02-review-request-PRD-v2.5-Design-Sync-r2.md`](2026-09-02-review-request-PRD-v2.5-Design-Sync-r2.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`6e35a71`**
-    2. [`2026-09-02-review-request-UseCases-v2.5-Alignment-r2.md`](2026-09-02-review-request-UseCases-v2.5-Alignment-r2.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`6e35a71`**
+    1. [`2026-09-02-review-request-PRD-v2.5-Design-Sync-r2.md`](2026-09-02-review-request-PRD-v2.5-Design-Sync-r2.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **HEAD**
+    2. [`2026-09-02-review-request-UseCases-v2.5-Alignment-r2.md`](2026-09-02-review-request-UseCases-v2.5-Alignment-r2.md) → 目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **HEAD**
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**，受审基线 `6e35a71`）
+  - **文档轨**：PRD v2.5 方案与用例体系终局复审中（目标 **L1 DOC-ALIGNED / PG-0**）
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中
 
 
-### 文档轨：全量用例体系（UseCases）v2.5 对齐复核轮（`5583bdd`）
+### 文档轨：PRD v2.5 设计同步与用例体系 Round 2 评审轮（`6e35a71`）
 
-- **本轮票型（1 份独立出具，`NO_APPROVE`）**：
-  - **Grok**：`NO_APPROVE`，**P1 × 2、无 P0**。独立确认上轮 2 项阻断（处置路径收敛至 `.macao/.dispositions/r<round>/executor.disposition.yml`、三份抽取 YAML 校验 PASS）已真正闭环；确认 Type 字母、`items[]`、UC-8 关卡 1 `ls-remote` fail-closed 均已落实；确认机验全项通过（13 份用例控制字符 0、valid 8/8、invalid 7/7、86/86 PASS）。阻断项：**P1-1** E7 `APPROVED` 有 issue 时时点与投影边分叉（UC-7 转移列直接写 E4 而语义列等 FINAL、PRD Layer 1c 对 DEADLOCK 未读 override/FINAL、提案 §4.2 仍残留「管理员替代签署 FINAL」）；**P1-2** 申请 §3 D-7 仍为 FSM（自称权威源的提案 L40 D-7 为 AEP/1.1，D-8 为 Evidence Ref，D-9 为 init/doctor/reconcile/adopt）。另记 P2-1～P2-8（UC-8 关卡 6 提升表述、README 产物表重复行、UC-1-glm 拼接残表与 8 规则、UC-3 branch 字段名等）。
-- **全量阻断项与建议项闭环实装**：
-  1. **P1-1 E7 豁免流时点、投影与唯一边彻底闭环**：
-     - UC-7 §2.c 表转移列与语义列严格同步为「落盘 `admin_override.json`（解 DEADLOCK HOLD，投影 `SHOULD_DISPOSE`）$\rightarrow$ 经执行者 FINAL disposition 校验通过后触发 E4 $\rightarrow$ `MERGING`」，严禁无 FINAL 直跳 `MERGING`，严禁管理员代写 disposition；
-     - PRD §3.2 Layer 1c 伪代码正式支持 DEADLOCK 下读取 `admin_override.json`（`choice: APPROVED`）与 `executor.disposition.yml`（FINAL）并在校验通过后触发 E4/E5a；
-     - PRD §3.4 场景三拆解为 6a（管理员出具 override 解除 HOLD）+ 6a-1（执行者提交 FINAL disposition 触发 E4）；
-     - 提案 §4.2 彻底删除「管理员替代签署 FINAL」表述；
-     - UC-1-glm `h1`/`h2` 调度与投影表显式增补 `CONSENSUS_CHECK`（已出具 admin_override 且待 FINAL）$\rightarrow$ `SHOULD_DISPOSE`。
-  2. **P1-2 申请 §3 对照表与权威源 100% 逐字对齐**：
-     - 申请 §3 D-1～D-9 编号与定义严格对齐 `PRD_CHANGE_PROPOSAL_v2.5.md` L34–42（D-7 为 AEP/1.1，D-8 为 Evidence Ref，D-9 为 init/doctor/reconcile/adopt 职责边界），删去「Layer 1a 触发 E3」误称。
-  3. **P2/P3 细节项全面清理**：
-     - UC-8 关卡 6 澄清 Post-merge 证据封存（PRD §14.5 第 5 步）；
-     - README 产物表消除 3 行重复项；
-     - UC-1-glm 移除 L61-62 拼接残表与第二个 Header，统一 gitignore 9 规则与五重纯整数门禁公式；
-     - UC-1-gemini 步骤 4 与 TUI 终端图示升级为 Schema v2.5；
-     - UC-3 示例更新为 `branch: feature/x`，清理 `adoption.yml` 残留。
-- **本轮机验结果**：`docs/usercases/*.md` **13 份、控制字符 0**；全部 YAML/JSON 示例 **Draft-07 校验 100% PASS**；`fixtures/valid` **8/8 PASS**、`fixtures/invalid` **7/7 拦截**；`docs/schemas/` ↔ `src/macao/schemas/` **8 份逐字节一致**；`PYTHONPATH=src python3 -m unittest discover tests` **86/86 PASS**；`compileall` rc=0。
+- **本轮票型（7 份独立出具：2 专家 APPROVE，2 专家 NO_APPROVE / REJECT）**：
+  - **Grok**：`APPROVE`（DesignSync 与 UseCases 双轨均授予 **L1 DOC-ALIGNED / PG-0**，确认 P1-1 E7 豁免流唯一边、P1-2 D-1～D-9 逐字对齐、P2/P3 清理全部闭环）；
+  - **Qwen**：`APPROVE`（DesignSync 与 UseCases 双轨均授予 **L1 DOC-ALIGNED / PG-0**，独立机验 0 控制字符、Schema 双副本 0 diff、测试 86/86 PASS 全部属实）；
+  - **Claude**：`NO_APPROVE`（DesignSync P1×5 / UseCases P1×4：P1-1 `macao.yaml` 策略面 required 与独裁帽反例、P1-2 PRD 统一表 E4 关卡顺序与 §14.5 漂移、P1-3 返工检查点拓扑子孙守卫一致性、P1-4 STATUS 计数审计、P1-5 `review_disposition` 条件枚举联动；UC-7 接管触发与 PRD 可达边、UC-6/7 缺失标准章节、UC-8 远端不可达降级冲突）；
+  - **Codex**：`REJECT`（P1×8：AEP payload 契约与 2048 字节预算、dev_manifest 核心引用必填、macao_config 封闭与必填、review_disposition 条件联动与 `issues_index_sha256`、E7 唯一出口与单写者、UC-7 init 与 MERGING 混塞、UC-8 远端模式与本地模式、SRSv1 7 类更名提示）。
+- **全量阻断项闭环实装**：
+  1. **Schema 机器契约全面加固（Fail-Closed）**：
+     - `dev_manifest.schema.json`：根级 `required` 补齐 `task_id`、`checkpoint_ref`、`full_document`；
+     - `macao_config.schema.json`：根级强制 `required: ["version", "project", "team", "policy"]`，reviewer 强制 `required: ["id", "cli", "adapter", "vote_weight"]`，policy 强制全部 6 字段必填且封闭为 `weighted_2/3_v1`；
+     - `review_disposition.schema.json`：根级增加 `issues_index_sha256` 必填约束；增加 `allOf` 联动（`DEFERRED`、`REJECTED`、`EXEMPTED_BY_ADMIN` 强制 `requires_new_checkpoint: false`，`FINAL` 状态严禁 `NEEDS_ADMIN`）；
+     - `aep_envelope.schema.json`：为 8 类 AEP 消息建立 per-type payload 校验（Type A/B/E/H 等），Type B 深度组合 `review_context.schema.json`，内联长正文硬约束 `maxLength: 2048` 字符预算；
+     - `src/macao/core/schema.py`：升级 `SchemaValidator` 集成本地 RefResolver 映射池，保障离线 `$ref` 解析 100% 稳定；
+     - **Fixtures 双向验证**：正例 9/9 PASS，反例 13/13 FAIL-CLOSED（新增 AEP 空 payload、dev 缺核心字段、disposition 非法 true 组合、config 缺 policy 等 6 项反例）。
+  2. **PRD、提案与 SRS 权威文档严密自洽**：
+     - PRD §3.3 统一状态转移表 E4 伴随动作严格同步为六道关卡顺序；
+     - PRD §3.3 E7 伴随动作全面同步两步流转：落盘 `admin_override.json`（解 HOLD，投影 `SHOULD_DISPOSE`）$\rightarrow$ 执行者提交带 `EXEMPTED_BY_ADMIN`+`override_id` 的 FINAL disposition 校验通过后分流 E4 `MERGING` 或 E5a `REWORK`；
+     - 提案 §4.5 彻底消除管理员代写 disposition 表述，严格落实单一垄断写者；
+     - 变更清单与 PRD §15.2 严格互锁：返工新 commit 必须为上一轮 `checkpoint_ref` 之严格拓扑子孙（`git merge-base --is-ancestor <prev> <new>`）；
+     - `docs/SRSv1.md:612-613` 现行迁移提示更新为 8 类 AEP/1.1 消息（Type A～Type H）。
+  3. **用例体系（UseCases）规格与结构标准化**：
+     - UC-7：剥离 init 向导歧义选择（归入 UC-1 步骤 3 `ADMIN_STATE_RESOLVED`）与 Git conflict 合并冲突（关卡 3 失败触发 `E4b` $\rightarrow$ `REWORK`），运行期 E7 严格收敛于 P1～P4；补齐标准 5～8 节（含设计自审）；
+     - UC-6：补齐标准 5～8 节（含设计自审与覆盖率/枚举互锁断言）；
+     - UC-8：明确远端共享模式（`remote_name` 非空）Gate 1 执行 `ls-remote` 严格 100% fail-closed 拦截，显式本地模式（`remote_name: null`）跳过远端推送；
+     - README：修复首次检查点（无编号产物触发）与返工检查点（E6）标识。
+- **本轮机验结果**：`docs/usercases/*.md` **13 份、控制字符 0**；全部 YAML/JSON 示例 **Draft-07 校验 100% PASS**；`fixtures/valid` **9/9 PASS**、`fixtures/invalid` **13/13 准确拦截**；`docs/schemas/` ↔ `src/macao/schemas/` **8 份逐字节一致**；`PYTHONPATH=src python3 -m unittest discover tests` **86/86 PASS**；`compileall` rc=0。
 
 ---
 

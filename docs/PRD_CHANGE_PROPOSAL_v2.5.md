@@ -212,7 +212,7 @@ deadline: "2026-09-01T12:30:00Z"
 - Orchestrator 按统一 timeout scanner 发送 ping，并在 deadline 后发送 `HUMAN_OVERRIDE_REQUEST`；
 - 超时不会自动创建 disposition、自动忽略 issue 或进入 `MERGING`；
 - `APPROVED` 场景继续停在 `CONSENSUS_CHECK`，`REWORK_REQUIRED` 场景继续停在 `REWORK`；
-- `NEEDS_ADMIN` 处置：管理员在 override 中对单条 issue 提供明确答复，记录审计事件后由 Executor（或 Admin）生成更高 `artifact_revision` 的 FINAL disposition。
+- `NEEDS_ADMIN` 处置：管理员在 override 中对单条 issue 提供明确答复（记录独立 `admin_override.json` 与 `override_id`），执行者读取 override 后提交带 `EXEMPTED_BY_ADMIN` + `override_id` 的 FINAL disposition（严禁管理员代写 disposition）。
 
 ### 4.5 状态转移表修订（E3 ～ E7）
 

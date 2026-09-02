@@ -1,0 +1,12 @@
+version: "1.0"
+timestamp: "2024-01-15T10:46:00Z"
+reviewer:
+  id: "cc-glm"
+  role: "reviewer"
+  cli: "codex"
+checkpoint_ref: "a1b2c3d"
+review_round: 1
+opinion:
+  status: "APPROVED"
+  confidence: 0.95
+vote: "NO_APPROVE"

@@ -1,0 +1,12 @@
+# 反例：Reviewer 侧弃权（ABSTAIN）不应能通过 review_manifest Schema——
+# 弃权仅由 Orchestrator 在超时降级时写入 vote_result.json（PRD §2.2）
+version: "1.0"
+timestamp: "2024-01-15T10:50:00Z"
+reviewer:
+  id: "kimi"
+  cli: "kimi"
+checkpoint_ref: "a1b2c3d"
+review_round: 1
+opinion:
+  status: "APPROVED"
+vote: "ABSTAIN"
