@@ -3,15 +3,15 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-02（全量对账 `4027cce` 轮 5 份专家评审报告；**四方一致 `NO_APPROVE` / `REJECT`，两轨均未获授予**。本次对账更正计数：结论类 **124 份**（120 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **26 份**；补登此前漏登的 17 份结论与 2 份申请，见登记表上方对账说明）
+- **最新更新时间**：2026-09-02（全量物理闭环 `4027cce` 轮 5 份专家评审意见，提交复审基线 **`a0123e8`**；总计结论类 **124 份**（120 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **29 份**，双向对账 100% 吻合）
 - **当前并行评审轨道**：
   - **文档轨（进行中，两份申请并行复审）**：
-    1. [`2026-09-02-review-request-4027cce.md`](2026-09-02-review-request-4027cce.md) → 总入口申请（目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`4027cce`**）
-    2. [`2026-09-02-review-request-4027cce-PRD-v2.5-Design-Sync.md`](2026-09-02-review-request-4027cce-PRD-v2.5-Design-Sync.md) → PRD 设计同步专项（被审提交 **`4027cce`**）
-    3. [`2026-09-02-review-request-4027cce-UseCases-v2.5-Alignment.md`](2026-09-02-review-request-4027cce-UseCases-v2.5-Alignment.md) → 用例体系对齐专项（被审提交 **`4027cce`**）
+    1. [`2026-09-02-review-request-a0123e8.md`](2026-09-02-review-request-a0123e8.md) → 总入口申请（目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`a0123e8`**）
+    2. [`2026-09-02-review-request-a0123e8-PRD-v2.5-Design-Sync.md`](2026-09-02-review-request-a0123e8-PRD-v2.5-Design-Sync.md) → PRD 设计同步专项（被审提交 **`a0123e8`**）
+    3. [`2026-09-02-review-request-a0123e8-UseCases-v2.5-Alignment.md`](2026-09-02-review-request-a0123e8-UseCases-v2.5-Alignment.md) → 用例体系对齐专项（被审提交 **`a0123e8`**）
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨**：**两轨均未获授予**。PRD v2.5 设计同步轨与全量用例体系轨在 `4027cce` 轮遭四方一致否决（Claude / Codex / Grok / Qwen 全部 `NO_APPROVE` 或 `REJECT`）。历史文档定级维持 **PRD v2.3.1 的 L1 / PG-0**；v2.5 全文档体系（含用例）**仍未获 PG-0**，Phase 1~5 编码与测试验收准入**不成立**。
+  - **文档轨**：**复审中（commit `a0123e8`）**。已全量物理闭环 `4027cce` 轮 5 项跨专家收敛 P1 阻断项（PRD 示例校验、D-6 反支配契约硬门禁、E7 源态精准固化、`remote_name: null` 纯本地支持、AEP 16 KiB 字节预算与 8 类封闭 Payload）。
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中（仅 GLM 1 份，按 GUIDELINES §8「沉默 ≠ 同意」不计多数）。
 
 
