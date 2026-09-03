@@ -73,79 +73,96 @@ class VoteAggregator:
         configured_reviewers: int,
         reviews: List[Dict[str, Any]],
         human_resolution: Optional[str] = None,
-        write_to_disk: bool = True,
         timed_out_reviewers: Optional[List[str]] = None,
+        write_to_disk: bool = True,
         task_id: Optional[str] = None,
         reviewer_weights: Optional[Dict[str, int]] = None,
-        policy: Optional[Dict[str, Any]] = None
+        policy: Optional[Dict[str, Any]] = None,
+        timeout_metadata: Optional[Dict[str, Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         """
-        Calculates consensus decision and produces schema-valid vote_result.json.
-        Validates schema before writing to disk (Fail-closed).
-        Persists timed out reviewers as ABSTAIN in votes and breakdown.
+        Synthesizes a standardized, deterministic vote_result.json structure (PRD §2.3 / §11.2 / D-1).
+        Supports pure integer weighted consensus evaluation and records cryptographic hashes.
         """
         votes_list = []
         input_artifacts = []
         issues_to_fix = []
 
-        valid_reviews = []
-        for r in reviews:
-            rev_id = r["data"]["reviewer"]["id"]
+        for rev in reviews:
+            rev_data = rev.get("data", {})
+            rev_id = rev_data.get("reviewer", {}).get("id", "unknown")
             if timed_out_reviewers and rev_id in timed_out_reviewers:
                 continue
-            valid_reviews.append(r)
 
-        for r in valid_reviews:
-            data = r["data"]
-            rev_id = data["reviewer"]["id"]
-            vote_val = data.get("vote") or data.get("opinion", {}).get("vote")
-            if not vote_val:
-                continue
+            rev_weight = int(reviewer_weights.get(rev_id, rev_data.get("reviewer", {}).get("vote_weight", 1))) if reviewer_weights else int(rev_data.get("reviewer", {}).get("vote_weight", 1))
 
-            op_data = data.get("opinion", {})
-            issues_list = op_data.get("feedback", {}).get("categories", [])
-            w = int(reviewer_weights.get(rev_id, data.get("reviewer", {}).get("vote_weight", 1))) if reviewer_weights else int(data.get("reviewer", {}).get("vote_weight", 1))
+            vote_val = rev_data.get("vote") or rev_data.get("opinion", {}).get("vote") or Vote.ABSTAIN.value
+            confidence_val = float(rev_data.get("opinion", {}).get("confidence", 0.9))
+
+            rev_issues = rev_data.get("issues", [])
+            categories = rev_data.get("categories", [])
+            op_categories = rev_data.get("opinion", {}).get("feedback", {}).get("categories", [])
 
             votes_list.append({
                 "reviewer": rev_id,
                 "vote": vote_val,
-                "weight": max(1, w),
+                "weight": max(1, rev_weight),
                 "source": "manifest",
-                "confidence": float(op_data.get("confidence", 0.9)),
-                "issues_count": len(issues_list)
+                "confidence": confidence_val,
+                "issues_count": len(rev_issues) + len(categories) + len(op_categories)
             })
 
             input_artifacts.append({
                 "reviewer": rev_id,
-                "kind": "review_manifest",
-                "path": r["file_path"],
-                "sha256": r.get("sha256", hashlib.sha256(b"").hexdigest()),
+                "path": str(rev.get("path", f".macao/.reviews/r{review_round}/{rev_id}.review.yml")),
                 "evidence_commit": checkpoint_ref,
-                "message_id": f"msg-rev-{rev_id}"
+                "sha256": rev.get("sha256", "0" * 64)
             })
 
-            for idx, cat in enumerate(issues_list):
+            for itm in rev_issues:
                 issues_to_fix.append({
-                    "id": f"issue-{rev_id}-{idx+1}",
+                    "id": itm.get("id"),
+                    "reviewer": rev_id,
+                    "type": itm.get("type", "logic"),
+                    "severity": itm.get("severity", "major"),
+                    "description": itm.get("description", "")
+                })
+            for cat in categories:
+                issues_to_fix.append({
+                    "id": cat.get("id"),
+                    "reviewer": rev_id,
+                    "type": cat.get("type", "logic"),
+                    "severity": cat.get("severity", "major"),
+                    "description": cat.get("issue", "")
+                })
+            for cat in op_categories:
+                issues_to_fix.append({
+                    "id": cat.get("id"),
                     "reviewer": rev_id,
                     "type": cat.get("type", "logic"),
                     "severity": cat.get("severity", "major"),
                     "description": cat.get("issue", "")
                 })
 
-        # Include timed out reviewers as ABSTAIN (PRD §2.2 / §3.3 / P1-1 / P1-3)
+        # Include timed out reviewers as ABSTAIN (PRD §2.2 / §3.3 / P1-1 / P1-3 / D-3)
         if timed_out_reviewers:
             for to_rev in timed_out_reviewers:
                 if not any(v["reviewer"] == to_rev for v in votes_list):
                     w = int(reviewer_weights.get(to_rev, 1)) if reviewer_weights else 1
-                    votes_list.append({
+                    t_meta = (timeout_metadata or {}).get(to_rev, {})
+                    entry = {
                         "reviewer": to_rev,
                         "vote": Vote.ABSTAIN.value,
                         "weight": max(1, w),
                         "source": "timeout",
                         "confidence": 0.0,
                         "issues_count": 0
-                    })
+                    }
+                    if "deadline" in t_meta:
+                        entry["deadline"] = t_meta["deadline"]
+                    if "last_ping_at" in t_meta:
+                        entry["last_ping_at"] = t_meta["last_ping_at"]
+                    votes_list.append(entry)
 
         total_configured_weight = None
         if policy and "configured_weight" in policy:
@@ -223,17 +240,17 @@ class VoteAggregator:
             "reviewers_accounted": reviewers_accounted,
             "votes": votes_list,
             "policy_snapshot": {
-                "rule": "weighted_2/3_v1",
-                "configured_seats": configured_reviewers,
+                "rule": pol.get("consensus_rule", "weighted_2/3_v1"),
+                "configured_seats": pol.get("configured_seats", configured_reviewers),
                 "configured_weight": total_configured_weight,
                 "seat_quorum_required": seat_quorum,
                 "weight_quorum_required": weight_quorum,
-                "decision_threshold_numerator": 2,
-                "decision_threshold_denominator": 3,
+                "decision_threshold_numerator": pol.get("decision_threshold_numerator", 2),
+                "decision_threshold_denominator": pol.get("decision_threshold_denominator", 3),
                 "minimum_winning_seats": min_winning_seats,
                 "dictator_cap_enabled": dictator_cap_enabled,
-                "max_single_weight_share_numerator": 2,
-                "max_single_weight_share_denominator": 3
+                "max_single_weight_share_numerator": pol.get("max_single_weight_share_numerator", 2),
+                "max_single_weight_share_denominator": pol.get("max_single_weight_share_denominator", 3)
             },
             "consensus_rule": "weighted_2/3_v1",
             "vote_breakdown": {
@@ -282,6 +299,26 @@ class VoteAggregator:
         if write_to_disk:
             out_file = self.root / ".macao" / "vote_result.json"
             out_file.parent.mkdir(parents=True, exist_ok=True)
+            # Immutability guard (D-1 / Codex P1-4):
+            # If vote_result.json already exists for identical task_id, checkpoint_ref, and review_round,
+            # verify consistency and reuse existing canonical record without overwriting.
+            if out_file.exists():
+                try:
+                    with open(out_file, "r", encoding="utf-8") as existing_f:
+                        existing_data = json.load(existing_f)
+                    if (existing_data.get("checkpoint_ref") == checkpoint_ref and
+                        existing_data.get("review_round") == review_round and
+                        existing_data.get("task_id") == result.get("task_id")):
+                        if existing_data.get("decision") == result.get("decision"):
+                            return existing_data
+                        else:
+                            raise ValueError(
+                                f"Immutable vote_result.json conflict: existing decision '{existing_data.get('decision')}' "
+                                f"differs from newly calculated '{result.get('decision')}' for ref {checkpoint_ref} r{review_round}"
+                            )
+                except json.JSONDecodeError:
+                    pass
+
             with open(out_file, "w", encoding="utf-8") as f:
                 json.dump(result, f, indent=2, ensure_ascii=False)
 

@@ -42,7 +42,7 @@ class WorkflowFSM:
             )
 
         # Update State Store
-        new_ref = detail.get("latest_commit", ref) if detail else ref
+        new_ref = (detail.get("latest_commit") or detail.get("checkpoint_ref") or ref) if detail else ref
         new_rnd = rnd
 
         # Advance round if moving to REWORK

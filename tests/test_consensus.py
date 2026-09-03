@@ -107,5 +107,87 @@ class TestConsensusEngine(unittest.TestCase):
         self.assertEqual(decision, Decision.DEADLOCK)
 
 
+class TestVoteAggregatorImmutability(unittest.TestCase):
+    def test_vote_result_immutability_and_conflict_rejection(self):
+        import tempfile, shutil
+        from macao.consensus.vote import VoteAggregator
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            agg = VoteAggregator(project_root=tmpdir)
+            reviews = [
+                {
+                    "path": ".macao/.reviews/r1/codex.review.yml",
+                    "data": {
+                        "reviewer": {"id": "codex", "vote_weight": 1},
+                        "vote": "YES_APPROVE",
+                        "opinion": {"confidence": 0.9}
+                    }
+                },
+                {
+                    "path": ".macao/.reviews/r1/opencode.review.yml",
+                    "data": {
+                        "reviewer": {"id": "opencode", "vote_weight": 1},
+                        "vote": "YES_APPROVE",
+                        "opinion": {"confidence": 0.9}
+                    }
+                }
+            ]
+            res1 = agg.generate_vote_result(
+                checkpoint_ref="a1b2c3d",
+                executor_id="claude-code",
+                review_round=1,
+                configured_reviewers=2,
+                reviews=reviews,
+                task_id="task-123",
+                write_to_disk=True
+            )
+            # Second call for the same task/ref/round should return existing canonical result without re-writing
+            res2 = agg.generate_vote_result(
+                checkpoint_ref="a1b2c3d",
+                executor_id="claude-code",
+                review_round=1,
+                configured_reviewers=2,
+                reviews=reviews,
+                task_id="task-123",
+                write_to_disk=True
+            )
+            self.assertEqual(res1["generated_at"], res2["generated_at"])
+            self.assertEqual(res1["decision"], res2["decision"])
+
+            # Call with conflicting reviews causing different decision should raise ValueError (fail-closed)
+            conflicting_reviews = [
+                {
+                    "path": ".macao/.reviews/r1/codex.review.yml",
+                    "data": {
+                        "reviewer": {"id": "codex", "vote_weight": 1},
+                        "vote": "NO_APPROVE",
+                        "opinion": {"confidence": 0.9}
+                    }
+                },
+                {
+                    "path": ".macao/.reviews/r1/opencode.review.yml",
+                    "data": {
+                        "reviewer": {"id": "opencode", "vote_weight": 1},
+                        "vote": "NO_APPROVE",
+                        "opinion": {"confidence": 0.9}
+                    }
+                }
+            ]
+            with self.assertRaises(ValueError) as ctx:
+                agg.generate_vote_result(
+                    checkpoint_ref="a1b2c3d",
+                    executor_id="claude-code",
+                    review_round=1,
+                    configured_reviewers=2,
+                    reviews=conflicting_reviews,
+                    task_id="task-123",
+                    write_to_disk=True
+                )
+            self.assertIn("Immutable vote_result.json conflict", str(ctx.exception))
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

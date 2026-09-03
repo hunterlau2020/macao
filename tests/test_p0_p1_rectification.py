@@ -1913,8 +1913,8 @@ opinion:
                 "disposition_status": "FINAL",
                 "dispositions": [
                     {
-                        "issue_id": "codex/ISSUE-01",
-                        "reviewer_id": "codex",
+                        "issue_id": vdata["issues_index"][0]["issue_id"],
+                        "reviewer_id": vdata["issues_index"][0]["reviewer"],
                         "disposition_type": "DEFERRED",
                         "requires_new_checkpoint": False,
                         "rationale": "Docstring will be added in follow-up docs PR"
@@ -1930,6 +1930,258 @@ opinion:
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    def test_submit_disposition_rejects_empty_and_forged_and_unapproved(self):
+        """
+        Regression tests for Claude A-P1-3 & Codex P1-2:
+        Enforces that submit_disposition rejects empty dispositions when issues exist,
+        rejects forged vote_result_ref or issues_index_sha256,
+        rejects foreign task/ref/round bindings,
+        and rejects DEADLOCK consensus decisions without admin override.
+        """
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            cfg_path = Path(tmpdir) / "macao.yaml"
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                yaml.dump({
+                    "version": "1.0",
+                    "repo": {"default_branch": "main", "remote_name": "origin"},
+                    "team": {
+                        "executor": {"id": "claude-code", "role": "executor", "cli": "claude"},
+                        "reviewers": [
+                            {"id": "codex", "role": "reviewer", "cli": "codex", "vote_weight": 1},
+                            {"id": "opencode", "role": "reviewer", "cli": "opencode", "vote_weight": 1}
+                        ]
+                    },
+                    "policy": {
+                        "consensus_rule": "weighted_2/3_v1",
+                        "seat_quorum_required": 2,
+                        "weight_quorum_required": 2,
+                        "minimum_winning_seats": 2,
+                        "dictator_cap_enabled": True
+                    }
+                }, f)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
-if __name__ == "__main__":
-    unittest.main()
+            orch = Orchestrator(project_root=tmpdir)
+            t_id = "task-disp-guard"
+            orch.store.create_task(
+                task_id=t_id,
+                title="Test disposition guards",
+                source_branch="feat/test",
+                target_branch="main"
+            )
+            orch.fsm.transition(t_id, AgentState.CODING, "E1")
+            orch.fsm.transition(t_id, AgentState.READY_FOR_REVIEW, "E1_PRODUCED", {"checkpoint_ref": head_sha})
+            orch.fsm.transition(t_id, AgentState.WAITING_REVIEW, "E2")
+
+            # Review with 1 advisory issue
+            rev_dir = Path(tmpdir) / ".macao" / ".reviews"
+            rev_dir.mkdir(parents=True, exist_ok=True)
+            with open(rev_dir / "codex.review.yml", "w", encoding="utf-8") as f:
+                yaml.dump({
+                    "version": "1.0",
+                    "task_id": t_id,
+                    "checkpoint_ref": head_sha,
+                    "review_round": 1,
+                    "reviewer": {"id": "codex", "role": "reviewer", "cli": "codex"},
+                    "vote": "YES_APPROVE",
+                    "opinion": {
+                        "status": "APPROVED",
+                        "vote": "YES_APPROVE",
+                        "confidence": 0.95,
+                        "summary": "Approved with 1 advisory comment",
+                        "feedback": {
+                            "categories": [
+                                {
+                                    "id": "codex/ADVISORY-1",
+                                    "type": "documentation",
+                                    "severity": "minor",
+                                    "issue": "Add inline docstring"
+                                }
+                            ]
+                        }
+                    }
+                }, f)
+            with open(rev_dir / "opencode.review.yml", "w", encoding="utf-8") as f:
+                yaml.dump({
+                    "version": "1.0",
+                    "task_id": t_id,
+                    "checkpoint_ref": head_sha,
+                    "review_round": 1,
+                    "reviewer": {"id": "opencode", "role": "reviewer", "cli": "opencode"},
+                    "vote": "YES_APPROVE",
+                    "opinion": {"status": "APPROVED", "vote": "YES_APPROVE", "confidence": 0.9, "summary": "Clean"}
+                }, f)
+
+            change, vdata = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2)
+            self.assertIsNone(change)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            vr_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            with open(vr_file, "rb") as f:
+                vote_res_sha = hashlib.sha256(f.read()).hexdigest()
+
+            # Case 1: Empty dispositions list when issues exist -> must be rejected!
+            bad_empty_disp = {
+                "version": "1.0",
+                "task_id": t_id,
+                "checkpoint_ref": head_sha,
+                "review_round": 1,
+                "executor": {"id": "claude-code", "role": "executor", "cli": "claude"},
+                "full_document": {"path": "docs/disp.md", "evidence_commit": head_sha, "sha256": "0" * 64},
+                "vote_result_ref": {"path": ".macao/vote_result.json", "evidence_commit": head_sha, "sha256": vote_res_sha},
+                "issues_index_sha256": vdata["issues_index_sha256"],
+                "disposition_status": "FINAL",
+                "dispositions": []
+            }
+            ok, msg, change_disp = orch.submit_disposition(t_id, bad_empty_disp)
+            self.assertFalse(ok)
+            self.assertIn("Dispositions must cover 100% issues exactly", msg)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            # Case 2: Forged vote_result_ref.sha256 -> must be rejected!
+            bad_sha_disp = dict(bad_empty_disp)
+            bad_sha_disp["vote_result_ref"] = {"path": ".macao/vote_result.json", "evidence_commit": head_sha, "sha256": "f" * 64}
+            bad_sha_disp["dispositions"] = [{
+                "issue_id": vdata["issues_index"][0]["issue_id"],
+                "reviewer_id": "codex",
+                "disposition_type": "DEFERRED",
+                "requires_new_checkpoint": False,
+                "rationale": "Deferred"
+            }]
+            ok, msg, _ = orch.submit_disposition(t_id, bad_sha_disp)
+            self.assertFalse(ok)
+            self.assertIn("vote_result_ref sha256 mismatch", msg)
+
+            # Case 3: Forged issues_index_sha256 -> must be rejected!
+            bad_issues_sha_disp = dict(bad_sha_disp)
+            bad_issues_sha_disp["vote_result_ref"]["sha256"] = vote_res_sha
+            bad_issues_sha_disp["issues_index_sha256"] = "e" * 64
+            ok, msg, _ = orch.submit_disposition(t_id, bad_issues_sha_disp)
+            self.assertFalse(ok)
+            self.assertIn("issues_index_sha256 mismatch", msg)
+
+            # Case 4: Foreign task_id / foreign checkpoint_ref -> must be rejected!
+            bad_task_disp = dict(bad_issues_sha_disp)
+            bad_task_disp["issues_index_sha256"] = vdata["issues_index_sha256"]
+            bad_task_disp["task_id"] = "foreign-task-id"
+            ok, msg, _ = orch.submit_disposition(t_id, bad_task_disp)
+            self.assertFalse(ok)
+            self.assertIn("Mismatched task_id", msg)
+
+            # Case 5: Legal disposition covering 100% issues -> accepted and transitions E4 to MERGING!
+            good_disp = dict(bad_task_disp)
+            good_disp["task_id"] = t_id
+            ok, msg, change_disp = orch.submit_disposition(t_id, good_disp)
+            self.assertTrue(ok)
+            self.assertEqual(change_disp.to_state, AgentState.MERGING)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.MERGING.value)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_orchestrator_weighted_consensus_and_policy_snapshot_integration(self):
+        """
+        Regression test for Claude A-P1-2 & Codex P1-1:
+        Verifies that Orchestrator preserves team and policy, passes weights to evaluate,
+        and accurately reflects policy_snapshot in vote_result.json.
+        With N=3, W=4, weights [opencode=1, antigravity=1, codex=2],
+        and votes [YES w=1, YES w=1, NO w=2],
+        the weighted result is DEADLOCK (2 vs 2), preventing automatic E4 or E5.
+        """
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
+            cfg_data = {
+                "version": "1.0",
+                "repo": {"default_branch": "main", "remote_name": "origin"},
+                "team": {
+                    "executor": {"id": "claude-code", "role": "executor", "cli": "claude"},
+                    "reviewers": [
+                        {"id": "opencode", "role": "reviewer", "cli": "opencode", "vote_weight": 1},
+                        {"id": "antigravity", "role": "reviewer", "cli": "agy", "vote_weight": 1},
+                        {"id": "codex", "role": "reviewer", "cli": "codex", "vote_weight": 2}
+                    ]
+                },
+                "policy": {
+                    "consensus_rule": "weighted_2/3_v1",
+                    "seat_quorum_required": 3,
+                    "weight_quorum_required": 3,
+                    "minimum_winning_seats": 2,
+                    "dictator_cap_enabled": True
+                }
+            }
+            with open(Path(tmpdir) / "macao.yaml", "w", encoding="utf-8") as f:
+                yaml.dump(cfg_data, f)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            orch = Orchestrator(project_root=tmpdir, config=cfg_data)
+            # Assert policy and team are preserved in orch.config (Door 2)
+            self.assertIsNotNone(orch.config.get("policy"))
+            self.assertIsNotNone(orch.config.get("team"))
+            self.assertEqual(orch.config["policy"]["weight_quorum_required"], 3)
+
+            t_id = "task-weighted-int"
+            orch.store.create_task(task_id=t_id, title="Test weighted integration", source_branch="feat/weighted", target_branch="main")
+            orch.fsm.transition(t_id, AgentState.CODING, "E1")
+            orch.fsm.transition(t_id, AgentState.READY_FOR_REVIEW, "E1_PRODUCED", {"checkpoint_ref": head_sha})
+            orch.fsm.transition(t_id, AgentState.WAITING_REVIEW, "E2")
+
+            # Setup reviews: opencode (YES, w=1), antigravity (YES, w=1), codex (NO, w=2)
+            rev_dir = Path(tmpdir) / ".macao" / ".reviews"
+            rev_dir.mkdir(parents=True, exist_ok=True)
+            with open(rev_dir / "opencode.review.yml", "w", encoding="utf-8") as f:
+                yaml.dump({
+                    "version": "1.0", "task_id": t_id, "checkpoint_ref": head_sha, "review_round": 1,
+                    "reviewer": {"id": "opencode", "role": "reviewer", "cli": "opencode"},
+                    "vote": "YES_APPROVE", "opinion": {"status": "APPROVED", "vote": "YES_APPROVE", "confidence": 0.9, "summary": "Approve"}
+                }, f)
+            with open(rev_dir / "antigravity.review.yml", "w", encoding="utf-8") as f:
+                yaml.dump({
+                    "version": "1.0", "task_id": t_id, "checkpoint_ref": head_sha, "review_round": 1,
+                    "reviewer": {"id": "antigravity", "role": "reviewer", "cli": "agy"},
+                    "vote": "YES_APPROVE", "opinion": {"status": "APPROVED", "vote": "YES_APPROVE", "confidence": 0.9, "summary": "Approve"}
+                }, f)
+            with open(rev_dir / "codex.review.yml", "w", encoding="utf-8") as f:
+                yaml.dump({
+                    "version": "1.0", "task_id": t_id, "checkpoint_ref": head_sha, "review_round": 1,
+                    "reviewer": {"id": "codex", "role": "reviewer", "cli": "codex"},
+                    "vote": "NO_APPROVE", "opinion": {"status": "REJECTED", "vote": "NO_APPROVE", "confidence": 0.95, "summary": "Reject"},
+                    "items": [
+                        {
+                            "issue_id": "codex/ISSUE-01",
+                            "disposition_class": "BLOCKING",
+                            "severity": "major",
+                            "title": "Blocking issue"
+                        }
+                    ]
+                }, f)
+
+            change, vdata = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=3)
+            # Must result in DEADLOCK, hold in CONSENSUS_CHECK, and NOT transition via E4 or E5!
+            self.assertIsNone(change)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+
+            # Check written vote_result.json
+            vr_file = Path(tmpdir) / ".macao" / "vote_result.json"
+            self.assertTrue(vr_file.exists())
+            with open(vr_file, "r", encoding="utf-8") as f:
+                vr_data = json.load(f)
+
+            self.assertEqual(vr_data["decision"], "DEADLOCK")
+            self.assertEqual(vr_data["vote_breakdown"]["reject_weight"], 2)
+            self.assertEqual(vr_data["vote_breakdown"]["approve_weight"], 2)
+            # Policy snapshot must accurately record configured_weight = 4 and quorums = 3
+            self.assertEqual(vr_data["policy_snapshot"]["configured_weight"], 4)
+            self.assertEqual(vr_data["policy_snapshot"]["seat_quorum_required"], 3)
+            self.assertEqual(vr_data["policy_snapshot"]["weight_quorum_required"], 3)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)

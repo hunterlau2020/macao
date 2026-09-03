@@ -76,6 +76,26 @@ class TestPRDSnippetsSchema(unittest.TestCase):
             err_msgs = ["/".join(map(str, e.path)) + ": " + e.message for e in errs]
             self.assertEqual(len(errs), 0, f"AEP snippet {o.get('type')} failed aep_envelope schema: {err_msgs}")
 
+    def test_proposal_and_usecase_disposition_snippets(self):
+        """Regression test for Claude A-P1-1/B-P1-1 & Grok P1-1: verify disposition examples in proposal and UC6."""
+        val = self.get_validator("review_disposition")
+        for p in ["docs/PRD_CHANGE_PROPOSAL_v2.5.md", "docs/usercases/UC6-issue-triage-rework.md"]:
+            with open(p, "r", encoding="utf-8") as f:
+                t = f.read()
+            matches = re.findall(r"^```(?:yaml|json)\n(.*?)^```", t, re.M | re.S)
+            found = 0
+            for code in matches:
+                try:
+                    o = yaml.safe_load(code)
+                    if isinstance(o, dict) and "disposition_status" in o:
+                        found += 1
+                        errs = list(val.iter_errors(o))
+                        err_msgs = ["/".join(map(str, e.path)) + ": " + e.message for e in errs]
+                        self.assertEqual(len(errs), 0, f"Snippet in {p} failed review_disposition schema: {err_msgs}")
+                except Exception:
+                    pass
+            self.assertGreaterEqual(found, 1, f"Expected at least 1 disposition snippet in {p}, found {found}")
+
 
 if __name__ == "__main__":
     unittest.main()

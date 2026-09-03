@@ -119,6 +119,7 @@ class Orchestrator:
 
         reviewer_ids = raw_config.get("reviewer_ids", active_rev_ids)
 
+        self.raw_config = raw_config
         self.config: Dict[str, Any] = {
             "max_rework_rounds": raw_config.get("max_rework_rounds", policy.get("max_rework_rounds", 3)),
             "min_effective_votes": raw_config.get("min_effective_votes", policy.get("min_effective_votes", len(reviewer_ids))),
@@ -131,7 +132,9 @@ class Orchestrator:
             "executor_id": raw_config.get("executor_id", team.get("executor", {}).get("id", "claude-code")),
             "reviewers": reviewers_list,
             "reviewer_ids": reviewer_ids,
-            "timeouts": timeouts
+            "timeouts": timeouts,
+            "team": team,
+            "policy": policy
         }
 
     # --- High-Level Workflow Actions ---
@@ -563,29 +566,69 @@ class Orchestrator:
                 else:
                     valid_reviews.append(r)
 
+            # Build reviewer_weights and policy from config (Claude A-P1-2 / Codex P1-1)
+            reviewer_weights = {}
+            for r_cfg in self.config.get("team", {}).get("reviewers", []):
+                if isinstance(r_cfg, dict) and "id" in r_cfg:
+                    reviewer_weights[r_cfg["id"]] = r_cfg.get("vote_weight", 1)
+            for r_cfg in self.config.get("reviewers", []):
+                if isinstance(r_cfg, dict) and "id" in r_cfg and r_cfg["id"] not in reviewer_weights:
+                    reviewer_weights[r_cfg["id"]] = r_cfg.get("vote_weight", 1)
+
+            policy_cfg = dict(self.config.get("policy", {}))
+            total_configured_weight = policy_cfg.get("configured_weight")
+            if not total_configured_weight:
+                total_configured_weight = sum(reviewer_weights.values()) if reviewer_weights else num_configured
+
             votes_list = []
             for r in valid_reviews:
                 v_data = r["data"]
                 vote_val = v_data.get("vote") or v_data.get("opinion", {}).get("vote")
                 if not vote_val:
                     continue
+                r_id = v_data["reviewer"]["id"]
+                w = int(reviewer_weights.get(r_id, v_data.get("reviewer", {}).get("vote_weight", 1)))
                 votes_list.append({
-                    "reviewer": v_data["reviewer"]["id"],
+                    "reviewer": r_id,
                     "vote": vote_val,
+                    "weight": max(1, w),
+                    "source": "manifest",
                     "confidence": float(v_data.get("opinion", {}).get("confidence", 0.9))
                 })
 
-
             # Handle Reviewer Timeouts (REQ-TIMEOUT): Synthesize ABSTAIN votes and idempotent audit
+            dispatch_audits = self.store.get_audit_events_by_type(task_id, "REVIEW_REQUESTS_DISPATCHED", review_round=rnd)
+            to_deadline = None
+            to_ping = None
+            if dispatch_audits:
+                to_deadline = dispatch_audits[0].get("detail", {}).get("deadline")
+                to_ping = dispatch_audits[0].get("ts") or dispatch_audits[0].get("timestamp")
+
+            timeout_meta_map = {}
             if timed_out_reviewers:
                 for to_rev in timed_out_reviewers:
+                    w = int(reviewer_weights.get(to_rev, 1))
+                    t_entry = {}
+                    if to_deadline:
+                        t_entry["deadline"] = to_deadline
+                    if to_ping:
+                        t_entry["last_ping_at"] = to_ping
+                    timeout_meta_map[to_rev] = t_entry
+
                     if not any(v["reviewer"] == to_rev for v in votes_list):
-                        votes_list.append({
+                        v_entry = {
                             "reviewer": to_rev,
                             "vote": Vote.ABSTAIN.value,
+                            "weight": max(1, w),
+                            "source": "timeout",
                             "confidence": 0.0,
                             "timeout": True
-                        })
+                        }
+                        if to_deadline:
+                            v_entry["deadline"] = to_deadline
+                        if to_ping:
+                            v_entry["last_ping_at"] = to_ping
+                        votes_list.append(v_entry)
                         if to_rev not in historical_timed_out_ids:
                             self.store.log_audit_event(task_id, "REVIEWER_TIMEOUT_ABSTAIN", {
                                 "reviewer_id": to_rev,
@@ -596,13 +639,15 @@ class Orchestrator:
 
             decision, breakdown, confidence = ConsensusEngine.evaluate(
                 votes=votes_list,
-                configured_reviewers=num_configured
+                configured_reviewers=num_configured,
+                configured_weight=total_configured_weight,
+                policy=policy_cfg
             )
 
             # Rule (P1-NEW-3 / P1-NEW-7 / PRD §2.2 / §3.3 / §6.1):
             # If decision is DEADLOCK OR any reviewer timed out, MUST HOLD in CONSENSUS_CHECK and NOT automatically transition to MERGING.
             # Timeout degradation requires human confirmation via resolve_override.
-            if decision == Decision.DEADLOCK or (timed_out_reviewers and len(timed_out_reviewers) > 0):
+            if decision == Decision.DEADLOCK or (timed_out_reviewers and len(timed_out_reviewers) > 0 and decision != Decision.APPROVED):
                 # PRD v2.5 D-1 / §3.4 场景三: Orchestrator writes immutable vote_result.json on DEADLOCK
                 vdata = self.vote_aggregator.generate_vote_result(
                     checkpoint_ref=ref,
@@ -611,7 +656,11 @@ class Orchestrator:
                     configured_reviewers=num_configured,
                     reviews=collected_reviews,
                     timed_out_reviewers=list(timed_out_reviewers) if timed_out_reviewers else [],
-                    write_to_disk=True
+                    write_to_disk=True,
+                    task_id=task_id,
+                    reviewer_weights=reviewer_weights,
+                    policy=policy_cfg,
+                    timeout_metadata=timeout_meta_map
                 )
                 self.store.register_artifact(
                     task_id=task_id,
@@ -673,14 +722,6 @@ class Orchestrator:
                     )
                 return None, None
 
-            # Build reviewer_weights and policy
-            reviewer_weights = {}
-            for r_cfg in self.config.get("team", {}).get("reviewers", []):
-                if isinstance(r_cfg, dict) and "id" in r_cfg:
-                    reviewer_weights[r_cfg["id"]] = r_cfg.get("vote_weight", 1)
-
-            policy_cfg = self.config.get("policy", {})
-
             # Generate and write authoritative vote_result.json for valid non-deadlock decisions
             vdata = self.vote_aggregator.generate_vote_result(
                 checkpoint_ref=ref,
@@ -693,8 +734,10 @@ class Orchestrator:
                 write_to_disk=True,
                 task_id=task_id,
                 reviewer_weights=reviewer_weights,
-                policy=policy_cfg
+                policy=policy_cfg,
+                timeout_metadata=timeout_meta_map
             )
+            decision = Decision(vdata["decision"])
 
             # Register vote_result artifact in store (P1-2)
             self.store.register_artifact(
@@ -717,7 +760,7 @@ class Orchestrator:
                         try:
                             with open(disp_path, "r", encoding="utf-8") as df:
                                 disp_data = yaml.safe_load(df)
-                            is_valid, _ = validate_review_disposition(disp_data)
+                            is_valid, _ = self.validate_disposition_fulfillment(task_id, disp_data)
                             if is_valid and disp_data.get("disposition_status") == "FINAL":
                                 has_valid_final_disp = True
                                 items = disp_data.get("dispositions", [])
@@ -781,28 +824,116 @@ class Orchestrator:
 
         return None, None
 
+    def validate_disposition_fulfillment(
+        self,
+        task_id: str,
+        disposition_data: Dict[str, Any]
+    ) -> Tuple[bool, str]:
+        """
+        Validates executor.disposition.yml against current task, consensus vote_result, and rules
+        (PRD §2.5 / §3.3 :875 / D-2 / D-5 / UC-6 / Claude A-P1-3 / Codex P1-2).
+        Enforces:
+        1. Task exists and is in CONSENSUS_CHECK.
+        2. Valid Draft-07 review_disposition schema.
+        3. Exact task_id, checkpoint_ref, review_round, executor ID binding.
+        4. Underlying consensus decision must be APPROVED (or approved by admin override).
+        5. vote_result.json existence and sha256 binding.
+        6. issues_index_sha256 exact match.
+        7. 100% exact coverage of issues_index (no missing, no extraneous issue IDs).
+        8. If FINAL, no NEEDS_ADMIN disposition items allowed.
+        """
+        task = self.store.get_task(task_id)
+        if not task:
+            return False, f"Task {task_id} not found"
+
+        cur_state = AgentState(task["state"])
+        if cur_state != AgentState.CONSENSUS_CHECK:
+            return False, f"Task must be in CONSENSUS_CHECK to accept disposition, current: {cur_state.value}"
+
+        is_valid, err = validate_review_disposition(disposition_data)
+        if not is_valid:
+            return False, f"Invalid review_disposition schema: {err}"
+
+        ref = task.get("checkpoint_ref")
+        rnd = task.get("review_round", 1)
+        exec_id = task.get("executor_id") or self.config.get("executor_id", "claude-code")
+
+        if disposition_data.get("task_id") != task_id:
+            return False, f"Mismatched task_id: expected {task_id}, got {disposition_data.get('task_id')}"
+        if disposition_data.get("checkpoint_ref") != ref:
+            return False, f"Mismatched checkpoint_ref: expected {ref}, got {disposition_data.get('checkpoint_ref')}"
+        if disposition_data.get("review_round") != rnd:
+            return False, f"Mismatched review_round: expected {rnd}, got {disposition_data.get('review_round')}"
+        if disposition_data.get("executor", {}).get("id") != exec_id:
+            return False, f"Mismatched executor id: expected {exec_id}, got {disposition_data.get('executor', {}).get('id')}"
+
+        vr_file = self.root / ".macao" / "vote_result.json"
+        if not vr_file.exists():
+            return False, "vote_result.json does not exist on disk"
+
+        try:
+            with open(vr_file, "r", encoding="utf-8") as f:
+                vdata = json.load(f)
+        except Exception as e:
+            return False, f"Failed to read vote_result.json: {e}"
+
+        # Underlying consensus decision must be APPROVED, or approved by admin override
+        is_approved = (vdata.get("decision") == "APPROVED")
+        admin_file = self.root / ".macao" / "admin_override.json"
+        if not is_approved and admin_file.exists():
+            try:
+                with open(admin_file, "r", encoding="utf-8") as af:
+                    a_data = json.load(af)
+                if a_data.get("override_choice") in ("APPROVED", "MERGE"):
+                    is_approved = True
+            except Exception:
+                pass
+
+        if not is_approved:
+            return False, f"Cannot submit disposition when consensus decision is '{vdata.get('decision')}' without approved admin override"
+
+        with open(vr_file, "rb") as fb:
+            vr_sha = hashlib.sha256(fb.read()).hexdigest()
+
+        disp_vr_sha = disposition_data.get("vote_result_ref", {}).get("sha256")
+        if disp_vr_sha != vr_sha:
+            return False, f"vote_result_ref sha256 mismatch: expected {vr_sha}, got {disp_vr_sha}"
+
+        disp_issues_sha = disposition_data.get("issues_index_sha256")
+        expected_issues_sha = vdata.get("issues_index_sha256")
+        if disp_issues_sha != expected_issues_sha:
+            return False, f"issues_index_sha256 mismatch: expected {expected_issues_sha}, got {disp_issues_sha}"
+
+        expected_issues = vdata.get("issues_index", [])
+        expected_ids = {item["issue_id"] for item in expected_issues}
+        disp_items = disposition_data.get("dispositions", [])
+        disp_ids = {d["issue_id"] for d in disp_items}
+
+        if disp_ids != expected_ids:
+            return False, f"Dispositions must cover 100% issues exactly: expected {sorted(list(expected_ids))}, got {sorted(list(disp_ids))}"
+
+        if disposition_data.get("disposition_status") == "FINAL":
+            if any(d.get("disposition_type") == "NEEDS_ADMIN" for d in disp_items):
+                return False, "FINAL disposition cannot contain NEEDS_ADMIN items"
+
+        return True, "Valid"
+
     def submit_disposition(
         self,
         task_id: str,
         disposition_data: Dict[str, Any]
     ) -> Tuple[bool, str, Optional[StateChange]]:
         """
-        Submits and validates an executor.disposition.yml manifest (PRD §2.5 / D-2 / UC-6).
+        Submits and validates an executor.disposition.yml manifest (PRD §2.5 / D-2 / UC-6 / Claude A-P1-3 / Codex P1-2).
+        Enforces 100% issue coverage, task/ref/round/executor binding, hash binding, and approved consensus decision.
         Transitions via E4 (MERGING) if all issues resolved without new checkpoint,
         or E5a (REWORK) if requires_new_checkpoint is True.
         """
-        task = self.store.get_task(task_id)
-        if not task:
-            return False, f"Task {task_id} not found", None
-
-        is_valid, err = validate_review_disposition(disposition_data)
+        is_valid, err_msg = self.validate_disposition_fulfillment(task_id, disposition_data)
         if not is_valid:
-            return False, f"Invalid review_disposition schema: {err}", None
+            return False, f"Disposition validation failed: {err_msg}", None
 
-        cur_state = AgentState(task["state"])
-        if cur_state != AgentState.CONSENSUS_CHECK:
-            return False, f"Task must be in CONSENSUS_CHECK to accept disposition, current: {cur_state.value}", None
-
+        task = self.store.get_task(task_id)
         rnd = task.get("review_round", 1)
         disp_dir = self.root / ".macao" / ".dispositions" / f"r{rnd}"
         disp_dir.mkdir(parents=True, exist_ok=True)
