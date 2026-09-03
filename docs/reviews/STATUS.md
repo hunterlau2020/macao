@@ -3,21 +3,49 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-03（全量物理闭环 `cd285dd` 轮 6 份专家评审意见，提交复审基线 **`73576c5`**；总计结论类 **136 份**（132 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **35 份**，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-03（登记 `73576c5` 轮 6 份专家评审意见；总计结论类 **142 份**（138 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **35 份**，双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **文档轨（进行中，两份申请并行复审）**：
+  - **文档轨（`73576c5` 轮已闭轮，未获授予；待下一轮整改提交）**：
     1. [`2026-09-03-review-request-73576c5.md`](2026-09-03-review-request-73576c5.md) → 总入口申请（目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`73576c5`**）
     2. [`2026-09-03-review-request-73576c5-PRD-v2.5-Design-Sync.md`](2026-09-03-review-request-73576c5-PRD-v2.5-Design-Sync.md) → PRD 设计同步专项（被审提交 **`73576c5`**）
     3. [`2026-09-03-review-request-73576c5-UseCases-v2.5-Alignment.md`](2026-09-03-review-request-73576c5-UseCases-v2.5-Alignment.md) → 用例体系对齐专项（被审提交 **`73576c5`**）
   - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
 - **当前定级状态**：
-  - **文档轨 · 用例体系（轨 B）**：`a0123e8` 与 `cd285dd` 轮**已连续两轮获 Claude、Grok、Qwen 全票授予通过**。
-  - **文档轨 · PRD 设计同步（轨 A）**：**复审中（commit `73576c5`）**。已全量物理闭环 `cd285dd` 轮收敛的全部 6 项阻断项（根配置 Quorum 与校验门禁、提案表格残余、契约封闭性、计票引擎纯整数加权五门禁、`vote_result` 契约与生成器对齐、编排器 E4 处置守卫与 Type E 消息发布）。
+  - **文档轨 · PRD 设计同步（轨 A）**：**`73576c5` 轮未获授予**。票型 3 否决（Claude `NO_APPROVE` P1×3、Grok `NO_APPROVE` P1×1、Codex `REJECT` P1×4）+ 1 授予（Muse `YES_APPROVE`）。
+  - **文档轨 · 用例体系（轨 B）**：**`73576c5` 轮改判为未获授予**，连续两轮全票授予的态势中断。Claude 与 Grok 均**推翻自己前两轮的 `YES_APPROVE`**——用例正文相对 `cd285dd` 零变更（已 diff 证实），但本轮轨 A 把 `review_disposition.schema.json` 收成 `additionalProperties: false`，UC-6 `:36` 的 `generated_at` 随之不再合法，轨 B 申请 §3.2「UC6 → PASS」经两方独立机验为 **FAIL**。
   - **历史文档定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
   - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中（仅 GLM 1 份，按 GUIDELINES §8「沉默 ≠ 同意」不计多数）。
 
 
-### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`a0123e8` → `cd285dd`，当前轮）
+### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`cd285dd` → `73576c5`，当前轮）
+
+- **被审提交**：`73576c5`；工作区 HEAD `34a1077`（差量 = 三份申请 + `STATUS.md` + 6 份评审结论，正文与 `73576c5` 一致）
+- **本轮票型（6 份报告 / 4 位专家，两轨合计）**：**多数否决，未获授予**。
+  - **Claude**：两轨均 `NO_APPROVE`（轨 A P1×3、轨 B P1×1）—— [`…-73576c5-claude.md`](2026-09-03-review-result-73576c5-claude.md)
+  - **Grok**：两轨均 `NO_APPROVE`（轨 A P1×1、轨 B P1×1）—— [`…-73576c5-DesignSync-grok.md`](2026-09-03-review-result-73576c5-DesignSync-grok.md)、[`…-73576c5-UseCases-grok.md`](2026-09-03-review-result-73576c5-UseCases-grok.md)
+  - **Codex**：不分轨合并 `REJECT`（P1×4，全部指向运行时/编排器层）—— [`…-73576c5-codex.md`](2026-09-03-review-result-73576c5-codex.md)
+  - **Muse**：两轨均 `YES_APPROVE`（轨 A ADVISORY×4、轨 B ADVISORY×2）—— [`…-73576c5-DesignSync-muse.md`](2026-09-03-review-result-73576c5-DesignSync-muse.md)、[`…-73576c5-UseCases-muse.md`](2026-09-03-review-result-73576c5-UseCases-muse.md)
+- **三方一致确认的实质进展（各方独立机验，非采信自述）**：
+  - `cd285dd` 轮阻断中的 3 项真实闭环：提案「当前状态（HOLD）」表述清理、根 `macao.yaml` 双 quorum 提至 3 且 `test_root_macao_yaml_passes_semantic_validation` 入库、`vote_result.schema.json` 遗留小写枚举 `"automatic"` 全库归零。
+  - **纯整数加权五道门禁在引擎单元层完全正确**：`ConsensusEngine.evaluate()` 门禁比较全为整数交叉乘法，`test_weighted_counterexample_deadlock`（`[YES w=2, NO w=1, NO w=1]` → `DEADLOCK`）与 `test_weighted_minimum_winning_seats_enforcement` 通过；Claude 另用 11 组独立反例逐格复算全部正确。
+  - `review_disposition.schema.json` 根 / `executor` / `full_document` / `dispositions.items` 全量 `additionalProperties: false`，`disposition_unrecognized_property.yml` 精确拦截；`votes[].source` 必填且拦截精确；双 Schema 目录 8/8 契约 + 32/32 fixtures 逐字节一致；97/97 测试 PASS；compileall 0 Errors。
+  - 用例正文相对 `cd285dd` **零变更**（`git diff` 证实）。
+- **未获授予的阻断项（按独立收敛方数排序）**：
+
+  | # | 阻断项 | 收敛方 |
+  |---|---|---|
+  | 1 | **`review_disposition` 契约本轮收紧为 `additionalProperties: false` 后，未回扫引用该契约的权威示例**：提案 §4.3（`:159`）与 UC-6（`:36`）的处置信封仍写 `generated_at`，该键契约中不存在，两处示例现均被拒。轨 B 申请 §3.2 明写「UC6 → PASS」，实测 FAIL。同一处修复对两轨均构成 L1 阻断（「所有 YAML/JSON 示例是合法可解析格式」） | **两方独立同结论**（Claude A-P1-1/B-P1-1 = Grok 轨 A P1-1/轨 B P1-1） |
+  | 2 | **编排器决策路径未加权、`policy_snapshot` 记录伪证**：`Orchestrator.__init__` 归一化丢弃 `team`/`policy` 整段，`vote_weight` 与全部 policy 参数运行时永不生效；`vote_result.json.policy_snapshot`（D-1 不可变记录自称的算法参数）实测记录派生默认值而非配置值。本轮头条修复①④在集成层不可达 | **三方独立收敛**（Claude A-P1-2 / Codex P1-1 / Grok P2-5，Grok 判 P2 未升级） |
+  | 3 | **`submit_disposition()` E4 守卫可被空处置或伪造引用穿透**：`DEADLOCK` + `dispositions: []` + 伪造 `vote_result_ref`/`issues_index_sha256` 可直推 `MERGING`；未校验 task/ref/round/executor 与当前轮绑定，未校验 issue_id 集合精确覆盖 | **两方独立收敛**（Claude A-P1-3 / Codex P1-2，Codex 另补 task/ref/round 绑定维） |
+  | 4 | **超时终局产物缺 `deadline`/`last_ping_at`，且计票调用缺上下文**：D-3 明定超时合成 `ABSTAIN` 必须记录 deadline 与最后 ping，`vote.py` 只写 `source`；DEADLOCK 分支不传 `task_id`/`reviewer_weights`/`policy` | 单方（Codex P1-3） |
+  | 5 | **`vote_result.json` 非真正不可变**：`vote.py:282-286` 无条件 `open(..., "w")` 重写，无存在性检查、无 round/sha 冲突拒绝，同轮重复调用可覆盖 D-1 声称的不可变记录 | 单方（Codex P1-4） |
+- **Claude 另登记的单方 P2/P3（不阻断本轮定级判断，Phase 1 前应处理）**：`state_engine.py` Layer 1c 与 E7 `resolve_override(APPROVED)` 直跳 `MERGING`（当前均未审慎接线的次要路径）；`EXTEND` override 选项三处文档声明但机器契约无该值；`vote_result` 双别名 `generated_at`/`timestamp`、`executor_id`/`executor` 并存；D-9 的 `reconcile` 在用例体系零命中；Markdown 份数口径连续第 3 轮不一致（205/209 均非申请所称 212）。
+- **本轮结构性观察**：「修复即引入同类缺陷」连续第 2 轮复发——`cd285dd` 轮 E7 收敛改对三处漏两行；本轮封闭 `review_disposition` 契约漏回扫提案与用例示例。围栏抽检门禁（`tests/test_prd_snippets_schema.py`）已固化但只覆盖 `MACAO_PRD_v2.md` 六节，连续第 6 轮建议扩面到提案与用例文件，本轮两条 P1 恰好落在缺口内。
+- **本次机验（本文件更新时复跑，非采信申请自述）**：`git ls-files '*.md'` **205** 份（申请称 212，口径不符，「0 控制字符」结论本身为真）；`Ran 97 tests … OK`；`compileall` rc=0；双 Schema 目录 8 份契约 + 32 份 fixtures 逐字节一致；根 `macao.yaml` 语义校验通过（`validate_config`/`ConfigManager.load` 均 PASS）但编排器归一化丢弃其 `policy`（见阻断项 2）。
+
+---
+
+### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`a0123e8` → `cd285dd`，已被 `73576c5` 轮取代）
 
 - **被审提交**：`cd285dd`
 - **前序轮票型（`a0123e8` 轮，6 份报告 / 4 位专家）**：
@@ -173,7 +201,7 @@
 
 ---
 
-## 评审申请记录全量对账表 (Review Registry - 128 份结论类文件 + 29 份申请全量对账)
+## 评审申请记录全量对账表 (Review Registry - 138 份结论类文件 + 35 份申请全量对账)
 
 > **本轮全量对账（2026-09-02，`a0123e8` 轮，按 `docs/MACAO_REVIEW_GUIDELINES.md` §1.3 与本文件第 4 行治理规则执行）**：
 >
@@ -221,45 +249,51 @@
 | 2026-09-02 | `2026-09-02-review-request-4027cce.md`（总入口）<br>`2026-09-02-review-request-4027cce-PRD-v2.5-Design-Sync.md`<br>`2026-09-02-review-request-4027cce-UseCases-v2.5-Alignment.md` | `6e35a71` .. `4027cce` | **L1 / PG-0** | `2026-09-02-review-result-4027cce-claude.md`<br>`2026-09-02-review-result-4027cce-codex.md`<br>`2026-09-02-review-result-4027cce-grok.md`<br>`2026-09-02-review-result-4027cce-DesignSync-qwen.md`<br>`2026-09-02-review-result-4027cce-UseCases-qwen.md` (5 份) | **未获授予。四方一致否决（`caf3473` 以来首次全体不通过）**：Claude `NO_APPROVE`×2 轨、Codex `REJECT`、Grok `NO_APPROVE`（前轮 APPROVE 改判）、Qwen `NO_APPROVE`×2 轨（前两轮 APPROVE 改判）。四方一致确认上轮 Claude 9 条 P1 中 **7 条真实闭环**、Codex 多条闭环、申请 §3/§4 机验全部复跑成立。**未获授予的阻断（按收敛方数）**：①UC-8 `remote_name: null` 通不过 `macao_config` 契约、PRD §14.5 无该模式（**四方全体**，本轮修复引入）；②PRD §2.5/§13/§2.4 Type A·B·E 五处示例 + 仓库根 `macao.yaml` 通不过自家契约（三方）；③D-6 两道反支配门禁契约层仍可关，反例可单席位批准合并（三方）；④E7 源态 `REWORK` 下 3/5 选项无可达边 + 提案 `:135` 互斥边（三方）；⑤AEP 16 KiB 预算与 8 类 payload 未完成（三方）；⑥STATUS 双向对账不平（Claude，**已于本次更新闭环**）；⑦`aep_envelope` `$ref` 指向网络 URL 致契约库不自包含（Claude）；⑧AEP 实现层不可用（Codex，属 L2 不计入）。 |
 | 2026-09-02 | `2026-09-02-review-request-a0123e8.md`（总入口）<br>`2026-09-02-review-request-a0123e8-PRD-v2.5-Design-Sync.md`<br>`2026-09-02-review-request-a0123e8-UseCases-v2.5-Alignment.md` | `4027cce` .. `a0123e8` | **L1 / PG-0** | `2026-09-02-review-result-a0123e8-claude.md`<br>`2026-09-02-review-result-a0123e8-DesignSync-grok.md`<br>`2026-09-02-review-result-a0123e8-UseCases-grok.md`<br>`2026-09-02-review-result-a0123e8-DesignSync-qwen.md`<br>`2026-09-02-review-result-a0123e8-UseCases-qwen.md`<br>`2026-09-02-review-result-a0123e8-codex.md` (6 份) | **轨 B 首获三张授予票（Claude / Grok / Qwen 全部 YES_APPROVE），轨 A 三方一致不授予；委员会共识尚未形成**。票型：Claude（轨 A `NO_APPROVE` P1×2 / 轨 B **`YES_APPROVE`**）、Grok（轨 A `NO_APPROVE` P1×1 / 轨 B **`YES_APPROVE`**）、Qwen（轨 A `NO_APPROVE` BLOCKING×3 / 轨 B **`YES_APPROVE`**）、Codex（不分轨合并 `REJECT` P1×3）。三方一致确认实质进展：**PRD 正式示例 14/14 + 根 `macao.yaml` 过契约**（已固化为 `tests/test_prd_snippets_schema.py`）、`remote_name: null` 全链路、STATUS 对账 0/0、§6 反例库 11/11、正例 10/10 反例 16/16、92/92 PASS。轨 A 阻断项已在 `cd285dd` 修复。 |
 | 2026-09-03 | `2026-09-03-review-request-cd285dd.md`（总入口）<br>`2026-09-03-review-request-cd285dd-PRD-v2.5-Design-Sync.md`<br>`2026-09-03-review-request-cd285dd-UseCases-v2.5-Alignment.md` | `a0123e8` .. `cd285dd` | **L1 / PG-0** | `2026-09-03-review-result-cd285dd-claude.md`<br>`2026-09-03-review-result-cd285dd-codex.md`<br>`2026-09-03-review-result-cd285dd-DesignSync-grok.md`<br>`2026-09-03-review-result-cd285dd-UseCases-grok.md`<br>`2026-09-03-review-result-cd285dd-DesignSync-qwen.md`<br>`2026-09-03-review-result-cd285dd-UseCases-qwen.md` (6 份) | **轨 B 连续两轮获全票一致授予通过（Claude / Grok / Qwen 全部 YES_APPROVE）；轨 A 问题高度收敛**。票型：Claude（轨 A `NO_APPROVE` P1×2 / 轨 B `YES_APPROVE`）、Grok（轨 A `NO_APPROVE` P1×1 / 轨 B `YES_APPROVE`）、Qwen（轨 A `NO_APPROVE` P1×1 / 轨 B `YES_APPROVE`）、Codex（合并 `REJECT` P1×3，仅评轨 A）。实质进展：D-6 配置期语义校验、`vote_result_ref` 必填契约、E7 源态清理全部闭环。轨 A 阻断项：①根 `macao.yaml` Quorum 低于法定人数触发自身校验失败；②提案 §4.2 残余“当前状态（HOLD）”与链接；③`review_disposition.schema.json` 缺少封闭；④计票引擎未实装纯整数五道门禁；⑤`vote_result.schema.json` 与 `vote.py` 字段不全；⑥编排器 E4 缺少 disposition 检查直接进入 MERGING。已在 `73576c5` 中全部闭环。 |
-| 2026-09-03 | `2026-09-03-review-request-73576c5.md`（总入口）<br>`2026-09-03-review-request-73576c5-PRD-v2.5-Design-Sync.md`<br>`2026-09-03-review-request-73576c5-UseCases-v2.5-Alignment.md` | `cd285dd` .. `73576c5` | **L1 / PG-0** | 复审中（待出具） | 待审提交 `73576c5`。全量闭环 `cd285dd` 轮阻断项：根 `macao.yaml` quorum 修复至 3并通过语义校验、提案表述清理、契约库封闭加固、计票纯整数五门禁实装与 Codex 反例验证、`vote_result` 契约与生成器对齐、编排器 E4 守卫与 Type E 消息发布、新增端到端集成测试、97/97 PASS。 |
+| 2026-09-03 | `2026-09-03-review-request-73576c5.md`（总入口）<br>`2026-09-03-review-request-73576c5-PRD-v2.5-Design-Sync.md`<br>`2026-09-03-review-request-73576c5-UseCases-v2.5-Alignment.md` | `cd285dd` .. `73576c5` | **L1 / PG-0** | `2026-09-03-review-result-73576c5-claude.md`<br>`2026-09-03-review-result-73576c5-codex.md`<br>`2026-09-03-review-result-73576c5-DesignSync-grok.md`<br>`2026-09-03-review-result-73576c5-UseCases-grok.md`<br>`2026-09-03-review-result-73576c5-DesignSync-muse.md`<br>`2026-09-03-review-result-73576c5-UseCases-muse.md` (6 份) | **未获授予**。票型：Claude（两轨 `NO_APPROVE`，轨 A P1×3 / 轨 B P1×1）、Grok（两轨 `NO_APPROVE`，轨 A P1×1 / 轨 B P1×1）、Codex（合并 `REJECT`，P1×4）、Muse（两轨 `YES_APPROVE`）。三方一致确认 `cd285dd` 阻断 3 项真实闭环、纯整数五门禁引擎层 11/11 正确、97/97 PASS。**未获授予的阻断**：①契约本轮收紧后未回扫提案 §4.3 与 UC-6 处置示例（`generated_at` vs `timestamp`，两方收敛）；②编排器归一化丢弃 `team`/`policy`，加权与 `policy_snapshot` 集成层不生效（三方收敛）；③`submit_disposition()` 可被空处置/伪造引用穿透（两方收敛）；④超时终局产物缺 deadline/ping（Codex 单方）；⑤`vote_result.json` 非真正不可变可被覆盖（Codex 单方）。 |
 | 2026-08~09 | 评审方法论横向评审（非定级轮） | `docs/MACAO_REVIEW_GUIDELINES.md` / `docs/reference/REVIEW_METHODOLOGY.md` | — | `REVIEW_METHODOLOGY_review_cc.md`<br>`REVIEW_METHODOLOGY_review_glm.md` (2 份) | 方法论本身的横向评审（cc / glm），不参与任何定级轮次；本次对账补登，避免再次落在登记表之外。 |
 
 ---
 
 ## 下一步行动
 
-> 依据 `a0123e8` 轮三方报告。**本轮只剩两条阻断，且都是两方独立收敛的旧项未改净**——`4027cce` 轮的 8 项已闭 6 项。轨 B 已获两票授予，轨 A 只差第 1、2 两项。
+> 依据 `73576c5` 轮 6 份专家报告（Claude / Grok / Codex / Muse）。**本轮五条阻断，两条为两方以上独立收敛的高优先级项**（均是「本轮修复动作本身收紧了契约，但未回扫引用该契约的既有示例」这一复发模式的最新实例）。
 
-### 优先级 0 · 轨 A 的两条阻断（两方收敛，闭环后轨 A 即可复审）
+### 优先级 0 · 两方以上收敛的阻断（闭环后可重新申请两轨 L1/PG-0）
 
-1. **[Claude A-P1-1 = Grok P1-1] E7 源态四处只改对两处**：`docs/PRD_CHANGE_PROPOSAL_v2.5.md:226` 与 `docs/v2.5_CODE_CHANGE_INVENTORY.md:85` 第 6 项删去「或 `REWORK`」，与 PRD `:881` 的 `HOLD`（`CONSENSUS_CHECK`）对齐。
-   *验收*：`grep -rn 'CONSENSUS_CHECK` 或 `REWORK' docs/ --include='*.md' | grep -v '/reviews/'` **零命中**（当前恰好命中这 2 处）。**这是两行的修改量。**
-2. **[Codex P1-1 = Claude A-P1-2] D-6 独裁帽与双 quorum 落到 Loader**：Draft-07 表达不了跨项求和，故 gate 1/2/3 应在 `ConfigManager.load()` 实现——加载时计算 $W=\sum w_i$，逐一校验 $\forall i, 3w_i < 2W$（不满足按提案 `:410` **拒绝启动**），并把 `seat_quorum_required` / `weight_quorum_required` 分别强制为 $\lceil 2N/3 \rceil$ / $\lceil 2W/3 \rceil$；同时修正 `src/macao/consensus/vote.py:180` 的 `weight_quorum_required` 分母（现用席位数 N，应为总权重 W）。`docs/schemas/README.md` 写明「gate 1/2/3 由 Config Loader 保证，契约不校验」，避免再把 `const: true` 表述为「物理锁死」。
-   *验收*：权重 `[5,1,1]` 与 quorum 低于公式的两份配置被 `ConfigManager.load()` 拒绝并打印拒因；两份反例进 Loader 层测试（非 Schema fixture）。
+1. **[Claude A-P1-1 = Grok 轨 A/B P1-1] `review_disposition` 契约收紧后，提案 §4.3 与 UC-6 处置示例未跟进**：`docs/PRD_CHANGE_PROPOSAL_v2.5.md:159` 与 `docs/usercases/UC6-issue-triage-rework.md:36` 的 `generated_at` 键在 `review_disposition.schema.json` 中不存在（契约只声明 `timestamp`），两处示例现均被拒。
+   *验收*：两处键改为 `timestamp`（与 PRD §2.5、正例 fixture 一致）后，`validate_review_disposition(...)` 对两个抽出对象均返回 `(True, None)`；`grep -rn '^generated_at:' docs/PRD_CHANGE_PROPOSAL_v2.5.md docs/usercases/` 零命中。
+2. **[Claude A-P1-2 / Codex P1-1] 编排器归一化丢弃 `team`/`policy`，加权与 policy 参数运行时不生效**：`src/macao/workflow/orchestrator.py:122-134` 的 `self.config` 归一化字典不含 `team`/`policy`，导致 `:677-682` 计算的 `reviewer_weights`/`policy_cfg` 恒为空；决策路径 `:566-600` 的票面无 `weight`；`vote_result.json.policy_snapshot`（D-1 不可变记录）因此写入派生默认值而非 `macao.yaml` 实际配置。
+   *验收*：`Orchestrator.__init__` 保留 `team`/`policy`；两处 `ConsensusEngine.evaluate()`/`generate_vote_result()` 调用均传入 `configured_weight`+`policy`+`reviewer_weights`；新增集成测试断言 `vote_result["policy_snapshot"]` 与 `macao.yaml` `policy` 逐字段相等，且 `vote_weight=[1,1,2]` + 票型 `[YES,YES,NO]` ⇒ `DEADLOCK`。
+3. **[Claude A-P1-3 / Codex P1-2] `submit_disposition()` 缺少与当前轮计票的绑定与穷尽覆盖校验**：`orchestrator.py:784-830` 只校验 Draft-07 Schema 与 `disposition_status == "FINAL"`，`dispositions: []` 或伪造的 `vote_result_ref`/`issues_index_sha256` 均可放行并直推 `MERGING`。Codex 另指出未校验 `task_id`/`checkpoint_ref`/`review_round`/`executor` 与当前轮一致。
+   *验收*：补齐三项前置断言（决策为 `APPROVED` 或合法 override；`dispositions` 的 issue_id 集合与 `vote_result.issues_index` 严格相等；`vote_result_ref.sha256`/`issues_index_sha256` 与重算值一致），每项各配一条否定测试。
 
-### 优先级 1 · 门禁固化（连续第 5 轮登记，本轮已完成三分之一）
+### 优先级 1 · Codex 单方发现，建议本轮一并处理
 
-3. **第一段已入 CI**（`tests/test_prd_snippets_schema.py`，PRD 示例 × 契约）——这很可能是本轮「修复未引入新缺陷」的直接原因。请**扩到用例与提案的全部围栏**。
-4. **补第二段**：用例 / 提案声明的每个判据、分支、状态转移边 ×「是否可由契约表达 / 是否在 PRD §3.3 转移表中存在对应边」。**本轮阻断项 1 正是这一段能自动捕获的类型。**
-5. **补第三段**：`docs/reviews/` 双向对账（脚本见 Claude `4027cce` 报告 §三 A-P1-4）。
-6. **反例 fixture 必须断言拒因关键字**，而非只断言被拒——`aep_payload_oversized.json` 就是缺这一条才让一个未超标（44 字符 / 298 字节）的样本冒充字节预算门禁的证据。
+4. **超时终局产物缺 `deadline`/`last_ping_at`**（Codex P1-3）：`vote.py:136-148` 合成的 timeout 票只写 `source`，提案 `:113`（D-3）明定必须记录 deadline 与最后一次 ping；`vote_result.schema.json:50-51` 两字段仅为可选，与「必须记录」矛盾。DEADLOCK 分支 `:607-615` 亦未传 `task_id`/`reviewer_weights`/`policy`，与正常分支 `:685` 输入不对称。
+   *验收*：timeout 票补齐两字段并设为 `source: timeout` 时的必填条件；DEADLOCK 分支与正常分支使用同一套（task/policy/weights）调用参数。
+5. **`vote_result.json` 非真正不可变**（Codex P1-4）：`vote.py:282-286` 每次无条件 `open(..., "w")` 重写，无存在性检查、无 round/sha 冲突拒绝。
+   *验收*：改为按 task/ref/round 隔离路径的原子 create-if-absent；已存在则只读复用，内容不一致 fail-closed；补同轮重复调用不变性测试。
 
-### 优先级 2 · P2 批次（不阻断定级，Phase 1 前处理）
+### 优先级 2 · P2/P3 批次（不阻断定级，Phase 1 前处理）
 
-7. **契约层**：`vote_result_ref` 进 `required` 并补进 valid fixture（Codex P1-2 / Claude P2-3）；8 类 payload 补 `additionalProperties: false`、裁定是否继续接受 `AEP/1.0`（Codex P1-3 / Claude P2-4）；`aep_envelope.schema.json:72` 的 `$ref` 改 `$defs` 内联或相对文件路径，使契约库自包含（Claude P2-1）；`macao_config` 的 `policy` 与根级补 `additionalProperties: false`，堵住已删的 `min_effective_votes` 被塞回（Claude P2-7）；`diff_policy` 收敛为枚举或改 `schemas/README.md:26` 措辞（Claude P2-6）。
-8. **用例层**：UC-8 §6 增纯本地模式断言（本轮新增分支尚无测试落点，Claude P2-5）；修 5 处悬空引用 UC-2 §11.4、UC-4 §12.5×3、UC-8「§14.5 三条件」（四轮未闭）；删 UC-5 §2.b 浮点「赞成加权占比」旁注；补 `reconcile` 分册（D-9 四命令中唯一无用例者）；`UC1-init-gemini.md` 补五个可验收小节。
-9. **PRD**：§14.2 `role_view` 表补「override APPROVED 且待 FINAL → `SHOULD_DISPOSE`」行（五轮未闭）。
+6. **`state_engine.py:102` Layer 1c 与 `orchestrator.py:913` E7 `APPROVED` 直跳 `MERGING`**（Claude A-P2-1/A-P2-2）：均绕开 disposition 守卫；Layer 1c 当前无调用方，E7 路径已由 CLI 接线，优先处理后者。
+7. **`EXTEND` override 选项文档三处声明（PRD `:881`、提案 `:230`、UC-7 `:31,:81`）但机器契约无该值**（Claude A-P2-3 / B-P2-2）：`OverrideChoice` 与 CLI `click.Choice` 均只有 4 个成员，UC-7 `:81` 的验收标准在现行契约下不可满足。二选一：补齐 `EXTEND` 或删除文档声明。
+8. **`vote_result` 双别名并存**（Claude A-P2-4）：`generated_at`/`timestamp`、`executor_id`/`executor` 仍同时声明且同时写出，是本轮阻断项 1 的直接成因；建议全库统一为 `timestamp`。
+9. **围栏抽检门禁扩面**（Claude A-P2-6，连续第 6 轮登记）：`tests/test_prd_snippets_schema.py` 只覆盖 `docs/MACAO_PRD_v2.md` 六节，不含提案与用例文件；本轮两条 P1 恰好落在缺口内。
+10. **D-9 的 `reconcile` 在用例体系零命中**（Claude B-P2-1）：`init`/`adopt` 有 UC-1、`doctor` 有 UC-10，`reconcile` 无任何用例，「全量用例体系」存在覆盖缺口。
+11. **Markdown 份数口径连续第 3 轮不一致**（Claude A-P3-2）：`git ls-files '*.md'` = 205、工作区 = 209，申请称 212，两种口径均不符；建议固定为 `git ls-files '*.md' | wc -l`。
+12. **反例 fixture 拒因归属需精确标注**（Claude A-P3-3，第 2 轮登记）：3 份 `macao_config_*` 反例在 Draft-07 单独下 ACCEPT，仅由 `validate_config` 语义层拒绝，不得表述为 Schema 物理锁死。
 
 ### 跨轨治理
 
-10. **申请正文不得把「部分闭环」写成「全量物理闭环」**。本轮申请 §1.2 称「D-6 反支配门禁 Schema 物理锁死」、§1.3 称「提案彻底清理」，两处经三方独立机验均不成立——而其余 6 项闭环是真实且高质量的。把未尽项如实标注，比整体宣称「100%」更有利于快速通过：本轮两条阻断合计不过数行修改量。
-11. **申请的自动化声明须写明命令与口径**。本轮 §3.2 称 188 份 Markdown，实测 `git ls-tree -r a0123e8` = 184、`git ls-files` = 187、`find docs` = 187、`find -L docs` = 200，四份口径无一相符；「0 控制字符」的结论各方复现为真。此项已连续五轮出现。
-12. **轨 B 若获委员会共识授予，Phase 1 编码启动前须先闭环优先级 0 第 2 项**：用例正确写下了 D-6 五重公式，但当前实现中独裁帽与双 quorum 三道门禁并不存在，照用例验收将验不出这三道门禁。
+13. **申请正文的完成式措辞需降级**：两份申请多处使用「彻底打通」「严密驻留」「全面对齐」「全部阻断项均已完成代码、契约与文档级的物理闭环」，其中集成层（编排器加权、`submit_disposition` 守卫）与文档层（提案/UC-6 示例）均被证伪。Codex 建议改为「目标实现中/待 P1 验收」直至上述反例被覆盖。
+14. **契约任何一次收紧后，必须重抽全部引用该契约的文档围栏**——不能仅凭「正文相对上轮无 diff」沿用历史授予结论。本轮两方（Claude、Grok）据此推翻了各自对轨 B 连续两轮的 `YES_APPROVE`。
+15. **两轨 P1 闭合前不建议单独推进轨 B 授予**：轨 B 的唯一 P1（B-P1-1）与轨 A 的 A-P1-1 同源，且轨 B 用例体系引用的运行时闭环（UC-5 加权门禁、UC-6/UC-7 E4 守卫）与轨 A 阻断项 2、3 直接相关，同一次修复即可解两轨。
 
 ### 代码轨（L4 / PG-3）
 
-13. **`42b5c07` 终局定级认证仍在复审中**：目前仅 GLM 1 份报告，Claude / Codex / Grok / Kimi / Qwen / ZCode 尚未出具。按 §8「沉默 ≠ 同意」，**维持 L3 / PG-2**。
+16. **`42b5c07` 终局定级认证仍在复审中**：目前仅 GLM 1 份报告，Claude / Codex / Grok / Kimi / Qwen / ZCode 尚未出具。按 §8「沉默 ≠ 同意」，**维持 L3 / PG-2**。
 
 ### 登记与治理
 
-14. **本文件对账已于本次执行**：补入 `a0123e8` 轮 4 份结论，计数由 124/26 更正为 **128/29**，双向均为 0。**下一轮申请复审前须再次全量对账**；申请方不得以 STATUS 的登记子集作为闭环核验边界（本文件第 4 行）。
+17. **本文件对账已于本次执行**：补入 `73576c5` 轮 6 份结论，计数由 132/35 更正为 **138/35**（申请份数不变，`review-request-73576c5*` 三份此前已计入），结论类由 132 更正为 138（`review-result-*` 138 + `review-2.5-*` 2 + `REVIEW_METHODOLOGY_*` 2 = 142，见文件头行），双向均为 0。**下一轮申请复审前须再次全量对账**；申请方不得以 STATUS 的登记子集作为闭环核验边界（本文件第 4 行）。
