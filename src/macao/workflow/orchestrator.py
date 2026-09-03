@@ -27,8 +27,10 @@ from macao.workflow.fsm import WorkflowFSM
 from macao.workflow.transitions import TransitionTable
 from macao.utils.git_utils import GitManager
 from macao.core.config import ConfigManager
+import hashlib
 from macao.core.schema import validate_admin_override
 from macao.core.schema import validate_dev_manifest
+from macao.core.schema import validate_review_disposition
 
 
 def parse_duration(val: Union[str, int, float], default: Optional[float] = None) -> float:
@@ -671,6 +673,14 @@ class Orchestrator:
                     )
                 return None, None
 
+            # Build reviewer_weights and policy
+            reviewer_weights = {}
+            for r_cfg in self.config.get("team", {}).get("reviewers", []):
+                if isinstance(r_cfg, dict) and "id" in r_cfg:
+                    reviewer_weights[r_cfg["id"]] = r_cfg.get("vote_weight", 1)
+
+            policy_cfg = self.config.get("policy", {})
+
             # Generate and write authoritative vote_result.json for valid non-deadlock decisions
             vdata = self.vote_aggregator.generate_vote_result(
                 checkpoint_ref=ref,
@@ -680,7 +690,10 @@ class Orchestrator:
                 reviews=valid_reviews,
                 human_resolution=None,
                 timed_out_reviewers=timed_out_reviewers,
-                write_to_disk=True
+                write_to_disk=True,
+                task_id=task_id,
+                reviewer_weights=reviewer_weights,
+                policy=policy_cfg
             )
 
             # Register vote_result artifact in store (P1-2)
@@ -693,6 +706,55 @@ class Orchestrator:
             )
 
             if decision == Decision.APPROVED:
+                if vdata.get("requires_disposition"):
+                    # PRD §2.4 / §3.3 / UC-5 / Claude A-P1-4 / Codex P1-2:
+                    # APPROVED with issues requires disposition before entering MERGING.
+                    disp_path = self.root / ".macao" / ".dispositions" / f"r{rnd}" / "executor.disposition.yml"
+                    has_valid_final_disp = False
+                    all_no_new_checkpoint = False
+
+                    if disp_path.exists():
+                        try:
+                            with open(disp_path, "r", encoding="utf-8") as df:
+                                disp_data = yaml.safe_load(df)
+                            is_valid, _ = validate_review_disposition(disp_data)
+                            if is_valid and disp_data.get("disposition_status") == "FINAL":
+                                has_valid_final_disp = True
+                                items = disp_data.get("dispositions", [])
+                                all_no_new_checkpoint = all(not itm.get("requires_new_checkpoint", False) for itm in items)
+                                any_requires_new_checkpoint = any(itm.get("requires_new_checkpoint", False) for itm in items)
+                                if any_requires_new_checkpoint:
+                                    change = self.fsm.transition(task_id, AgentState.REWORK, "E5a", vdata)
+                                    return change, vdata
+                        except Exception:
+                            pass
+
+                    if not (has_valid_final_disp and all_no_new_checkpoint):
+                        # Publish DISPOSITION_REQUIRED AEP and HOLD in CONSENSUS_CHECK.
+                        vr_file = self.root / ".macao" / "vote_result.json"
+                        vote_result_sha = "0" * 64
+                        if vr_file.exists():
+                            with open(vr_file, "rb") as f:
+                                vote_result_sha = hashlib.sha256(f.read()).hexdigest()
+                        self.msg_bus.publish(
+                            msg_type=AEPType.DISPOSITION_REQUIRED,
+                            from_agent="macao",
+                            to_agent=exec_id,
+                            payload={
+                                "task_id": task_id,
+                                "checkpoint_ref": ref or "c1a2b3d",
+                                "review_round": rnd,
+                                "vote_result_ref": {
+                                    "path": ".macao/vote_result.json",
+                                    "evidence_commit": ref or "c1a2b3d",
+                                    "sha256": vote_result_sha
+                                },
+                                "issues_index_sha256": vdata.get("issues_index_sha256", "0" * 64),
+                                "timeout_deadline": (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)).isoformat()
+                            }
+                        )
+                        return None, vdata
+
                 change = self.fsm.transition(task_id, AgentState.MERGING, "E4", vdata)
                 return change, vdata
             elif decision == Decision.REWORK_REQUIRED:
@@ -718,6 +780,56 @@ class Orchestrator:
                 return change, vdata
 
         return None, None
+
+    def submit_disposition(
+        self,
+        task_id: str,
+        disposition_data: Dict[str, Any]
+    ) -> Tuple[bool, str, Optional[StateChange]]:
+        """
+        Submits and validates an executor.disposition.yml manifest (PRD §2.5 / D-2 / UC-6).
+        Transitions via E4 (MERGING) if all issues resolved without new checkpoint,
+        or E5a (REWORK) if requires_new_checkpoint is True.
+        """
+        task = self.store.get_task(task_id)
+        if not task:
+            return False, f"Task {task_id} not found", None
+
+        is_valid, err = validate_review_disposition(disposition_data)
+        if not is_valid:
+            return False, f"Invalid review_disposition schema: {err}", None
+
+        cur_state = AgentState(task["state"])
+        if cur_state != AgentState.CONSENSUS_CHECK:
+            return False, f"Task must be in CONSENSUS_CHECK to accept disposition, current: {cur_state.value}", None
+
+        rnd = task.get("review_round", 1)
+        disp_dir = self.root / ".macao" / ".dispositions" / f"r{rnd}"
+        disp_dir.mkdir(parents=True, exist_ok=True)
+        disp_file = disp_dir / "executor.disposition.yml"
+        with open(disp_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(disposition_data, f)
+
+        self.store.register_artifact(
+            task_id=task_id,
+            kind="disposition",
+            checkpoint_ref=task.get("checkpoint_ref", ""),
+            review_round=rnd,
+            path=str(disp_file.relative_to(self.root))
+        )
+
+        status = disposition_data.get("disposition_status")
+        if status == "FINAL":
+            items = disposition_data.get("dispositions", [])
+            any_requires_new_checkpoint = any(itm.get("requires_new_checkpoint", False) for itm in items)
+            if any_requires_new_checkpoint:
+                change = self.fsm.transition(task_id, AgentState.REWORK, "E5a", disposition_data)
+                return True, "Disposition requires rework, transitioned via E5a to REWORK", change
+            else:
+                change = self.fsm.transition(task_id, AgentState.MERGING, "E4", disposition_data)
+                return True, "Disposition accepted, transitioned via E4 to MERGING", change
+
+        return True, f"Disposition accepted with status {status}", None
 
     def execute_merge(self, task_id: str) -> Tuple[bool, str, Optional[StateChange]]:
         """

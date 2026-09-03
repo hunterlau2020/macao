@@ -5,7 +5,10 @@
   "type": "object",
   "required": [
     "version",
+    "generated_at",
+    "task_id",
     "checkpoint_ref",
+    "executor_id",
     "review_round",
     "reviewers_total",
     "reviewers_responded",
@@ -36,15 +39,18 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["reviewer", "vote"],
+        "required": ["reviewer", "vote", "weight", "source"],
         "properties": {
           "reviewer": { "type": "string" },
           "vote": { "enum": ["YES_APPROVE", "NO_APPROVE", "ABSTAIN"] },
           "weight": { "type": "integer", "minimum": 1 },
-          "source": { "enum": ["manifest", "timeout"] },
+          "source": { "enum": ["manifest", "timeout", "human_admin"] },
           "confidence": { "type": "number" },
-          "issues_count": { "type": "integer" }
-        }
+          "issues_count": { "type": "integer" },
+          "deadline": { "type": "string" },
+          "last_ping_at": { "type": "string" }
+        },
+        "additionalProperties": false
       }
     },
     "policy_snapshot": {
@@ -68,10 +74,11 @@
         "decision_threshold_numerator": { "type": "integer" },
         "decision_threshold_denominator": { "type": "integer" },
         "minimum_winning_seats": { "type": "integer", "minimum": 2 },
-        "dictator_cap_enabled": { "type": "boolean", "const": true },
+        "dictator_cap_enabled": { "type": "boolean" },
         "max_single_weight_share_numerator": { "type": "integer" },
         "max_single_weight_share_denominator": { "type": "integer" }
-      }
+      },
+      "additionalProperties": false
     },
     "consensus_rule": { "type": "string" },
     "vote_breakdown": {
@@ -90,6 +97,7 @@
         "approve": { "type": "integer", "minimum": 0 },
         "reject": { "type": "integer", "minimum": 0 },
         "abstain": { "type": "integer", "minimum": 0 },
+        "effective_votes": { "type": "integer", "minimum": 0 },
         "effective_seats": { "type": "integer", "minimum": 0 },
         "effective_weight": { "type": "integer", "minimum": 0 },
         "approve_seats": { "type": "integer", "minimum": 0 },
@@ -97,8 +105,12 @@
         "reject_seats": { "type": "integer", "minimum": 0 },
         "reject_weight": { "type": "integer", "minimum": 0 },
         "abstain_seats": { "type": "integer", "minimum": 0 },
-        "abstain_weight": { "type": "integer", "minimum": 0 }
-      }
+        "abstain_weight": { "type": "integer", "minimum": 0 },
+        "effective_rate": { "type": "number" },
+        "yes_approve": { "type": "integer" },
+        "no_approve": { "type": "integer" }
+      },
+      "additionalProperties": false
     },
     "input_artifacts": {
       "type": "array",
@@ -112,7 +124,8 @@
           "sha256": { "type": "string" },
           "evidence_commit": { "type": "string" },
           "message_id": { "type": "string" }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "issues_index": {
@@ -133,17 +146,20 @@
               "evidence_commit": { "type": "string" },
               "sha256": { "type": "string" },
               "anchor": { "type": "string" }
-            }
+            },
+            "additionalProperties": false
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "issues_index_sha256": { "type": "string" },
     "requires_disposition": { "type": "boolean" },
     "decision": { "enum": ["APPROVED", "REWORK_REQUIRED", "DEADLOCK"] },
-    "resolution": { "enum": ["automatic", "AUTO_WEIGHTED_CONSENSUS"] },
+    "resolution": { "enum": ["AUTO_WEIGHTED_CONSENSUS", "HUMAN_OVERRIDE"] },
     "decision_confidence": { "type": "number" },
     "summary": { "type": "object" },
     "next_step": { "type": "object" }
-  }
+  },
+  "additionalProperties": false
 }

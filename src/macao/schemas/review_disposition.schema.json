@@ -29,7 +29,8 @@
         "role": { "type": "string" },
         "cli": { "type": "string" },
         "version": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "full_document": {
       "type": "object",
@@ -38,7 +39,8 @@
         "path": { "type": "string" },
         "evidence_commit": { "type": "string" },
         "sha256": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "vote_result_ref": {
       "type": "object",
@@ -71,9 +73,11 @@
               "evidence_commit": { "type": "string" },
               "sha256": { "type": "string" },
               "anchor": { "type": "string" }
-            }
+            },
+            "additionalProperties": false
           }
         },
+        "additionalProperties": false,
         "allOf": [
           {
             "if": {
@@ -114,6 +118,7 @@
       }
     }
   },
+  "additionalProperties": false,
   "allOf": [
     {
       "if": {

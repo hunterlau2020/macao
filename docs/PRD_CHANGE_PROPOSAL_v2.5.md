@@ -125,8 +125,8 @@ Schema 必须通过 `allOf` 条件约束表达以下规则：
 | `APPROVED` 且无 issue | `CONSENSUS_CHECK` → `MERGING`（E4） | 无语义处置 | E4 机器守卫通过 |
 | `APPROVED` 且有 issue | 留在 `CONSENSUS_CHECK`（HOLD） | 发送 `DISPOSITION_REQUIRED`；Executor 逐项处置 | 全部 `requires_new_checkpoint=false` 时 E4；任一为 `true` 时 E5a 进入 `REWORK` |
 | `DEADLOCK` 或门禁失败 | `CONSENSUS_CHECK`（HOLD） | 即时落盘 `vote_result.json`（`decision: DEADLOCK`），发送 `HUMAN_OVERRIDE_REQUEST` | E7 管理员裁决（`APPROVED | REWORK | RETRY_REVIEW | CANCEL`） |
-| disposition 超时 | 当前状态（HOLD） | 发送 `HUMAN_OVERRIDE_REQUEST` | E7 管理员裁决（`APPROVED(带豁免) | EXTEND | REWORK | CANCEL`） |
-| disposition 标记 `NEEDS_ADMIN` | 当前状态（HOLD） | 发送 `HUMAN_OVERRIDE_REQUEST`（带 issue 级上下文） | 管理员提供 issue 级应答后 Executor 产出 FINAL disposition |
+| disposition 超时 | `CONSENSUS_CHECK`（HOLD） | 发送 `HUMAN_OVERRIDE_REQUEST` | E7 管理员裁决（`APPROVED(带豁免) | EXTEND | REWORK | CANCEL`） |
+| disposition 标记 `NEEDS_ADMIN` | `CONSENSUS_CHECK`（HOLD） | 发送 `HUMAN_OVERRIDE_REQUEST`（带 issue 级上下文） | 管理员提供 issue 级应答后 Executor 产出 FINAL disposition |
 
 #### 管理员 E7 覆盖与豁免语义
 
@@ -511,5 +511,5 @@ policy:
 ## 11. 建议决议
 
 1. 确认本提案为 **`ACCEPTED`**；
-2. 正式升级 [`docs/MACAO_PRD_v2.md`](file:///home/debian/macao/docs/MACAO_PRD_v2.md) 至 **v2.5**；
+2. 正式升级 [`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md) 至 **v2.5**；
 3. 同步完成 SRS、FAQ、UC 全套文档改造，并建立代码变更清单。

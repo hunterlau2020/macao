@@ -73,8 +73,11 @@ class VoteAggregator:
         configured_reviewers: int,
         reviews: List[Dict[str, Any]],
         human_resolution: Optional[str] = None,
+        write_to_disk: bool = True,
         timed_out_reviewers: Optional[List[str]] = None,
-        write_to_disk: bool = True
+        task_id: Optional[str] = None,
+        reviewer_weights: Optional[Dict[str, int]] = None,
+        policy: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Calculates consensus decision and produces schema-valid vote_result.json.
@@ -101,18 +104,23 @@ class VoteAggregator:
 
             op_data = data.get("opinion", {})
             issues_list = op_data.get("feedback", {}).get("categories", [])
+            w = int(reviewer_weights.get(rev_id, data.get("reviewer", {}).get("vote_weight", 1))) if reviewer_weights else int(data.get("reviewer", {}).get("vote_weight", 1))
 
             votes_list.append({
                 "reviewer": rev_id,
                 "vote": vote_val,
+                "weight": max(1, w),
+                "source": "manifest",
                 "confidence": float(op_data.get("confidence", 0.9)),
                 "issues_count": len(issues_list)
             })
 
             input_artifacts.append({
+                "reviewer": rev_id,
                 "kind": "review_manifest",
                 "path": r["file_path"],
-                "sha256": r["sha256"],
+                "sha256": r.get("sha256", hashlib.sha256(b"").hexdigest()),
+                "evidence_commit": checkpoint_ref,
                 "message_id": f"msg-rev-{rev_id}"
             })
 
@@ -125,22 +133,38 @@ class VoteAggregator:
                     "description": cat.get("issue", "")
                 })
 
-        # Include timed out reviewers as ABSTAIN (PRD §2.2 / §3.3 / P1-1)
+        # Include timed out reviewers as ABSTAIN (PRD §2.2 / §3.3 / P1-1 / P1-3)
         if timed_out_reviewers:
             for to_rev in timed_out_reviewers:
                 if not any(v["reviewer"] == to_rev for v in votes_list):
+                    w = int(reviewer_weights.get(to_rev, 1)) if reviewer_weights else 1
                     votes_list.append({
                         "reviewer": to_rev,
                         "vote": Vote.ABSTAIN.value,
+                        "weight": max(1, w),
+                        "source": "timeout",
                         "confidence": 0.0,
                         "issues_count": 0
                     })
 
-        decision, breakdown, confidence = ConsensusEngine.evaluate(votes_list, configured_reviewers)
+        total_configured_weight = None
+        if policy and "configured_weight" in policy:
+            total_configured_weight = int(policy["configured_weight"])
+        elif reviewer_weights:
+            total_configured_weight = sum(reviewer_weights.values())
+        else:
+            total_configured_weight = sum(v.get("weight", 1) for v in votes_list) or configured_reviewers
 
-        resolution_type = Resolution.AUTOMATIC.value
+        decision, breakdown, confidence = ConsensusEngine.evaluate(
+            votes_list,
+            configured_reviewers=configured_reviewers,
+            configured_weight=total_configured_weight,
+            policy=policy
+        )
+
+        resolution_type = "AUTO_WEIGHTED_CONSENSUS"
         if human_resolution:
-            resolution_type = Resolution.HUMAN_OVERRIDE.value
+            resolution_type = "HUMAN_OVERRIDE"
             hr_upper = str(human_resolution).strip().upper()
             if hr_upper in ("APPROVED", "MERGE", "FORCE_MERGE"):
                 decision = Decision.APPROVED
@@ -161,54 +185,77 @@ class VoteAggregator:
             Decision.RETRY_REVIEW: "RETRY_REVIEW"
         }
         next_action = next_action_map.get(decision)
-        total_weight = sum(v.get("weight", 1) for v in votes_list)
+
+        pol = policy or {}
+        seat_quorum = pol.get("seat_quorum_required", math.ceil(2 * configured_reviewers / 3)) if configured_reviewers > 0 else 1
+        weight_quorum = pol.get("weight_quorum_required", math.ceil(2 * total_configured_weight / 3))
+        min_winning_seats = pol.get("minimum_winning_seats", 2)
+        dictator_cap_enabled = pol.get("dictator_cap_enabled", True)
+
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        reviewers_responded = len([v for v in votes_list if v.get("source") == "manifest"])
+        reviewers_accounted = len(votes_list)
+
+        issues_index = [
+            {
+                "issue_id": itm.get("id") or f"ISSUE-{idx+1}",
+                "reviewer": itm.get("reviewer", "reviewer"),
+                "disposition_class": "BLOCKING" if itm.get("severity") in ("critical", "major") else "ADVISORY",
+                "severity": itm.get("severity", "minor"),
+                "title": itm.get("description") or itm.get("issue") or itm.get("title") or "Review issue"
+            }
+            for idx, itm in enumerate(issues_to_fix)
+        ]
+        canonical_issues = json.dumps(issues_index, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        issues_index_sha256 = hashlib.sha256(canonical_issues).hexdigest()
 
         result: Dict[str, Any] = {
-            "version": "1.0",
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "version": "2.0",
+            "generated_at": now_iso,
+            "timestamp": now_iso,
+            "task_id": task_id or f"task-{checkpoint_ref[:7]}",
             "checkpoint_ref": checkpoint_ref,
+            "executor_id": executor_id,
             "executor": executor_id,
             "review_round": review_round,
             "reviewers_total": configured_reviewers,
-            "reviewers_responded": len(votes_list),
-            "reviewers_accounted": len(votes_list),
+            "reviewers_responded": reviewers_responded,
+            "reviewers_accounted": reviewers_accounted,
             "votes": votes_list,
             "policy_snapshot": {
                 "rule": "weighted_2/3_v1",
                 "configured_seats": configured_reviewers,
-                "configured_weight": total_weight if total_weight > 0 else configured_reviewers,
-                "seat_quorum_required": math.ceil(2 * configured_reviewers / 3) if configured_reviewers > 0 else 1,
-                "weight_quorum_required": math.ceil(2 * (total_weight if total_weight > 0 else configured_reviewers) / 3),
+                "configured_weight": total_configured_weight,
+                "seat_quorum_required": seat_quorum,
+                "weight_quorum_required": weight_quorum,
                 "decision_threshold_numerator": 2,
                 "decision_threshold_denominator": 3,
-                "minimum_winning_seats": 2,
-                "dictator_cap_enabled": True
+                "minimum_winning_seats": min_winning_seats,
+                "dictator_cap_enabled": dictator_cap_enabled,
+                "max_single_weight_share_numerator": 2,
+                "max_single_weight_share_denominator": 3
             },
             "consensus_rule": "weighted_2/3_v1",
             "vote_breakdown": {
                 "approve": breakdown.get("approve", breakdown.get("yes_approve", 0)),
                 "reject": breakdown.get("reject", breakdown.get("no_approve", 0)),
                 "abstain": breakdown.get("abstain", 0),
-                "effective_seats": len([v for v in votes_list if v.get("vote") != "ABSTAIN"]),
-                "effective_weight": sum(v.get("weight", 1) for v in votes_list if v.get("vote") != "ABSTAIN"),
-                "approve_seats": breakdown.get("approve", breakdown.get("yes_approve", 0)),
-                "approve_weight": sum(v.get("weight", 1) for v in votes_list if v.get("vote") == "YES_APPROVE"),
-                "reject_seats": breakdown.get("reject", breakdown.get("no_approve", 0)),
-                "reject_weight": sum(v.get("weight", 1) for v in votes_list if v.get("vote") == "NO_APPROVE"),
-                "abstain_seats": breakdown.get("abstain", 0),
-                "abstain_weight": sum(v.get("weight", 1) for v in votes_list if v.get("vote") == "ABSTAIN")
+                "effective_votes": breakdown.get("effective_votes", 0),
+                "effective_seats": breakdown.get("effective_seats", 0),
+                "effective_weight": breakdown.get("effective_weight", 0),
+                "approve_seats": breakdown.get("approve_seats", 0),
+                "approve_weight": breakdown.get("approve_weight", 0),
+                "reject_seats": breakdown.get("reject_seats", 0),
+                "reject_weight": breakdown.get("reject_weight", 0),
+                "abstain_seats": breakdown.get("abstain_seats", 0),
+                "abstain_weight": breakdown.get("abstain_weight", 0),
+                "effective_rate": breakdown.get("effective_rate", 1.0),
+                "yes_approve": breakdown.get("yes_approve", 0),
+                "no_approve": breakdown.get("no_approve", 0)
             },
             "input_artifacts": input_artifacts,
-            "issues_index": [
-                {
-                    "issue_id": f"ISSUE-{idx+1}",
-                    "disposition_class": "BLOCKING" if itm.get("severity") in ("critical", "major") else "ADVISORY",
-                    "severity": itm.get("severity", "minor"),
-                    "title": itm.get("issue") or itm.get("title") or itm.get("description") or "Review issue"
-                }
-                for idx, itm in enumerate(issues_to_fix)
-            ],
-            "issues_index_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "issues_index": issues_index,
+            "issues_index_sha256": issues_index_sha256,
             "requires_disposition": len(issues_to_fix) > 0,
             "decision": decision.value,
             "decision_confidence": confidence,

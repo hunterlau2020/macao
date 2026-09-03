@@ -7,6 +7,8 @@ import unittest
 import tempfile
 import datetime
 import subprocess
+import hashlib
+import yaml
 from pathlib import Path
 
 from macao.core.config import ConfigManager
@@ -338,7 +340,8 @@ development:
             with open(vote_json_file, "r", encoding="utf-8") as f:
                 v_res = json.load(f)
 
-            self.assertEqual(v_res["reviewers_responded"], 2)
+            self.assertEqual(v_res["reviewers_accounted"], 2)
+            self.assertEqual(v_res["reviewers_responded"], 1)
             self.assertEqual(v_res["vote_breakdown"]["abstain"], 1)
             votes_map = {v["reviewer"]: v["vote"] for v in v_res["votes"]}
             self.assertEqual(votes_map["opencode"], "ABSTAIN")
@@ -1097,7 +1100,7 @@ development:
             with open(vote_file, "r", encoding="utf-8") as f:
                 vdata = json.load(f)
             self.assertEqual(vdata["decision"], "APPROVED")
-            self.assertEqual(vdata["resolution"], "automatic")
+            self.assertEqual(vdata["resolution"], "AUTO_WEIGHTED_CONSENSUS")
             self.assertEqual(vdata["vote_breakdown"]["approve"], 2)
             self.assertEqual(vdata["vote_breakdown"]["abstain"], 0)
 
@@ -1765,6 +1768,165 @@ development:
             task_updated = orch.store.get_task(t_id)
             self.assertEqual(task_updated["state"], AgentState.READY_FOR_REVIEW.value)
             self.assertEqual(task_updated["checkpoint_ref"], head_r2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_approved_with_advisory_holds_and_requires_disposition(self):
+        """Claude A-P1-4 / Codex P1-2: APPROVED with 1 advisory issue must HOLD in CONSENSUS_CHECK, publish Type E, and only enter MERGING upon FINAL disposition."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@macao.org"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "config", "user.name", "Macao Test"], cwd=tmpdir, check=True)
+            init_file = Path(tmpdir) / "README.md"
+            init_file.write_text("initial", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
+            head_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
+
+            cfg = {
+                "reviewer_ids": ["codex", "kimi"],
+                "team": {
+                    "executor": {"id": "claude", "cli": "claude", "adapter": "pty-wrapper"},
+                    "reviewers": [
+                        {"id": "codex", "cli": "codex", "adapter": "pty-wrapper", "vote_weight": 1},
+                        {"id": "kimi", "cli": "kimi", "adapter": "pty-wrapper", "vote_weight": 1}
+                    ]
+                },
+                "policy": {
+                    "consensus_rule": "weighted_2/3_v1",
+                    "seat_quorum_required": 2,
+                    "weight_quorum_required": 2,
+                    "minimum_winning_seats": 2,
+                    "dictator_cap_enabled": True
+                }
+            }
+            orch = Orchestrator(project_root=tmpdir, config=cfg)
+            task = orch.start_task("Issue Triage Task", "Testing E4 disposition guard")
+            t_id = task["task_id"]
+
+            dev_dir = Path(tmpdir) / ".macao"
+            dev_dir.mkdir(parents=True, exist_ok=True)
+            (dev_dir / ".dev.yml").write_text(f"""version: "1.0"
+task_id: "{t_id}"
+checkpoint_ref: "{head_sha}"
+full_document:
+  path: "docs/reviews/req.md"
+  evidence_commit: "{head_sha}"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+status: ready_for_review
+signal: EXPLICIT
+review_round: 1
+executor:
+  id: claude
+  cli: claude
+development:
+  quality_metrics:
+    tests_passed: true
+  git:
+    latest_commit: "{head_sha}"
+""", encoding="utf-8")
+
+            orch.check_development_checkpoint(t_id)
+            orch.dispatch_review_requests(t_id)
+
+            # Reviewer 1: YES_APPROVE with 1 advisory issue
+            revs_dir = Path(tmpdir) / ".macao" / ".reviews"
+            revs_dir.mkdir(parents=True, exist_ok=True)
+            (revs_dir / "codex.review.yml").write_text(f"""version: "1.0"
+timestamp: "2026-09-01T10:00:00Z"
+task_id: "{t_id}"
+checkpoint_ref: "{head_sha}"
+review_round: 1
+vote: YES_APPROVE
+reviewer:
+  id: codex
+  role: reviewer
+  cli: codex
+opinion:
+  status: APPROVED
+  vote: YES_APPROVE
+  confidence: 0.95
+  feedback:
+    summary: "Good but consider docstring"
+    categories:
+      - type: documentation
+        severity: minor
+        issue: "Consider adding docstring for timeout parameter"
+""", encoding="utf-8")
+
+            # Reviewer 2: YES_APPROVE with 0 issues
+            (revs_dir / "kimi.review.yml").write_text(f"""version: "1.0"
+timestamp: "2026-09-01T10:00:00Z"
+task_id: "{t_id}"
+checkpoint_ref: "{head_sha}"
+review_round: 1
+vote: YES_APPROVE
+reviewer:
+  id: kimi
+  role: reviewer
+  cli: kimi
+opinion:
+  status: APPROVED
+  vote: YES_APPROVE
+  confidence: 0.90
+  feedback:
+    summary: "Clean implementation"
+    categories: []
+""", encoding="utf-8")
+
+            # Evaluate consensus: should HOLD in CONSENSUS_CHECK, not jump to MERGING!
+            change_cons, vdata = orch.collect_and_evaluate_consensus(t_id, configured_reviewers=2)
+            self.assertIsNone(change_cons, "APPROVED with advisory issues MUST NOT transition directly to MERGING")
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CONSENSUS_CHECK.value)
+            self.assertTrue(vdata.get("requires_disposition"))
+
+            # Verify Type E DISPOSITION_REQUIRED was published
+            pending_msgs = orch.msg_bus.receive_pending("claude")
+            type_e_msgs = [m for m in pending_msgs if m["type"] == "DISPOSITION_REQUIRED"]
+            self.assertTrue(len(type_e_msgs) >= 1, "Must publish DISPOSITION_REQUIRED message")
+
+            # Executor submits FINAL disposition with requires_new_checkpoint: false
+            vote_res_sha = hashlib.sha256((Path(tmpdir) / ".macao" / "vote_result.json").read_bytes()).hexdigest()
+            disp_payload = {
+                "version": "1.0",
+                "timestamp": "2026-09-01T10:30:00Z",
+                "task_id": t_id,
+                "checkpoint_ref": head_sha,
+                "review_round": 1,
+                "executor": {
+                    "id": "claude",
+                    "role": "executor",
+                    "cli": "claude"
+                },
+                "full_document": {
+                    "path": "docs/reviews/disp.md",
+                    "evidence_commit": head_sha,
+                    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "vote_result_ref": {
+                    "path": ".macao/vote_result.json",
+                    "evidence_commit": head_sha,
+                    "sha256": vote_res_sha
+                },
+                "issues_index_sha256": vdata["issues_index_sha256"],
+                "disposition_status": "FINAL",
+                "dispositions": [
+                    {
+                        "issue_id": "codex/ISSUE-01",
+                        "reviewer_id": "codex",
+                        "disposition_type": "DEFERRED",
+                        "requires_new_checkpoint": False,
+                        "rationale": "Docstring will be added in follow-up docs PR"
+                    }
+                ]
+            }
+
+            ok, msg, change_disp = orch.submit_disposition(t_id, disp_payload)
+            self.assertTrue(ok, f"submit_disposition failed: {msg}")
+            self.assertIsNotNone(change_disp)
+            self.assertEqual(change_disp.to_state, AgentState.MERGING)
+            self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.MERGING.value)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 

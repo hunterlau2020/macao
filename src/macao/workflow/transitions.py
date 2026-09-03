@@ -34,6 +34,7 @@ class TransitionTable:
             "E4a": (AgentState.MERGING, AgentState.DONE),
             "E4b": (AgentState.MERGING, AgentState.REWORK),
             "E5": (AgentState.CONSENSUS_CHECK, AgentState.REWORK),
+            "E5a": (AgentState.CONSENSUS_CHECK, AgentState.REWORK),
             "E6": (AgentState.REWORK, AgentState.READY_FOR_REVIEW),
             "E8": (None, AgentState.UNKNOWN),         # From any active non-terminal state to UNKNOWN
             "E10": (None, AgentState.CANCELLED),     # From any active non-terminal state to CANCELLED

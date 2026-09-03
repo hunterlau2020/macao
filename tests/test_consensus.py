@@ -82,6 +82,30 @@ class TestConsensusEngine(unittest.TestCase):
         d, _, _ = ConsensusEngine.evaluate(votes_split_abstain, 3)
         self.assertEqual(d, Decision.DEADLOCK)
 
+    def test_weighted_counterexample_deadlock(self):
+        """Codex P1-1: [YES w=2, NO w=1, NO w=1] in 3-seat system must result in DEADLOCK."""
+        votes = [
+            {"reviewer": "codex", "vote": Vote.YES_APPROVE, "weight": 2},
+            {"reviewer": "kimi", "vote": Vote.NO_APPROVE, "weight": 1},
+            {"reviewer": "gemini", "vote": Vote.NO_APPROVE, "weight": 1}
+        ]
+        decision, breakdown, _ = ConsensusEngine.evaluate(votes, configured_reviewers=3, configured_weight=4)
+        self.assertEqual(decision, Decision.DEADLOCK)
+        self.assertEqual(breakdown["approve_weight"], 2)
+        self.assertEqual(breakdown["reject_weight"], 2)
+        self.assertEqual(breakdown["effective_weight"], 4)
+
+    def test_weighted_minimum_winning_seats_enforcement(self):
+        """Even if weight reaches 2/3, single reviewer cannot win if minimum_winning_seats=2."""
+        # 1 reviewer with weight 3 out of total weight 4 (hypothetical or configured)
+        votes = [
+            {"reviewer": "codex", "vote": Vote.YES_APPROVE, "weight": 3},
+            {"reviewer": "kimi", "vote": Vote.NO_APPROVE, "weight": 1}
+        ]
+        # approve_weight = 3 >= 2/3 of 4 (3*3=9 >= 8), but approve_seats = 1 < minimum_winning_seats=2
+        decision, _, _ = ConsensusEngine.evaluate(votes, configured_reviewers=2, configured_weight=4, policy={"minimum_winning_seats": 2, "seat_quorum_required": 2, "weight_quorum_required": 3})
+        self.assertEqual(decision, Decision.DEADLOCK)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -88,16 +88,19 @@ class TestSchemaValidation(unittest.TestCase):
 
     def test_vote_result_schema_v25_strict_decision(self):
         valid_vote = {
-            "version": "1.0",
+            "version": "2.0",
+            "generated_at": "2026-09-01T00:00:00Z",
             "timestamp": "2026-09-01T00:00:00Z",
+            "task_id": "task-1",
             "checkpoint_ref": "a1b2c3d",
+            "executor_id": "cc-ds4",
             "review_round": 1,
             "reviewers_total": 2,
             "reviewers_responded": 2,
             "reviewers_accounted": 2,
             "votes": [
-                {"reviewer": "codex", "vote": "YES_APPROVE", "weight": 1},
-                {"reviewer": "kimi", "vote": "YES_APPROVE", "weight": 1}
+                {"reviewer": "codex", "vote": "YES_APPROVE", "weight": 1, "source": "manifest"},
+                {"reviewer": "kimi", "vote": "YES_APPROVE", "weight": 1, "source": "manifest"}
             ],
             "policy_snapshot": {
                 "rule": "weighted_2/3_v1",
@@ -338,6 +341,7 @@ class TestSchemaValidation(unittest.TestCase):
             "disposition_final_with_needs_admin.yml": "review_disposition",
             "disposition_missing_vote_result_ref.yml": "review_disposition",
             "disposition_rejected_with_new_checkpoint.yml": "review_disposition",
+            "disposition_unrecognized_property.yml": "review_disposition",
             "macao_config_missing_policy.yaml": "macao_config",
             "macao_config_minimum_seats_one.yaml": "macao_config",
             "macao_config_dictator_cap_false.yaml": "macao_config",
@@ -347,6 +351,7 @@ class TestSchemaValidation(unittest.TestCase):
             "review_abstain_invalid.yml": "review_manifest",
             "review_status_vote_conflict.yml": "review_manifest",
             "vote_result_cancelled_decision.json": "vote_result",
+            "vote_result_missing_source.json": "vote_result",
         }
         for ivf in sorted(glob.glob("docs/schemas/fixtures/invalid/*")):
             fname = os.path.basename(ivf)

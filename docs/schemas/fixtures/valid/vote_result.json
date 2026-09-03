@@ -5,6 +5,7 @@
   "task_id": "task-123",
   "checkpoint_ref": "a1b2c3d",
   "executor": "cc-ds4",
+  "executor_id": "cc-ds4",
   "review_round": 1,
   "reviewers_total": 3,
   "reviewers_responded": 3,

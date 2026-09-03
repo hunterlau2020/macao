@@ -211,6 +211,21 @@ policy:
         self.assertTrue(cursor_adp.capabilities().can_execute)
         self.assertTrue(cursor_adp.capabilities().can_review)
 
+    def test_root_macao_yaml_passes_semantic_validation(self):
+        """Verify that the repository's root macao.yaml passes validate_config and ConfigManager.load."""
+        root_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "macao.yaml")
+        self.assertTrue(os.path.exists(root_path), f"macao.yaml must exist at {root_path}")
+        with open(root_path, "r", encoding="utf-8") as f:
+            raw_cfg = yaml.safe_load(f)
+        is_valid, err = validate_config(raw_cfg)
+        self.assertTrue(is_valid, f"Root macao.yaml failed semantic validation: {err}")
+
+        mgr = ConfigManager(root_path)
+        loaded = mgr.load()
+        self.assertEqual(loaded["project"]["name"], "macao-demo")
+        self.assertEqual(mgr.seat_quorum_required, 3)
+        self.assertEqual(mgr.weight_quorum_required, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

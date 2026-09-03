@@ -139,6 +139,16 @@ class ConfigManager:
         return not merge_policy.get("rebase_before_merge", False)
 
     @property
+    def seat_quorum_required(self) -> int:
+        policy = self.data.get("policy", {})
+        return policy.get("seat_quorum_required", 2)
+
+    @property
+    def weight_quorum_required(self) -> int:
+        policy = self.data.get("policy", {})
+        return policy.get("weight_quorum_required", 2)
+
+    @property
     def min_effective_votes(self) -> int:
         policy = self.data.get("policy", {})
         return policy.get("seat_quorum_required", policy.get("min_effective_votes", 2))
