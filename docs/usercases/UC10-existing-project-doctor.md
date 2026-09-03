@@ -1,9 +1,9 @@
-# UC-10 既有项目接入与诊断（`macao doctor` / `preflight`）
+# UC-10 既有项目接入与诊断（`macao doctor` / `preflight` / `reconcile`）
 
 - **设计日期**：2026-09-01
 - **设计人**：glm
 - **状态**：用例设计稿（待实现；实现前须过 Schema/测试对账）
-- **关联**：PRD v2.5 §14.1 第 1–2 步、§14.2、§20（Wizard 与运行时隔离）；FAQ Q8/Q9/Q11；UC-1（init 吸收 setup）；`preflight`/`doctor`（cli/main.py）、`ensure_gitignore_isolation`。
+- **关联**：PRD v2.5 §14.1 第 1–2 步、§14.2、§20（Wizard 与运行时隔离）；FAQ Q8/Q9/Q11；UC-1（init 吸收 setup）；`preflight`/`doctor`/`reconcile`（cli/main.py、D-9 确定性恢复）、`ensure_gitignore_isolation`。
 - **边界声明**：**零侵入**：不自动改既有任务 FSM、不迁移既有分支策略、不动用户代码；一切修复动作显式列出并经确认。诊断是**只读报告 + 建议命令**，不是自动修复器（FAQ Q9：配置文件不记运行态，运行态在 State Store）。
 
 ---
@@ -40,7 +40,7 @@ a1 `macao init`（UC-1 全流程：CLI 探测 → 团队绑定 → `macao.yaml` 
 
 ### d. 对账提示
 
-发现"DB 有活跃任务但产物/席位不一致" → 提示 `macao daemon --once` 触发一次扫描对账（产物型触发是正规路径），**doctor 不自行转移状态**。
+发现"DB 有活跃任务但产物/席位不一致" → 提示 `macao reconcile`（D-9 确定性恢复执行器）或 `macao daemon --once` 触发一次扫描对账（产物型触发是正规路径），**doctor 不自行转移状态**。
 
 ### e. 修复动作（全部显式）
 

@@ -277,7 +277,7 @@ def override():
 
 
 @override.command("resolve")
-@click.option("--choice", required=True, type=click.Choice(["APPROVED", "REWORK", "RETRY_REVIEW", "CANCEL"]), help="Decision choice")
+@click.option("--choice", required=True, type=click.Choice(["APPROVED", "REWORK", "RETRY_REVIEW", "CANCEL", "EXTEND"]), help="Decision choice")
 @click.option("--note", default="", help="Optional note")
 def override_resolve(choice: str, note: str):
     """Resolve human override deadlock or unknown state (PRD §6.1 / §14.1)."""

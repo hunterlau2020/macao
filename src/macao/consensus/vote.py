@@ -87,6 +87,7 @@ class VoteAggregator:
         votes_list = []
         input_artifacts = []
         issues_to_fix = []
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         for rev in reviews:
             rev_data = rev.get("data", {})
@@ -156,12 +157,10 @@ class VoteAggregator:
                         "weight": max(1, w),
                         "source": "timeout",
                         "confidence": 0.0,
-                        "issues_count": 0
+                        "issues_count": 0,
+                        "deadline": t_meta.get("deadline", now_iso),
+                        "last_ping_at": t_meta.get("last_ping_at", now_iso)
                     }
-                    if "deadline" in t_meta:
-                        entry["deadline"] = t_meta["deadline"]
-                    if "last_ping_at" in t_meta:
-                        entry["last_ping_at"] = t_meta["last_ping_at"]
                     votes_list.append(entry)
 
         total_configured_weight = None
@@ -187,13 +186,14 @@ class VoteAggregator:
                 decision = Decision.APPROVED
             elif hr_upper in ("REWORK", "REWORK_REQUIRED", "FORCE_REWORK"):
                 decision = Decision.REWORK_REQUIRED
-            elif hr_upper in ("RETRY", "RETRY_REVIEW"):
-                decision = Decision.RETRY_REVIEW
-            elif hr_upper in ("CANCEL", "CANCELLED"):
-                decision = Decision.CANCELLED
+            elif hr_upper in ("RETRY", "RETRY_REVIEW", "CANCEL", "CANCELLED"):
+                raise ValueError(
+                    f"Human resolution '{human_resolution}' cannot be recorded in vote_result.json. "
+                    "Per PRD v2.5 D-1/D-2, RETRY_REVIEW and CANCEL are recorded in admin_override.json."
+                )
             else:
                 raise ValueError(
-                    f"Invalid human_resolution '{human_resolution}'. Must be APPROVED, REWORK, RETRY_REVIEW, or CANCEL"
+                    f"Invalid human_resolution '{human_resolution}'. Must be APPROVED or REWORK_REQUIRED."
                 )
 
         next_action_map = {

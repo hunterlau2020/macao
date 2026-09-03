@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, Set
 
 from macao.core.types import AgentState
-from macao.core.schema import validate_dev_manifest, validate_review_manifest, validate_vote_result
+from macao.core.schema import validate_dev_manifest, validate_review_manifest, validate_vote_result, validate_review_disposition
 from macao.consensus.engine import ConsensusEngine
 
 
@@ -100,6 +100,22 @@ class StateRecognitionEngine:
 
                         decision = vdata.get("decision")
                         if decision == "APPROVED":
+                            if vdata.get("requires_disposition"):
+                                disp_file = self.root / ".macao" / ".dispositions" / f"r{review_round}" / "executor.disposition.yml"
+                                if disp_file.exists():
+                                    try:
+                                        with open(disp_file, "r", encoding="utf-8") as df:
+                                            ddata = yaml.safe_load(df)
+                                        ok_disp, _ = validate_review_disposition(ddata)
+                                        if ok_disp and ddata.get("disposition_status") == "FINAL":
+                                            items = ddata.get("dispositions", [])
+                                            if any(itm.get("requires_new_checkpoint", False) for itm in items):
+                                                return AgentState.REWORK, "E5a", ddata
+                                            else:
+                                                return AgentState.MERGING, "E4", ddata
+                                    except Exception:
+                                        pass
+                                return None, "HOLD", {"reason": "DISPOSITION_REQUIRED"}
                             return AgentState.MERGING, "E4", vdata
                         elif decision == "REWORK_REQUIRED":
                             if review_round < max_rework_rounds:

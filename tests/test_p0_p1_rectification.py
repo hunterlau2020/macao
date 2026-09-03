@@ -2185,3 +2185,102 @@ opinion:
             self.assertEqual(vr_data["policy_snapshot"]["weight_quorum_required"], 3)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_override_choice_extend_refreshes_hold(self):
+        """Verify OverrideChoice.EXTEND refreshes timer in CONSENSUS_CHECK and records admin_override.json (UC-7 / Claude A-P2-3)."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            orch = Orchestrator(project_root=tmpdir, config={"reviewer_ids": ["codex", "opencode"]})
+            task = orch.start_task("Extend Task", "Testing EXTEND override")
+            t_id = task["task_id"]
+
+            # Advance to CONSENSUS_CHECK
+            orch.fsm.transition(t_id, AgentState.READY_FOR_REVIEW, "E1_PRODUCED", {"checkpoint_ref": "c1a2b3d"})
+            orch.fsm.transition(t_id, AgentState.WAITING_REVIEW, "E2", {"checkpoint_ref": "c1a2b3d"})
+            orch.fsm.transition(t_id, AgentState.CONSENSUS_CHECK, "E3", {"checkpoint_ref": "c1a2b3d"})
+
+            change = orch.resolve_override(t_id, OverrideChoice.EXTEND, note="Extending timer for executor triage")
+            self.assertEqual(change.from_state, AgentState.CONSENSUS_CHECK)
+            self.assertEqual(change.to_state, AgentState.CONSENSUS_CHECK)
+            self.assertEqual(change.trigger, "E7")
+
+            ov_file = Path(tmpdir) / ".macao" / "admin_override.json"
+            self.assertTrue(ov_file.exists())
+            with open(ov_file, "r", encoding="utf-8") as f:
+                ov_data = json.load(f)
+            self.assertEqual(ov_data["choice"], "EXTEND")
+            self.assertEqual(ov_data["task_id"], t_id)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_state_engine_layer_1c_disposition_check(self):
+        """Verify StateRecognitionEngine Layer 1c enforces disposition check before MERGING (Claude A-P2-1)."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            from macao.workflow.state_engine import StateRecognitionEngine
+            engine = StateRecognitionEngine(project_root=tmpdir)
+            macao_dir = Path(tmpdir) / ".macao"
+            macao_dir.mkdir(parents=True, exist_ok=True)
+            vr_file = macao_dir / "vote_result.json"
+
+            # 1. APPROVED without requires_disposition -> MERGING directly
+            with open("docs/schemas/fixtures/valid/vote_result.json", "r", encoding="utf-8") as f:
+                vr_data = json.load(f)
+            vr_data["task_id"] = "task-layer1c"
+            vr_data["checkpoint_ref"] = "c1a2b3d4e5f6"
+            vr_data["review_round"] = 1
+            vr_data["decision"] = "APPROVED"
+            vr_data["requires_disposition"] = False
+            vr_data["issues_index"] = []
+            with open(vr_file, "w", encoding="utf-8") as f:
+                json.dump(vr_data, f)
+
+            st, tr, d = engine.recognize_state(AgentState.CONSENSUS_CHECK, "c1a2b3d4e5f6", 1)
+            self.assertEqual(st, AgentState.MERGING)
+            self.assertEqual(tr, "E4")
+
+            # 2. APPROVED with requires_disposition: True and NO disposition -> HOLD
+            vr_data["requires_disposition"] = True
+            vr_data["issues_index"] = [
+                {
+                    "issue_id": "issue-1",
+                    "reviewer": "gemini",
+                    "disposition_class": "ADVISORY",
+                    "severity": "minor",
+                    "title": "Advisory issue"
+                }
+            ]
+            with open(vr_file, "w", encoding="utf-8") as f:
+                json.dump(vr_data, f)
+
+            st, tr, d = engine.recognize_state(AgentState.CONSENSUS_CHECK, "c1a2b3d4e5f6", 1)
+            self.assertIsNone(st)
+            self.assertEqual(tr, "HOLD")
+            self.assertEqual(d.get("reason"), "DISPOSITION_REQUIRED")
+
+            # 3. APPROVED with requires_disposition: True and valid FINAL disposition -> MERGING
+            disp_dir = macao_dir / ".dispositions" / "r1"
+            disp_dir.mkdir(parents=True, exist_ok=True)
+            disp_file = disp_dir / "executor.disposition.yml"
+            with open(disp_file, "w", encoding="utf-8") as f:
+                yaml.dump({
+                    "version": "1.0",
+                    "task_id": "task-layer1c",
+                    "checkpoint_ref": "c1a2b3d4e5f6",
+                    "review_round": 1,
+                    "executor": {"id": "claude"},
+                    "vote_result_ref": {"path": ".macao/vote_result.json", "evidence_commit": "c1a2b3d4e5f6", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+                    "issues_index_sha256": vr_data.get("issues_index_sha256"),
+                    "disposition_status": "FINAL",
+                    "full_document": {"path": "docs/reviews/disp.md", "evidence_commit": "c1a2b3d4e5f6", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+                    "dispositions": [
+                        {"issue_id": "issue-1", "disposition_type": "ADOPTED", "requires_new_checkpoint": False, "rationale": "Addressed"}
+                    ]
+                }, f)
+
+            st, tr, d = engine.recognize_state(AgentState.CONSENSUS_CHECK, "c1a2b3d4e5f6", 1)
+            self.assertEqual(st, AgentState.MERGING)
+            self.assertEqual(tr, "E4")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+

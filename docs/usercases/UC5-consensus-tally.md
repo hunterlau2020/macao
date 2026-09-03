@@ -26,7 +26,7 @@ E3 产物型转移 `WAITING_REVIEW → CONSENSUS_CHECK`；收集本轮全部合�
 
 - 每席位读 `vote`（三值）与 `macao.yaml` 的 `vote_weight`（静态政策，默认 1）
 - **有效权重** = 未弃权席位权重和（弃权不进分母）
-- **赞成加权占比** = Σ(approve 权重) / 有效权重；反对同理
+- **赞成加权占比** = Σ(approve 权重) / 有效权重；反对同理（该占比仅用于展示与 `decision_confidence` 报告量，不参与任何门禁判定）
 - **加权五重门禁（纯整数）**：
   1. 配置期独裁帽：$\forall i, 3w_i < 2W$
   2. 席位法定人数：$E_N \ge \lceil 2N/3 \rceil$

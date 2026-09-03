@@ -43,7 +43,7 @@ class TransitionTable:
         # Special handling for E7 & E9 (Human Override from CONSENSUS_CHECK, PRD §3.3:841 / P2-NEW-5 / Codex P2-1)
         if trigger_id == "E7":
             if from_state in (AgentState.CONSENSUS_CHECK, AgentState.UNKNOWN):
-                return to_state in (AgentState.MERGING, AgentState.REWORK, AgentState.WAITING_REVIEW, AgentState.CANCELLED)
+                return to_state in (AgentState.MERGING, AgentState.REWORK, AgentState.WAITING_REVIEW, AgentState.CANCELLED, AgentState.CONSENSUS_CHECK)
             return False
 
         if trigger_id == "E9":

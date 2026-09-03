@@ -97,5 +97,34 @@ class TestPRDSnippetsSchema(unittest.TestCase):
             self.assertGreaterEqual(found, 1, f"Expected at least 1 disposition snippet in {p}, found {found}")
 
 
+    def test_all_usercases_and_proposals_code_snippets(self):
+        """Comprehensive fence extraction test for all usercase and proposal markdown documents (Claude A-P2-6)."""
+        tested_count = 0
+        for p in sorted(glob.glob("docs/usercases/*.md")):
+            with open(p, "r", encoding="utf-8") as f:
+                t = f.read()
+            matches = re.findall(r"^```(?:yaml|json)\n(.*?)^```", t, re.M | re.S)
+            for code in matches:
+                try:
+                    o = yaml.safe_load(code)
+                except Exception:
+                    continue
+                if not isinstance(o, dict):
+                    continue
+                if "team" in o and "policy" in o:
+                    errs = list(self.get_validator("macao_config").iter_errors(o))
+                    self.assertEqual(len(errs), 0, f"{p} config failed schema: {errs}")
+                    tested_count += 1
+                elif "signal" in o and "checkpoint_ref" in o:
+                    errs = list(self.get_validator("dev_manifest").iter_errors(o))
+                    self.assertEqual(len(errs), 0, f"{p} dev_manifest failed schema: {errs}")
+                    tested_count += 1
+                elif "disposition_status" in o:
+                    errs = list(self.get_validator("review_disposition").iter_errors(o))
+                    self.assertEqual(len(errs), 0, f"{p} disposition failed schema: {errs}")
+                    tested_count += 1
+        self.assertGreaterEqual(tested_count, 3, f"Expected at least 3 usercase schema snippets, found {tested_count}")
+
+
 if __name__ == "__main__":
     unittest.main()

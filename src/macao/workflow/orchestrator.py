@@ -480,13 +480,16 @@ class Orchestrator:
         timed_out_reviewers: Optional[List[str]] = None
     ) -> Tuple[Optional[StateChange], Optional[Dict[str, Any]]]:
         """
-        Consensus Engine Evaluation:
+        Consensus Engine Evaluation (PRD §3.3 / D-1 / D-2 / D-6 / UC-5 / UC-6):
         1. Checks quorum in WAITING_REVIEW -> moves to CONSENSUS_CHECK (E3).
-        2. Evaluates votes in CONSENSUS_CHECK:
-           - APPROVED -> writes vote_result.json, moves to MERGING (E4).
-           - REWORK_REQUIRED -> writes vote_result.json, moves to REWORK (E5 if round < max else HOLD).
-           - DEADLOCK / TIMEOUT ABSTAIN -> DOES NOT WRITE vote_result.json (PRD §3.3 E3 / §6.1 / P1-NEW-3 / P1-NEW-7), triggers HUMAN_OVERRIDE_REQUEST, HOLDS in CONSENSUS_CHECK.
-           - MAX_REWORK_ROUNDS_REACHED -> DOES NOT WRITE vote_result.json to disk (PRD §3.3 E5/E7 / Codex P0-3), triggers HUMAN_OVERRIDE_REQUEST, HOLDS.
+        2. Evaluates weighted votes in CONSENSUS_CHECK:
+           - APPROVED (zero issues) -> writes immutable vote_result.json, transitions via E4 to MERGING.
+           - APPROVED (with issues) -> writes immutable vote_result.json, publishes Type E DISPOSITION_REQUIRED,
+             and HOLDS in CONSENSUS_CHECK until executor submits valid FINAL executor.disposition.yml.
+           - REWORK_REQUIRED -> writes immutable vote_result.json, transitions via E5 to REWORK (if round < max else HOLD).
+           - DEADLOCK / TIMEOUT ABSTAIN -> writes immutable vote_result.json (PRD §3.3 E3 / D-1 / D-3),
+             publishes Type H HUMAN_OVERRIDE_REQUEST, and HOLDS in CONSENSUS_CHECK for E7 human override.
+           - MAX_REWORK_ROUNDS_REACHED -> publishes Type H HUMAN_OVERRIDE_REQUEST, HOLDS for E7 human override.
         """
         task = self.store.get_task(task_id)
         if not task:
@@ -603,16 +606,19 @@ class Orchestrator:
             if dispatch_audits:
                 to_deadline = dispatch_audits[0].get("detail", {}).get("deadline")
                 to_ping = dispatch_audits[0].get("ts") or dispatch_audits[0].get("timestamp")
+            if not to_deadline:
+                to_deadline = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            if not to_ping:
+                to_ping = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
             timeout_meta_map = {}
             if timed_out_reviewers:
                 for to_rev in timed_out_reviewers:
                     w = int(reviewer_weights.get(to_rev, 1))
-                    t_entry = {}
-                    if to_deadline:
-                        t_entry["deadline"] = to_deadline
-                    if to_ping:
-                        t_entry["last_ping_at"] = to_ping
+                    t_entry = {
+                        "deadline": to_deadline,
+                        "last_ping_at": to_ping
+                    }
                     timeout_meta_map[to_rev] = t_entry
 
                     if not any(v["reviewer"] == to_rev for v in votes_list):
@@ -622,12 +628,10 @@ class Orchestrator:
                             "weight": max(1, w),
                             "source": "timeout",
                             "confidence": 0.0,
-                            "timeout": True
+                            "timeout": True,
+                            "deadline": to_deadline,
+                            "last_ping_at": to_ping
                         }
-                        if to_deadline:
-                            v_entry["deadline"] = to_deadline
-                        if to_ping:
-                            v_entry["last_ping_at"] = to_ping
                         votes_list.append(v_entry)
                         if to_rev not in historical_timed_out_ids:
                             self.store.log_audit_event(task_id, "REVIEWER_TIMEOUT_ABSTAIN", {
@@ -877,15 +881,21 @@ class Orchestrator:
         except Exception as e:
             return False, f"Failed to read vote_result.json: {e}"
 
-        # Underlying consensus decision must be APPROVED, or approved by admin override
+        # Underlying consensus decision must be APPROVED, or approved by admin override (PRD §3.3 E7 / UC-7)
         is_approved = (vdata.get("decision") == "APPROVED")
         admin_file = self.root / ".macao" / "admin_override.json"
-        if not is_approved and admin_file.exists():
+        admin_override_id = None
+        if admin_file.exists():
             try:
                 with open(admin_file, "r", encoding="utf-8") as af:
                     a_data = json.load(af)
-                if a_data.get("override_choice") in ("APPROVED", "MERGE"):
+                ch = a_data.get("choice") or a_data.get("override_choice")
+                if (ch in ("APPROVED", "MERGE") and
+                    a_data.get("task_id") == task_id and
+                    a_data.get("checkpoint_ref") == ref and
+                    a_data.get("review_round") == rnd):
                     is_approved = True
+                    admin_override_id = a_data.get("override_id")
             except Exception:
                 pass
 
@@ -911,6 +921,13 @@ class Orchestrator:
 
         if disp_ids != expected_ids:
             return False, f"Dispositions must cover 100% issues exactly: expected {sorted(list(expected_ids))}, got {sorted(list(disp_ids))}"
+
+        for d in disp_items:
+            if d.get("disposition_type") == "EXEMPTED_BY_ADMIN":
+                if not admin_file.exists():
+                    return False, f"Item {d.get('issue_id')} is marked EXEMPTED_BY_ADMIN but no admin_override.json exists"
+                if admin_override_id and d.get("override_id") != admin_override_id:
+                    return False, f"Item {d.get('issue_id')} override_id mismatch: expected {admin_override_id}, got {d.get('override_id')}"
 
         if disposition_data.get("disposition_status") == "FINAL":
             if any(d.get("disposition_type") == "NEEDS_ADMIN" for d in disp_items):
@@ -1034,17 +1051,20 @@ class Orchestrator:
                 choice_enum = OverrideChoice.RETRY_REVIEW
             elif choice_upper in ("CANCEL", "CANCELLED"):
                 choice_enum = OverrideChoice.CANCEL
+            elif choice_upper in ("EXTEND", "TIMEOUT_EXTEND"):
+                choice_enum = OverrideChoice.EXTEND
             else:
                 choice_enum = OverrideChoice(choice_upper)
         else:
             choice_enum = choice
 
-        # 1. Map choice to target state, trigger ID, and resolution string
+        # 1. Map choice to target state, trigger ID, and resolution string (PRD §3.3 E7 / UC-7)
         choice_map = {
             OverrideChoice.APPROVED: (AgentState.MERGING, "E7", "APPROVED"),
             OverrideChoice.REWORK: (AgentState.REWORK, "E7", "REWORK"),
             OverrideChoice.RETRY_REVIEW: (AgentState.WAITING_REVIEW, "E9", "RETRY_REVIEW"),
-            OverrideChoice.CANCEL: (AgentState.CANCELLED, "E10", "CANCEL")
+            OverrideChoice.CANCEL: (AgentState.CANCELLED, "E10", "CANCEL"),
+            OverrideChoice.EXTEND: (AgentState.CONSENSUS_CHECK, "E7", "EXTEND")
         }
         target_state, trigger_id, resolution_choice = choice_map[choice_enum]
 

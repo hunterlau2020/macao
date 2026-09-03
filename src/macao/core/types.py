@@ -63,11 +63,12 @@ class Resolution(str, Enum):
 
 
 class OverrideChoice(str, Enum):
-    """Valid choices for human override (PRD §3.3 E7, §15.2)."""
+    """Valid choices for human override (PRD §3.3 E7, §15.2, UC-7)."""
     APPROVED = "APPROVED"
     REWORK = "REWORK"
     RETRY_REVIEW = "RETRY_REVIEW"
     CANCEL = "CANCEL"
+    EXTEND = "EXTEND"
 
 
 class ExecutionMode(str, Enum):

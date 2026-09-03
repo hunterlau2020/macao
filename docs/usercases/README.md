@@ -31,7 +31,7 @@ UC-1 init ──► UC-2 task create (E1) ──► UC-3 开发/检查点
                                        归档 / 下一单
 ```
 
-守护与接入不在主链上，但与主旅程并行：`UC-9` 超时守护、`UC-10` doctor/既有项目诊断。
+守护与接入不在主链上，但与主旅程并行：`UC-9` 超时守护、`UC-10` doctor/既有项目诊断与 reconcile 确定性恢复。
 
 ---
 
@@ -48,7 +48,7 @@ UC-1 init ──► UC-2 task create (E1) ──► UC-3 开发/检查点
 | **UC-7** | 人工接管 | 管理员 | Deadlock / init 歧义 / E7 / 超时；`macao override resolve`；写独立 `admin_override.json` | [UC7-human-override.md](UC7-human-override.md) | 设计稿 (v2.5) |
 | **UC-8** | 合并与签字 | 编排器 + 管理员 | `MERGING` → `DONE`（E4a）；六道关卡（含 Pre-merge Evidence 校验）；`macao merge approve`；Git 引用与归档 | [UC8-merge-signoff.md](UC8-merge-signoff.md) | 设计稿 (v2.5) |
 | **UC-9** | 超时与守护 | OrchestratorDaemon | per_reviewer 超时 → `ABSTAIN` 计入 `accounted` 触发 E3；隔离迟到票；Layer 3 报告给管理员 | [UC9-timeout-daemon.md](UC9-timeout-daemon.md) | 设计稿 (v2.5) |
-| **UC-10** | 既有项目接入与诊断 | 管理员 | `macao doctor` / `preflight` / gitignore 隔离 / 纯整数共识体检 | [UC10-existing-project-doctor.md](UC10-existing-project-doctor.md) | 设计稿 (v2.5) |
+| **UC-10** | 既有项目接入、诊断与恢复 | 管理员 | `macao doctor` / `preflight` / `reconcile` (D-9) / gitignore 隔离 / 纯整数共识体检 | [UC10-existing-project-doctor.md](UC10-existing-project-doctor.md) | 设计稿 (v2.5) |
 
 ---
 
