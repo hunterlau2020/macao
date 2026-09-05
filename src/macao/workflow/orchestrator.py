@@ -31,6 +31,7 @@ import hashlib
 from macao.core.schema import validate_admin_override
 from macao.core.schema import validate_dev_manifest
 from macao.core.schema import validate_review_disposition
+from macao.utils.logger import get_logger
 
 
 def parse_duration(val: Union[str, int, float], default: Optional[float] = None) -> float:
@@ -80,6 +81,7 @@ class Orchestrator:
 
         self.db_path = self.actual_db_path
         self.store = StateStore(self.actual_db_path, project_root=str(self.root))
+        self.logger = get_logger("macao.orchestrator", str(self.root))
         self.msg_bus = MessageBus(self.actual_db_path)
         self.git = GitManager(str(self.root))
         self.fsm = WorkflowFSM(self.store, str(self.root))
@@ -205,6 +207,7 @@ class Orchestrator:
             }
         )
 
+        self.logger.info(f"Task started: task_id={t_id}, title='{title}', branch={src_branch} -> {target_branch}")
         return self.store.get_task(t_id)
 
     def check_development_checkpoint(self, task_id: str) -> Optional[StateChange]:

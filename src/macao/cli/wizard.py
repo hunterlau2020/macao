@@ -86,6 +86,8 @@ def ensure_gitignore_isolation(project_root: Path) -> bool:
         ".macao/.dev.yml",
         ".macao/vote_result.json",
         ".macao/archive/",
+        ".macao/logs/",
+        ".macao/*.log",
         ".macao/*.db",
         ".macao/*.db-journal",
         ".macao/*.db-wal",

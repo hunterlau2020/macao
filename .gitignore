@@ -11,6 +11,8 @@ build/
 .macao/state.db*
 .macao/worktrees/
 .macao/archive/
+.macao/logs/
+.macao/*.log
 .macao/.reviews/
 .macao/.dev.yml
 .macao/vote_result.json

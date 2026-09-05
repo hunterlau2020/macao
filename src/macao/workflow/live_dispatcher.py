@@ -21,6 +21,7 @@ from macao.adapter.kimi import KimiAdapter
 from macao.adapter.mock import MockAgentAdapter
 from macao.utils.git_utils import GitManager
 from macao.utils.ansi import strip_ansi
+from macao.utils.logger import get_logger
 
 
 CLI_ADAPTER_REGISTRY = {
@@ -185,6 +186,7 @@ class LiveAgentDispatcher:
     def __init__(self, project_root: str = "."):
         self.project_root = Path(project_root).resolve()
         self.git = GitManager(str(self.project_root))
+        self.logger = get_logger("macao.dispatcher", str(self.project_root))
 
     def get_adapter_for_reviewer(self, reviewer_cfg: Dict[str, Any]) -> Any:
         """Instantiates appropriate agent adapter based on reviewer configuration."""
@@ -339,6 +341,16 @@ class LiveAgentDispatcher:
                 "error": str(e)
             }
         finally:
+            try:
+                raw_session = adapter.get_logs(2000)
+                if raw_session:
+                    rev_log_dir = self.project_root / ".macao" / "logs" / "reviewers"
+                    rev_log_dir.mkdir(parents=True, exist_ok=True)
+                    log_file = rev_log_dir / f"{agent_id}_r{review_round}.log"
+                    log_file.write_text(raw_session, encoding="utf-8")
+                    self.logger.info(f"Saved reviewer '{agent_id}' raw session log to {log_file.relative_to(self.project_root)} ({len(raw_session)} chars)")
+            except Exception as ex:
+                self.logger.warning(f"Failed to persist reviewer session log for {agent_id}: {ex}")
             adapter.stop("dispatch_finished")
             if created_worktree:
                 self.git.remove_isolated_worktree(agent_id, task_id, review_round)

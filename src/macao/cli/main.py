@@ -20,7 +20,7 @@ from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.cursor import CursorAgentAdapter
 from macao.adapter.kimi import KimiAdapter
 from macao.adapter.mock import MockAgentAdapter
-from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status
+from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status, render_audit_table
 
 
 DEFAULT_CONFIG_TEMPLATE = """# MACAO macao.yaml Orchestration Configuration (PRD §13)
@@ -268,6 +268,66 @@ def status():
 
     artifacts = store.list_artifacts(task_data["task_id"])
     render_task_status(task_data, artifacts)
+
+
+@cli.command("logs")
+@click.option("-n", "--lines", default=50, help="Number of lines to display")
+@click.option("-r", "--reviewer", default=None, help="Inspect raw session log for specific reviewer")
+@click.option("-f", "--follow", is_flag=True, help="Follow log output in real-time")
+def logs_cmd(lines: int, reviewer: Optional[str], follow: bool):
+    """View orchestration system logs and reviewer agent terminal logs."""
+    import time
+
+    if reviewer:
+        rev_log_dir = Path(".macao/logs/reviewers")
+        matches = sorted(rev_log_dir.glob(f"*{reviewer}*.log")) if rev_log_dir.exists() else []
+        if not matches:
+            console.print(f"[yellow]No reviewer session logs found matching '{reviewer}' in .macao/logs/reviewers/[/yellow]")
+            return
+        target = matches[-1]
+        console.print(f"[bold cyan]Reviewer Log: {target}[/bold cyan]\n")
+        content = target.read_text(encoding="utf-8", errors="replace")
+        all_lines = content.splitlines()
+        for line in all_lines[-lines:]:
+            console.print(line)
+        return
+
+    log_file = Path(".macao/logs/macao.log")
+    if not log_file.exists():
+        console.print("[yellow]No log file found at .macao/logs/macao.log. Run a task or daemon first.[/yellow]")
+        return
+
+    if follow:
+        console.print(f"[dim]Following {log_file} (Ctrl+C to exit)...[/dim]\n")
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(0, os.SEEK_END)
+            try:
+                while True:
+                    line = f.readline()
+                    if line:
+                        console.print(line.rstrip())
+                    else:
+                        time.sleep(0.5)
+            except KeyboardInterrupt:
+                return
+    else:
+        content = log_file.read_text(encoding="utf-8", errors="replace")
+        all_lines = content.splitlines()
+        for line in all_lines[-lines:]:
+            console.print(line)
+
+
+@cli.command("audit")
+@click.option("-t", "--task", "task_id", default=None, help="Filter by task ID")
+@click.option("-n", "--limit", default=30, help="Maximum number of audit events to display")
+def audit_cmd(task_id: Optional[str], limit: int):
+    """Query immutable audit events recorded in StateStore (PRD §11.4)."""
+    store = StateStore()
+    events = store.list_audit_events(task_id=task_id, limit=limit)
+    if not events:
+        console.print("[yellow]No audit events found.[/yellow]")
+        return
+    render_audit_table(list(reversed(events)))
 
 
 @cli.group()

@@ -143,5 +143,39 @@ def render_e2e_report(result: Dict[str, Any]) -> None:
     archived_summary = f"Archived {archived_count} files" + (f": {', '.join(archived_files)}" if archived_files else "")
     table.add_row("8. Physical Archive", archived_summary, archive_status)
     table.add_row("9. Final FSM State", f"Final task state: {result.get('final_state')}", f"[bold cyan]{result.get('final_state')}[/bold cyan]")
+    console.print(table)
+
+
+def render_audit_table(events: List[Dict[str, Any]]) -> None:
+    """Renders formatted audit events table."""
+    table = Table(title="MACAO Audit Events Log", border_style="cyan")
+    table.add_column("Seq", style="dim", justify="right", width=5)
+    table.add_column("Timestamp", style="green", no_wrap=True)
+    table.add_column("Task ID", style="cyan", no_wrap=True)
+    table.add_column("Event Type", style="bold yellow")
+    table.add_column("Details", style="white")
+
+    for ev in events:
+        detail = ev.get("detail", {})
+        if isinstance(detail, dict):
+            summary_items = [f"{k}={v}" for k, v in detail.items() if k not in ("full_document",)]
+            detail_str = ", ".join(summary_items[:4])
+            if len(summary_items) > 4:
+                detail_str += "..."
+        else:
+            detail_str = str(detail)
+
+        ts = str(ev.get("ts", ""))
+        if "T" in ts:
+            ts = ts.replace("T", " ")[:19]
+
+        table.add_row(
+            str(ev.get("sequence_id", "")),
+            ts,
+            str(ev.get("task_id", "") or "-"),
+            str(ev.get("type", "")),
+            detail_str
+        )
 
     console.print(table)
+
