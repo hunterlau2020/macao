@@ -125,6 +125,41 @@ class TestPRDSnippetsSchema(unittest.TestCase):
                     tested_count += 1
         self.assertGreaterEqual(tested_count, 3, f"Expected at least 3 usercase schema snippets, found {tested_count}")
 
+    def test_all_templates_code_snippets(self):
+        """Verify all YAML/JSON manifest snippets in templates/*.md pass Draft-07 schemas."""
+        from macao.core.schema import SchemaValidator
+        val = SchemaValidator()
+        tested_count = 0
+        for p in sorted(glob.glob("templates/*.md")):
+            with open(p, "r", encoding="utf-8") as f:
+                t = f.read()
+            matches = re.findall(r"^```(?:yaml|json)\s*\n(.*?)\n```", t, re.M | re.S)
+            for code in matches:
+                try:
+                    o = yaml.safe_load(code)
+                except Exception:
+                    continue
+                if not isinstance(o, dict):
+                    continue
+                tested_count += 1
+                matched_schema = None
+                if "signal" in o and "checkpoint_ref" in o:
+                    matched_schema = "dev_manifest"
+                elif "disposition_status" in o:
+                    matched_schema = "review_disposition"
+                elif "override_id" in o:
+                    matched_schema = "admin_override"
+                elif "reviewer" in o and "vote" in o:
+                    matched_schema = "review_manifest"
+                elif "type" in o and "payload" in o:
+                    matched_schema = "aep_envelope"
+
+                self.assertIsNotNone(matched_schema, f"Snippet in {p} must map to a known schema")
+                ok, err = val.validate(matched_schema, o)
+                self.assertTrue(ok, f"Snippet in {p} failed {matched_schema}: {err}")
+        self.assertGreaterEqual(tested_count, 6, f"Expected at least 6 template snippets, found {tested_count}")
+
 
 if __name__ == "__main__":
     unittest.main()
+
