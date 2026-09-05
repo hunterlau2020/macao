@@ -1,0 +1,31 @@
+version: "1.0"
+timestamp: "2026-09-05T12:00:00Z"
+task_id: "task-001"
+checkpoint_ref: "95b7b35"
+review_round: 1
+status: "ready_for_review"
+signal: "EXPLICIT"
+executor:
+  id: "claude-code"
+  role: "executor"
+  cli: "claude-code"
+  version: "1.0.0"
+full_document:
+  path: "docs/reviews/2026-09-05-review-request-95b7b35.md"
+  evidence_commit: "95b7b35"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+development:
+  description: "实现任务核心业务功能"
+  quality_metrics:
+    tests_passed: true
+    tests_total: 10
+    test_coverage: 100.0
+    lint_errors: 0
+    security_scan_passed: true
+  git:
+    latest_commit: "95b7b35"
+    branch: "feature/demo"
+    files_changed: 3
+  review_focus:
+    - "核心业务逻辑的边界与异常处理"
+    - "自动化测试覆盖率"

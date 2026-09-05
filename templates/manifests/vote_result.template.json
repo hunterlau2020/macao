@@ -1,0 +1,79 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-05T12:20:00Z",
+  "generated_at": "2026-09-05T12:20:00Z",
+  "task_id": "task-001",
+  "checkpoint_ref": "95b7b35",
+  "executor": "claude-code",
+  "executor_id": "claude-code",
+  "review_round": 1,
+  "reviewers_total": 3,
+  "reviewers_responded": 3,
+  "reviewers_accounted": 3,
+  "votes": [
+    {
+      "reviewer": "codex",
+      "vote": "YES_APPROVE",
+      "weight": 1,
+      "source": "manifest",
+      "confidence": 0.95,
+      "issues_count": 0
+    },
+    {
+      "reviewer": "opencode",
+      "vote": "YES_APPROVE",
+      "weight": 1,
+      "source": "manifest",
+      "confidence": 0.90,
+      "issues_count": 0
+    },
+    {
+      "reviewer": "antigravity",
+      "vote": "YES_APPROVE",
+      "weight": 1,
+      "source": "manifest",
+      "confidence": 0.92,
+      "issues_count": 0
+    }
+  ],
+  "policy_snapshot": {
+    "rule": "weighted_2/3_v1",
+    "configured_seats": 3,
+    "configured_weight": 3,
+    "seat_quorum_required": 2,
+    "weight_quorum_required": 2,
+    "decision_threshold_numerator": 2,
+    "decision_threshold_denominator": 3,
+    "minimum_winning_seats": 2,
+    "max_single_weight_share_numerator": 2,
+    "max_single_weight_share_denominator": 3
+  },
+  "consensus_rule": "weighted_2/3_v1",
+  "vote_breakdown": {
+    "approve": 3,
+    "reject": 0,
+    "abstain": 0,
+    "effective_seats": 3,
+    "effective_weight": 3,
+    "approve_seats": 3,
+    "approve_weight": 3,
+    "reject_seats": 0,
+    "reject_weight": 0,
+    "abstain_seats": 0,
+    "abstain_weight": 0
+  },
+  "input_artifacts": [
+    {
+      "reviewer": "codex",
+      "kind": "review_manifest",
+      "path": ".macao/.reviews/r1/codex.review.yml",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence_commit": "95b7b35"
+    }
+  ],
+  "issues_index": [],
+  "issues_index_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "requires_disposition": false,
+  "decision": "APPROVED",
+  "resolution": "AUTO_WEIGHTED_CONSENSUS"
+}

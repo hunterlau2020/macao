@@ -1,0 +1,66 @@
+{
+  "protocol": "AEP/1.1",
+  "message_id": "msg-20260905-002",
+  "timestamp": "2026-09-05T12:05:00Z",
+  "type": "REVIEW_REQUEST",
+  "from": "orchestrator",
+  "to": ["codex", "opencode"],
+  "payload": {
+    "project": "macao-demo",
+    "executor": "claude-code",
+    "checkpoint_ref": "95b7b35",
+    "review_round": 1,
+    "review_context": {
+      "repository": {
+        "workspace_path": ".macao/worktrees/codex/task-001/r1",
+        "remote_name": "origin",
+        "fetch_policy": "fetch_source_and_evidence_before_diff"
+      },
+      "dev_checkpoint": {
+        "path": ".macao/.dev.yml",
+        "commit": "95b7b35",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "base_commit": "73576c5",
+        "head_commit": "95b7b35",
+        "review_round": 1
+      },
+      "evidence": {
+        "ref": "refs/macao/evidence/task-001/r1",
+        "commit": "95b7b35",
+        "dev_manifest": {
+          "path": ".macao/.dev.yml",
+          "commit": "95b7b35",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "task_info": {
+        "description": "Implement safe arithmetic module",
+        "source": "review_request",
+        "path": "docs/reviews/2026-09-05-review-request-95b7b35.md",
+        "commit": "95b7b35",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "code_changes": {
+        "refs": {
+          "base_commit": "73576c5",
+          "head_commit": "95b7b35"
+        },
+        "diff_policy": "generate_locally"
+      },
+      "quality_snapshot": {
+        "source": "evidence.dev_manifest"
+      },
+      "executor_self_assessment": {
+        "source": "task_info"
+      },
+      "review_guidelines": {
+        "path": "docs/MACAO_REVIEW_GUIDELINES.md",
+        "commit": "95b7b35",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "history": [],
+      "references": []
+    },
+    "review_deadline": "2026-09-05T14:05:00Z"
+  }
+}

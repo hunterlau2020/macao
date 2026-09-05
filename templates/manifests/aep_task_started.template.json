@@ -1,0 +1,16 @@
+{
+  "protocol": "AEP/1.0",
+  "message_id": "msg-20260905-001",
+  "timestamp": "2026-09-05T12:00:00Z",
+  "type": "DEVELOPMENT_STARTED",
+  "from": "admin",
+  "to": "claude-code",
+  "payload": {
+    "task_id": "task-001",
+    "specification_summary": "实现安全算术计算模块",
+    "acceptance_criteria": [
+      "unit_tests_pass == true",
+      "coverage == 100"
+    ]
+  }
+}

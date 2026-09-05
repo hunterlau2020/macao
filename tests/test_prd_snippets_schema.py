@@ -159,7 +159,30 @@ class TestPRDSnippetsSchema(unittest.TestCase):
                 self.assertTrue(ok, f"Snippet in {p} failed {matched_schema}: {err}")
         self.assertGreaterEqual(tested_count, 6, f"Expected at least 6 template snippets, found {tested_count}")
 
+    def test_all_standalone_manifest_templates(self):
+        """Verify all standalone manifest templates in templates/manifests/ pass Draft-07 schemas."""
+        from macao.core.schema import SchemaValidator
+        val = SchemaValidator()
+        mapping = {
+            "dev.template.yml": "dev_manifest",
+            "review.template.yml": "review_manifest",
+            "disposition.template.yml": "review_disposition",
+            "vote_result.template.json": "vote_result",
+            "admin_override.template.json": "admin_override",
+            "macao_config.template.yaml": "macao_config",
+            "aep_task_started.template.json": "aep_envelope",
+            "aep_review_request.template.json": "aep_envelope"
+        }
+        for fname, schema_name in mapping.items():
+            fpath = os.path.join("templates/manifests", fname)
+            self.assertTrue(os.path.exists(fpath), f"Expected template file {fpath} to exist")
+            with open(fpath, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) if (fname.endswith(".yml") or fname.endswith(".yaml")) else json.load(f)
+            ok, err = val.validate(schema_name, data)
+            self.assertTrue(ok, f"Template {fname} failed {schema_name} validation: {err}")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

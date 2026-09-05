@@ -1,0 +1,25 @@
+version: "1.0"
+timestamp: "2026-09-05T12:30:00Z"
+task_id: "task-001"
+checkpoint_ref: "95b7b35"
+review_round: 1
+executor:
+  id: "claude-code"
+  role: "executor"
+  cli: "claude-code"
+disposition_status: "FINAL"
+vote_result_ref:
+  path: ".macao/vote_result.json"
+  evidence_commit: "95b7b35"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+issues_index_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+full_document:
+  path: "docs/reviews/2026-09-05-disposition-task-001-r1.md"
+  evidence_commit: "95b7b35"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+dispositions:
+  - issue_id: "codex/ISSUE-01"
+    reviewer_id: "codex"
+    disposition_type: "ADOPTED"
+    requires_new_checkpoint: true
+    rationale: "采纳建议并已修复空指针检查"

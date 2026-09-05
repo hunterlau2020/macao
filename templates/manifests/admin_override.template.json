@@ -1,0 +1,14 @@
+{
+  "override_id": "ovr-task-001-r1",
+  "timestamp": "2026-09-05T12:45:00Z",
+  "task_id": "task-001",
+  "checkpoint_ref": "95b7b35",
+  "review_round": 1,
+  "admin_identity": "admin@macao.local",
+  "trigger": "consensus_deadlock",
+  "choice": "APPROVED",
+  "exempt_issue_ids": [
+    "codex/ISSUE-01"
+  ],
+  "note": "经人工架构评估，该边缘超时分支已在网关层截流，批准放行合入"
+}
