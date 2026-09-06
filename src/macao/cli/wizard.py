@@ -110,6 +110,45 @@ def ensure_gitignore_isolation(project_root: Path) -> bool:
     return False
 
 
+def remove_gitignore_isolation(project_root: Path) -> bool:
+    """Removes the auto-added MACAO section and rules from .gitignore."""
+    gi_path = project_root / ".gitignore"
+    if not gi_path.exists():
+        return False
+    content = gi_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    header = "# MACAO Runtime Worktrees & State Store (Auto-added)"
+    rules_set = {
+        ".macao/worktrees/",
+        ".macao/.reviews/",
+        ".macao/.dev.yml",
+        ".macao/vote_result.json",
+        ".macao/archive/",
+        ".macao/logs/",
+        ".macao/*.log",
+        ".macao/*.db",
+        ".macao/*.db-journal",
+        ".macao/*.db-wal",
+        ".macao/*.db-shm",
+    }
+    new_lines = []
+    modified = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == header or stripped in rules_set:
+            modified = True
+            continue
+        new_lines.append(line)
+
+    if modified:
+        new_content = "\n".join(new_lines).strip()
+        if new_content:
+            new_content += "\n"
+        gi_path.write_text(new_content, encoding="utf-8")
+        return True
+    return False
+
+
 def generate_smart_config(
     project_root: Path,
     executor_cli: Optional[str] = None,

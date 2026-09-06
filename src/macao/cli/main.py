@@ -104,10 +104,16 @@ def get_orchestrator(project_root: str = ".") -> Orchestrator:
     )
 
 
-@click.group()
-def cli():
+@click.group(invoke_without_command=True)
+@click.option("--init", "is_init", is_flag=True, help="Alias for 'macao init'")
+@click.pass_context
+def cli(ctx, is_init):
     """MACAO - Multi-Agent CLI Agent Orchestrator."""
-    pass
+    if is_init:
+        ctx.invoke(init_cmd)
+        ctx.exit()
+    elif ctx.invoked_subcommand is None:
+        pass
 
 
 @cli.command()
@@ -179,9 +185,9 @@ def preflight():
     console.print("\n[dim]Note: Real CLI integration requires human supervision & intervention.[/dim]\n")
 
 
-@cli.command()
+@cli.command("init")
 @click.option("--path", default="macao.yaml", help="Path to create macao.yaml")
-def init(path: str):
+def init_cmd(path: str = "macao.yaml"):
     """Initialize a default macao.yaml configuration file conforming to schema."""
     p = Path(path)
     if p.exists():
@@ -485,6 +491,55 @@ def live_run(auto_signoff: bool):
     finally:
         runner.cleanup()
 
+
+@cli.command("clean")
+@click.option("--all", "clean_all", is_flag=True, help="Remove macao.yaml and restore .gitignore in addition to runtime files")
+@click.option("--restore", is_flag=True, help="Restore the latest macao.yaml.bak.* backup if available")
+def clean_cmd(clean_all: bool, restore: bool):
+    """Clean up MACAO runtime files and rollback configuration or .gitignore."""
+    from macao.cli.wizard import remove_gitignore_isolation
+    project_root = Path(".").resolve()
+    macao_dir = project_root / ".macao"
+    cfg_file = project_root / "macao.yaml"
+
+    cleaned_items = []
+
+    # 1. Clean .macao runtime directory
+    if macao_dir.exists():
+        shutil.rmtree(macao_dir, ignore_errors=True)
+        cleaned_items.append(".macao/ (runtime directory)")
+
+    # 2. If --restore requested: find latest macao.yaml.bak.*
+    if restore:
+        backups = sorted(project_root.glob("macao.yaml.bak.*"), key=lambda p: p.stat().st_mtime)
+        if backups:
+            latest_backup = backups[-1]
+            shutil.copy(latest_backup, cfg_file)
+            cleaned_items.append(f"Restored macao.yaml from {latest_backup.name}")
+        else:
+            console.print("[yellow]No backup files matching 'macao.yaml.bak.*' found.[/yellow]")
+
+    # 3. If --all requested
+    if clean_all:
+        if cfg_file.exists() and not restore:
+            cfg_file.unlink()
+            cleaned_items.append("macao.yaml (configuration file)")
+
+        # Clean backup files
+        for bak in project_root.glob("macao.yaml.bak.*"):
+            bak.unlink()
+            cleaned_items.append(f"{bak.name} (backup file)")
+
+        # Clean .gitignore rules
+        if remove_gitignore_isolation(project_root):
+            cleaned_items.append(".gitignore (removed MACAO rules)")
+
+    if cleaned_items:
+        console.print("[bold green]✓ MACAO rollback/clean completed successfully:[/bold green]")
+        for item in cleaned_items:
+            console.print(f"  • {item}")
+    else:
+        console.print("[yellow]Nothing to clean. Workspace is already clean.[/yellow]")
 
 
 if __name__ == "__main__":
