@@ -317,13 +317,18 @@ def task():
 
 
 @task.command("create")
-@click.option("--title", required=True, help="Task title")
+@click.option("--title", default=None, help="Task title (e.g. 'Add vocabulary quiz feature')")
 @click.option("--description", default="", help="Task detailed description")
 @click.option("--acceptance", default="", help="Acceptance criteria")
 @click.option("--branch", default="feature/task-01", help="Source branch")
 @click.option("--target", default="main", help="Target branch")
-def task_create(title: str, description: str, acceptance: str, branch: str, target: str):
+def task_create(title: Optional[str], description: str, acceptance: str, branch: str, target: str):
     """Create and start a new development task."""
+    if not title:
+        if sys.stdin.isatty():
+            title = click.prompt("Task title", type=str)
+        else:
+            raise click.UsageError("Missing option '--title'.")
     orchestrator = get_orchestrator(".")
 
     task_data = orchestrator.start_task(
