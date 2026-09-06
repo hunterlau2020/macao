@@ -179,3 +179,99 @@ def render_audit_table(events: List[Dict[str, Any]]) -> None:
 
     console.print(table)
 
+
+def render_team_probe_report(probe: Dict[str, Any]) -> None:
+    """Renders comprehensive team and environment dynamic probe report."""
+    project_name = probe.get("project_name", "Unknown Project")
+    console.print(f"\n[bold cyan]=== MACAO Team & Environment Pre-dispatch Probe: {project_name} ===[/bold cyan]")
+
+    if not probe.get("valid_config"):
+        console.print(f"[bold red]Configuration Error:[/bold red] {probe.get('error')}\n")
+        return
+
+    # 1. Executor Table
+    exec_info = probe.get("executor", {})
+    exec_table = Table(title="[bold green]Configured Executor (Implementation Agent)[/bold green]", border_style="green")
+    exec_table.add_column("Agent ID", style="bold cyan")
+    exec_table.add_column("CLI Tool", style="yellow")
+    exec_table.add_column("Model", style="white")
+    exec_table.add_column("Version", style="magenta")
+    exec_table.add_column("Status", style="bold")
+    exec_table.add_column("Dispatch Target", style="dim white")
+
+    st_color = "green" if exec_info.get("status") == "READY" else "red"
+    exec_table.add_row(
+        str(exec_info.get("id", "N/A")),
+        str(exec_info.get("cli", "N/A")),
+        str(exec_info.get("model") or "default"),
+        str(exec_info.get("version", "unknown")),
+        f"[{st_color}]{exec_info.get('status')}[/{st_color}]",
+        "Primary developer assigned for task implementation"
+    )
+    console.print(exec_table)
+
+    # 2. Reviewers Table
+    rev_list = probe.get("reviewers", [])
+    quorum = probe.get("quorum", {})
+    rev_table = Table(
+        title=f"[bold blue]Configured Reviewers ({len(rev_list)} Agents | Quorum Required: {quorum.get('minimum_winning_seats', 2)} of {len(rev_list)})[/bold blue]",
+        border_style="blue"
+    )
+    rev_table.add_column("Agent ID", style="bold cyan")
+    rev_table.add_column("CLI Tool", style="yellow")
+    rev_table.add_column("Vote Weight", style="dim yellow")
+    rev_table.add_column("Version", style="magenta")
+    rev_table.add_column("Status", style="bold")
+    rev_table.add_column("Details", style="dim white")
+
+    for r in rev_list:
+        rst_color = "green" if r.get("status") == "READY" else "red"
+        rev_table.add_row(
+            str(r.get("id", "N/A")),
+            str(r.get("cli", "N/A")),
+            str(r.get("weight", 1.0)),
+            str(r.get("version", "unknown")),
+            f"[{rst_color}]{r.get('status')}[/{rst_color}]",
+            str(r.get("details", ""))[:50]
+        )
+    console.print(rev_table)
+
+    # 3. Workspace & Active Task Summary
+    git = probe.get("git", {})
+    active = probe.get("active_task")
+
+    summary_table = Table(title="[bold magenta]Workspace & Dispatch Readiness[/bold magenta]", border_style="magenta")
+    summary_table.add_column("Item", style="bold white")
+    summary_table.add_column("Value", style="cyan")
+    summary_table.add_column("Readiness", style="bold")
+
+    git_status = "[green]CLEAN[/green]" if git.get("is_clean") else "[yellow]DIRTY / UNCOMMITTED[/yellow]"
+    summary_table.add_row("Git Branch", f"{git.get('branch')} (HEAD: {git.get('commit')})", git_status)
+
+    if active:
+        summary_table.add_row(
+            "Active Task",
+            f"{active['task_id']} ({active.get('title', '')[:30]})",
+            f"[bold yellow]IN PROGRESS ({active['state']})[/bold yellow]"
+        )
+    else:
+        summary_table.add_row("Active Task", "None (Idle)", "[bold green]READY FOR NEW TASK[/bold green]")
+
+    q_achieve = quorum.get("achievable", False)
+    q_str = f"{quorum.get('ready_count')}/{quorum.get('total_configured')} Ready (Need {quorum.get('minimum_winning_seats')})"
+    summary_table.add_row("Consensus Quorum", q_str, "[bold green]ACHIEVABLE[/bold green]" if q_achieve else "[bold red]BLOCKED[/bold red]")
+
+    console.print(summary_table)
+
+    # 4. Final Verdict
+    if probe.get("can_dispatch"):
+        console.print(
+            f"[bold green]✓ Pre-execution Probing Passed:[/bold green] All {quorum.get('ready_count')} reviewers and executor '{exec_info.get('id')}' are healthy.\n"
+        )
+    else:
+        reasons = "\n  - ".join(probe.get("blocking_reasons", []))
+        console.print(
+            f"[bold red]✗ Pre-execution Probing Blocked:[/bold red]\n  - {reasons}\n"
+        )
+
+

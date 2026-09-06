@@ -22,8 +22,8 @@ from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.cursor import CursorAgentAdapter
 from macao.adapter.kimi import KimiAdapter
-from macao.adapter.mock import MockAgentAdapter
-from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status, render_audit_table
+from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status, render_audit_table, render_team_probe_report
+from macao.workflow.prober import TeamProber
 
 
 DEFAULT_CONFIG_TEMPLATE = """# ==============================================================================
@@ -316,19 +316,70 @@ def task():
     pass
 
 
+@task.command("probe")
+def task_probe():
+    """Dynamically probe executor and reviewer agent readiness before dispatching tasks."""
+    prober = TeamProber(".")
+    res = prober.probe()
+    render_team_probe_report(res)
+
+
 @task.command("create")
 @click.option("--title", default=None, help="Task title (e.g. 'Add vocabulary quiz feature')")
 @click.option("--description", default="", help="Task detailed description")
 @click.option("--acceptance", default="", help="Acceptance criteria")
 @click.option("--branch", default="feature/task-01", help="Source branch")
 @click.option("--target", default="main", help="Target branch")
-def task_create(title: Optional[str], description: str, acceptance: str, branch: str, target: str):
-    """Create and start a new development task."""
+@click.option("--probe/--no-probe", default=True, help="Dynamically probe team and environment readiness before creating task")
+@click.option("--dry-run", is_flag=True, help="Perform dynamic pre-dispatch probe only, do not create task")
+@click.option("-f", "--force", is_flag=True, help="Force task creation even if active task exists or warnings occur")
+def task_create(title: Optional[str], description: str, acceptance: str, branch: str, target: str, probe: bool, dry_run: bool, force: bool):
+    """Create and start a new development task with dynamic team probing."""
+    prober = TeamProber(".")
+    probe_result = prober.probe()
+
+    if dry_run:
+        render_team_probe_report(probe_result)
+        if probe_result.get("can_dispatch"):
+            console.print("[bold cyan]ℹ Dry-run probe passed: Team and environment are ready for task dispatch.[/bold cyan]")
+        else:
+            console.print("[bold red]✗ Dry-run probe failed: Task cannot be dispatched.[/bold red]")
+        return
+
+    if probe and probe_result.get("valid_config"):
+        active = probe_result.get("active_task")
+        if active and not force:
+            render_team_probe_report(probe_result)
+            console.print(
+                f"[bold red]Cannot create new task:[/bold red] Active task '{active['task_id']}' is already running in state '{active['state']}'.\n"
+                f"[dim]Run 'macao status' to inspect, 'macao task cancel' to abort it, or pass '--force' to proceed anyway.[/dim]"
+            )
+            sys.exit(1)
+
+        exec_info = probe_result.get("executor", {})
+        if not exec_info.get("installed") and not force:
+            render_team_probe_report(probe_result)
+            console.print(
+                f"[bold red]Cannot create task:[/bold red] Configured executor '{exec_info.get('id')}' ({exec_info.get('cli')}) is not installed or unreachable.\n"
+                f"[dim]Please install '{exec_info.get('cli')}' or update 'team.executor' in macao.yaml.[/dim]"
+            )
+            sys.exit(1)
+
+        quorum_info = probe_result.get("quorum", {})
+        if not quorum_info.get("achievable") and not force:
+            render_team_probe_report(probe_result)
+            console.print(
+                f"[bold red]Cannot create task:[/bold red] Only {quorum_info.get('ready_count')} reviewer(s) ready, but quorum requires {quorum_info.get('minimum_winning_seats')}.\n"
+                f"[dim]Please verify reviewer CLIs or update 'team.reviewers' in macao.yaml.[/dim]"
+            )
+            sys.exit(1)
+
     if not title:
         if sys.stdin.isatty():
             title = click.prompt("Task title", type=str)
         else:
             raise click.UsageError("Missing option '--title'.")
+
     orchestrator = get_orchestrator(".")
 
     task_data = orchestrator.start_task(
@@ -338,7 +389,19 @@ def task_create(title: Optional[str], description: str, acceptance: str, branch:
         source_branch=branch,
         target_branch=target
     )
-    console.print(f"[bold green]✓ Task '{task_data['task_id']}' created in state: {task_data['state']}[/bold green]")
+
+    exec_id = probe_result.get("executor", {}).get("id", "dev-executor") if probe_result.get("valid_config") else "executor"
+    exec_cli = probe_result.get("executor", {}).get("cli", "")
+    exec_disp = f"{exec_id} ({exec_cli})" if exec_cli else exec_id
+    rev_count = len(probe_result.get("reviewers", [])) if probe_result.get("valid_config") else 0
+
+    console.print(f"\n[bold green]✓ Task '{task_data['task_id']}' successfully created![/bold green]")
+    console.print(f"  [bold]Title[/bold]            : {title}")
+    console.print(f"  [bold]Assigned Executor[/bold]: [cyan]{exec_disp}[/cyan] (in charge of implementation)")
+    console.print(f"  [bold]Assigned Reviewers[/bold]: [cyan]{rev_count} independent agents[/cyan] (Worktree isolated)")
+    console.print(f"  [bold]Branch[/bold]           : {task_data.get('source_branch', branch)} -> {task_data.get('target_branch', target)}")
+    console.print(f"  [bold]Initial State[/bold]    : [green]{task_data['state']}[/green]")
+    console.print(f"\n[dim]Next step: Executor '{exec_id}' implements task changes on branch, then run 'macao task checkpoint --auto --review'[/dim]")
 
 
 @task.command("recover")

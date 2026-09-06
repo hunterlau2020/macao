@@ -110,9 +110,32 @@ flowchart TD
 
 ## 三、协同任务调度与管理 (Phase 2)
 
-### 1. macao task create（创建任务与参数深度剖析）
+### 1. macao task probe（任务执行前动态状态探测与派发识别）
 
-创建并启动一个多 Agent 协同的开发任务。
+* **为什么需要前置动态探测？**
+  在多 Agent 协同体系中，盲目派发任务是极其危险的。如果不做动态状态探测：
+  1. 不清楚当前项目配置的执行者（Executor）是否安装、连通、处于空闲还是故障状态。
+  2. 不清楚审查团（Reviewers）是否有足够的健康席位满足法定仲裁（Quorum）门槛（若 4 人评审团有 2 个 CLI 无法唤起，则 3 票仲裁门槛永远无法达成，任务必然死锁）。
+  3. 不清楚当前代码仓库是否已有未完结的活跃任务（Active Task），容易引发分支冲突。
+  4. 不清楚**任务究竟会被派给谁**（明确哪位 Agent 负责写代码，哪几位负责审查）。
+
+* **命令**：
+  ```bash
+  macao task probe
+  ```
+
+* **终端探测报告展示**：
+  运行后系统将动态探活并输出结构化矩阵：
+  - **Executor 状态**：明确当前项目的开发执行者（如 `dev-agy (agy)` 或 `dev-claude (claude-code)`）、版本号、PATH 路径与就绪状态；明确声明任务派发归属。
+  - **Reviewers 阵容**：列出全部配置的审查者席位、投票权重、连通性及版本。
+  - **Quorum 仲裁可行性评估**：实时计算 `已就绪审查者数 / 总审查者数`，对比 `minimum_winning_seats`，提前验证共识门槛能否达成。
+  - **工作区与活跃任务**：检测当前 Git 分支干净度与是否存在正在进行的活跃任务。
+
+---
+
+### 2. macao task create（创建任务、动态预检与派发确认）
+
+创建并启动一个多 Agent 协同的开发任务。默认会在真正创建前自动执行动态探测门禁（Fail-closed）。
 
 ```bash
 macao task create [OPTIONS]
@@ -127,6 +150,9 @@ macao task create [OPTIONS]
 | **`--acceptance`** | 字符串 | 可选 | 空 | **验收标准**。审查者验证通过的准则（如测试通过、覆盖率）。 |
 | **`--branch`** | 字符串 | 可选 | `feature/task-01` | 本次开发的特性分支名称。 |
 | **`--target`** | 字符串 | 可选 | `main` | 最终通过评审后合并的目标主干分支。 |
+| **`--dry-run`** | 标志位 | 可选 | False | **纯预检模式**。仅执行动态探测与派发规划，不创建任务。 |
+| **`--probe / --no-probe`** | 标志位 | 可选 | `--probe` (开启) | 是否在创建任务前执行动态探测门禁。 |
+| **`-f / --force`** | 标志位 | 可选 | False | 强制创建（跳过活跃任务冲突或非致命警告）。 |
 
 #### `--title` 在系统底层的作用机制
 1. **状态持久化**：写入 `.macao/state.db` 的 `tasks` 表，作为该次任务展示给开发者的主标题。
@@ -136,12 +162,13 @@ macao task create [OPTIONS]
 
 #### 实战调用示例
 
-* **方式 A：极简调用（一句话需求）**
+* **方式 A：执行前纯探测与规划（--dry-run）**
   ```bash
-  macao task create --title "为词汇学习模块补充单元测试"
+  # 仅测试当前团队与环境状态，明确派发目标，不写数据库
+  macao task create --dry-run
   ```
 
-* **方式 B：标准工程实战（推荐生产使用）**
+* **方式 B：标准工程实战创建（自动通过动态预检后派发）**
   ```bash
   macao task create \
     --title "增加每日单词打卡与进度统计API" \
@@ -149,9 +176,18 @@ macao task create [OPTIONS]
     --acceptance "1. pytest 单元测试全部通过; 2. 接口支持按日期查询打卡状态; 3. 正确率计算无精度问题" \
     --branch "feature/daily-checkin"
   ```
+  创建成功后，控制台将明确输出派发结果：
+  ```text
+  ✓ Task 'task-20260906-xxxx' successfully created!
+    Title            : 增加每日单词打卡与进度统计API
+    Assigned Executor: dev-agy (agy) (in charge of implementation)
+    Assigned Reviewers: 4 independent agents (Worktree isolated)
+    Branch           : feature/daily-checkin -> main
+    Initial State    : CODING
+  ```
 
 * **方式 C：终端交互输入**
-  直接敲 `macao task create`，系统会交互式提示：
+  直接敲 `macao task create`，系统在完成预检后提示输入标题：
   ```text
   Task title: 增加每日单词打卡与进度统计API
   ```

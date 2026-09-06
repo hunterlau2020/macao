@@ -68,8 +68,8 @@ macao live-run
 | `macao clean` | 清理 `.macao/` 临时运行时数据，支持 `--all` 彻底回滚重置或 `--restore` 恢复备份 |
 | `macao doctor` | 静态配置诊断、SQLite 状态库检查与 CLI 就绪度诊断 |
 | `macao preflight` | 实时探活系统安装的各 AI CLI、版本、权限模式与通信总线 |
-| `macao test-clis` | 真实拉起各 CLI 的 PTY 伪终端沙箱，测试 ANSI 清洗与 0 僵尸进程清理 |
-| `macao task create` | 发起协同开发任务（注入任务标题、验收标准、开发分支与目标分支） |
+| `macao task probe` | 任务执行前动态探活 Executor / Reviewer 状态、仲裁可行性与派发目标确认 |
+| `macao task create` | 发起协同开发任务（内置前置动态探测门禁、支持 `--dry-run`） |
 | `macao status` | 终端 Rich 彩色看板：展示当前 FSM 阶段、检查点 Commit、各 Agent 产物与投票进度 |
 | `macao logs` | 查看系统运行日志与审查专家（Reviewer）在 Worktree 中的原始交互会话日志（支持 `-f`, `-r`） |
 | `macao audit` | 终端表格查询 StateStore 中记录的不可变审计事件时间线（状态流转、共识裁决） |

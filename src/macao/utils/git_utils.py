@@ -46,6 +46,16 @@ class GitManager:
         code, stdout, _ = self._run("rev-parse", "HEAD")
         return stdout if code == 0 else ""
 
+    def get_current_branch(self) -> str:
+        """Returns current branch name or HEAD commit."""
+        code, stdout, _ = self._run("rev-parse", "--abbrev-ref", "HEAD")
+        return stdout if code == 0 else ""
+
+    def is_clean(self) -> bool:
+        """Returns True if working tree and staging area are clean."""
+        code, stdout, _ = self._run("status", "--porcelain")
+        return code == 0 and not stdout
+
     def get_merge_base(self, commit1: str, commit2: str) -> str:
         code, stdout, _ = self._run("merge-base", commit1, commit2)
         return stdout if code == 0 else ""
