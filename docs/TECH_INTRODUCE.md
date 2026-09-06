@@ -375,6 +375,8 @@ PYTHONPATH=src python3 -m macao.cli.main override resolve --choice APPROVED --no
 
 ## 七、动态探活机制、隔离工作区与日志架构 (Dynamic Probing & Worktree Lifecycle)
 
+> **深度技术设计专文**：详见 [`docs/PROBE_TECHNICAL_DESIGN.md`](PROBE_TECHNICAL_DESIGN.md)（含会话发现机制、进度三元组对账算法与审计日志系统）。
+
 ### 1. 探活核心原则与命令分工（Preflight vs Probe）
 MACAO 对“静态环境预检”与“项目运行态探测”进行了明确的职责解耦：
 1. **`macao preflight`（静态宿主基础设施预检）**：

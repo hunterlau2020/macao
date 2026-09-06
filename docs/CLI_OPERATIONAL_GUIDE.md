@@ -112,6 +112,8 @@ flowchart TD
 
 ### 1. macao probe / macao task probe（动态状态探测、工作区定位与派发前置检视）
 
+> **技术设计详情**：关于 `macao probe` 的核心原则、原生会话定位器（`SessionLocator`）、进度三元组及审计机制，详见 [`docs/PROBE_TECHNICAL_DESIGN.md`](PROBE_TECHNICAL_DESIGN.md)。
+
 * **为什么需要前置动态探测？**
   在多 Agent 协同体系中，盲目派发任务是极其危险的。如果不做动态状态探测：
   1. 不清楚当前项目配置的执行者（Executor）与审查团（Reviewers）是否安装、连通、处于空闲还是正在作业。
