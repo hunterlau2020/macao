@@ -117,6 +117,39 @@ class TestCleanAndRollback(unittest.TestCase):
             finally:
                 os.chdir(old_cwd)
 
+    def test_git_context_detection_and_logging_options(self):
+        """Verify Git context detection handles null remote and logging flags work."""
+        from macao.cli.wizard import detect_git_context
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=self.tmpdir):
+            proj_dir = Path("pure_local_repo")
+            proj_dir.mkdir()
+
+            # Detect git context on non-git dir
+            ctx = detect_git_context(proj_dir)
+            self.assertEqual(ctx["branch"], "main")
+            self.assertIsNone(ctx["remote"])
+
+            # Test verbose and log-level flags
+            res = runner.invoke(cli, ["--log-level", "DEBUG", "doctor"])
+            self.assertEqual(res.exit_code, 0)
+            self.assertEqual(os.environ.get("MACAO_LOG_LEVEL"), "DEBUG")
+
+            res_v = runner.invoke(cli, ["-v", "doctor"])
+            self.assertEqual(res_v.exit_code, 0)
+            self.assertEqual(os.environ.get("MACAO_LOG_CONSOLE"), "1")
+
+            # Test macao logs -r list and -e list
+            res_logs = runner.invoke(cli, ["logs", "-r", "list"])
+            self.assertEqual(res_logs.exit_code, 0)
+            self.assertIn("No reviewer session logs", res_logs.output)
+
+            res_exec = runner.invoke(cli, ["logs", "-e", "list"])
+            self.assertEqual(res_exec.exit_code, 0)
+            self.assertIn("No executor session logs", res_exec.output)
+
 
 if __name__ == "__main__":
     unittest.main()
+

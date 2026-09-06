@@ -182,9 +182,17 @@ def get_orchestrator(project_root: str = ".") -> Orchestrator:
 
 @click.group(invoke_without_command=True)
 @click.option("--init", "is_init", is_flag=True, help="Alias for 'macao init'")
+@click.option("--log-level", default=None, type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False), help="Global log level (DEBUG, INFO, WARNING, ERROR)")
+@click.option("-v", "--verbose", is_flag=True, help="Enable verbose / DEBUG console logging")
 @click.pass_context
-def cli(ctx, is_init):
+def cli(ctx, is_init, log_level, verbose):
     """MACAO - Multi-Agent CLI Agent Orchestrator."""
+    if verbose:
+        os.environ["MACAO_LOG_LEVEL"] = "DEBUG"
+        os.environ["MACAO_LOG_CONSOLE"] = "1"
+    elif log_level:
+        os.environ["MACAO_LOG_LEVEL"] = log_level.upper()
+
     if is_init:
         ctx.invoke(init_cmd)
         ctx.exit()
@@ -352,20 +360,55 @@ def status():
 
 @cli.command("logs")
 @click.option("-n", "--lines", default=50, help="Number of lines to display")
-@click.option("-r", "--reviewer", default=None, help="Inspect raw session log for specific reviewer")
+@click.option("-r", "--reviewer", default=None, help="Inspect raw session log for specific reviewer (or 'all' / 'list')")
+@click.option("-e", "--executor", "executor_flag", default=None, help="Inspect raw session log for executor (or 'all' / 'list')")
 @click.option("-f", "--follow", is_flag=True, help="Follow log output in real-time")
-def logs_cmd(lines: int, reviewer: Optional[str], follow: bool):
-    """View orchestration system logs and reviewer agent terminal logs."""
+def logs_cmd(lines: int, reviewer: Optional[str], executor_flag: Optional[str], follow: bool):
+    """View orchestration system logs, reviewer agent terminal logs, or executor logs."""
     import time
 
+    # 1. Reviewer CLI Session Logs
     if reviewer:
         rev_log_dir = Path(".macao/logs/reviewers")
+        if reviewer.lower() in ("all", "list"):
+            if not rev_log_dir.exists() or not list(rev_log_dir.glob("*.log")):
+                console.print("[yellow]No reviewer session logs found in .macao/logs/reviewers/[/yellow]")
+                return
+            console.print("[bold cyan]Found Reviewer Session Logs in .macao/logs/reviewers/:[/bold cyan]")
+            for lf in sorted(rev_log_dir.glob("*.log")):
+                console.print(f"  • [green]{lf.name}[/green] ({lf.stat().st_size} bytes)")
+            return
+
         matches = sorted(rev_log_dir.glob(f"*{reviewer}*.log")) if rev_log_dir.exists() else []
         if not matches:
             console.print(f"[yellow]No reviewer session logs found matching '{reviewer}' in .macao/logs/reviewers/[/yellow]")
             return
         target = matches[-1]
         console.print(f"[bold cyan]Reviewer Log: {target}[/bold cyan]\n")
+        content = target.read_text(encoding="utf-8", errors="replace")
+        all_lines = content.splitlines()
+        for line in all_lines[-lines:]:
+            console.print(line)
+        return
+
+    # 2. Executor Session Logs
+    if executor_flag:
+        exec_log_dir = Path(".macao/logs/executors")
+        if executor_flag.lower() in ("all", "list"):
+            if not exec_log_dir.exists() or not list(exec_log_dir.glob("*.log")):
+                console.print("[yellow]No executor session logs found in .macao/logs/executors/[/yellow]")
+                return
+            console.print("[bold cyan]Found Executor Session Logs in .macao/logs/executors/:[/bold cyan]")
+            for lf in sorted(exec_log_dir.glob("*.log")):
+                console.print(f"  • [green]{lf.name}[/green] ({lf.stat().st_size} bytes)")
+            return
+
+        matches = sorted(exec_log_dir.glob(f"*{executor_flag}*.log")) if exec_log_dir.exists() else []
+        if not matches:
+            console.print(f"[yellow]No executor session logs found matching '{executor_flag}' in .macao/logs/executors/[/yellow]")
+            return
+        target = matches[-1]
+        console.print(f"[bold cyan]Executor Log: {target}[/bold cyan]\n")
         content = target.read_text(encoding="utf-8", errors="replace")
         all_lines = content.splitlines()
         for line in all_lines[-lines:]:

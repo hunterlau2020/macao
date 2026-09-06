@@ -46,24 +46,58 @@ def probe_available_clis() -> List[Dict[str, Any]]:
     return found
 
 
-def detect_git_context(project_root: Path) -> Dict[str, str]:
-    """Detects Git repository branch and remote defaults."""
+def detect_git_context(project_root: Path) -> Dict[str, Optional[str]]:
+    """Detects Git repository branch and remote defaults accurately."""
     branch = "main"
-    remote = "origin"
-    try:
-        res = subprocess.run(["git", "branch", "--show-current"], cwd=project_root, capture_output=True, text=True)
-        if res.returncode == 0 and res.stdout.strip():
-            branch = res.stdout.strip()
-    except Exception:
-        pass
+    remote = None
 
+    # 1. Detect remote
     try:
         res = subprocess.run(["git", "remote"], cwd=project_root, capture_output=True, text=True)
         if res.returncode == 0 and res.stdout.strip():
-            remote = res.stdout.strip().split()[0]
+            remotes = res.stdout.strip().split()
+            remote = "origin" if "origin" in remotes else remotes[0]
     except Exception:
         pass
 
+    # 2. Detect default target branch:
+    detected_branch = None
+    if remote:
+        try:
+            res = subprocess.run(["git", "symbolic-ref", f"refs/remotes/{remote}/HEAD"], cwd=project_root, capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout.strip():
+                detected_branch = res.stdout.strip().split("/")[-1]
+        except Exception:
+            pass
+
+    # Fallback to local 'main'
+    if not detected_branch:
+        try:
+            res = subprocess.run(["git", "rev-parse", "--verify", "refs/heads/main"], cwd=project_root, capture_output=True, text=True)
+            if res.returncode == 0:
+                detected_branch = "main"
+        except Exception:
+            pass
+
+    # Fallback to local 'master'
+    if not detected_branch:
+        try:
+            res = subprocess.run(["git", "rev-parse", "--verify", "refs/heads/master"], cwd=project_root, capture_output=True, text=True)
+            if res.returncode == 0:
+                detected_branch = "master"
+        except Exception:
+            pass
+
+    # Fallback to current checked-out branch
+    if not detected_branch:
+        try:
+            res = subprocess.run(["git", "branch", "--show-current"], cwd=project_root, capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout.strip():
+                detected_branch = res.stdout.strip()
+        except Exception:
+            pass
+
+    branch = detected_branch or "main"
     return {"branch": branch, "remote": remote}
 
 
@@ -574,6 +608,16 @@ def run_interactive_init(
     # 5. Git & CI
     git_info = detect_git_context(project_root)
     ci_cmd = detect_ci_command(project_root)
+
+    if not (non_interactive or not sys.stdin.isatty()):
+        console.print(f"\n[bold green]4. Git 仓库合并主干与远端设置:[/bold green]")
+        console.print(f"  • 目标主干分支 (default_branch): [bold white]{git_info['branch']}[/bold white]")
+        console.print(f"  • Git 远端名称 (remote_name): [bold white]{git_info['remote'] or '无 (null)'}[/bold white]")
+        use_git = click.confirm("是否采用探查到的 Git 主干分支与远端设置？", default=True)
+        if not use_git:
+            git_info["branch"] = click.prompt("请输入主干合并目标分支名称", default=git_info["branch"])
+            user_remote = click.prompt("请输入 Git 远端名称 (若为纯本地仓库请留空)", default=git_info["remote"] or "")
+            git_info["remote"] = user_remote.strip() if user_remote.strip() else None
 
     # 6. Format annotated YAML
     yaml_str = format_annotated_macao_yaml(
