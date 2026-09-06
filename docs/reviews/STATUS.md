@@ -3,18 +3,36 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-03（提交 `404ebd2` 轮 3 份复审申请；总计结论类 **142 份**（138 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **38 份**，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-07（提交 `d042395` 轮合并复审申请；总计结论类 **142 份**（138 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **42 份**，双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **文档轨（`404ebd2` 轮复审申请中，全面闭环 `73576c5` 轮 5 项阻断）**：
-    1. [`2026-09-03-review-request-404ebd2.md`](2026-09-03-review-request-404ebd2.md) → 总入口申请（目标 **L1 DOC-ALIGNED / PG-0**；被审提交 **`404ebd2`**）
-    2. [`2026-09-03-review-request-404ebd2-PRD-v2.5-Design-Sync.md`](2026-09-03-review-request-404ebd2-PRD-v2.5-Design-Sync.md) → PRD 设计同步专项（被审提交 **`404ebd2`**）
-    3. [`2026-09-03-review-request-404ebd2-UseCases-v2.5-Alignment.md`](2026-09-03-review-request-404ebd2-UseCases-v2.5-Alignment.md) → 用例体系对齐专项（被审提交 **`404ebd2`**）
-  - **代码轨（挂起复审）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md) → 目标 **L4 / PG-3**，被审提交 `42b5c07`
+  - **综合编排与探活轨（`d042395` 轮合并复审申请中，覆盖 f9ff6bf~d042395 全量 20 Commits，128 项测试全绿）**：
+    1. [`2026-09-07-review-request-d042395.md`](2026-09-07-review-request-d042395.md) → 总入口合并申请（目标 **L3 SCENARIO-VERIFIED / PG-2 全量认证并提请 L4 / PG-3 准入**；被审提交 **`d042395`**）
+  - **文档轨（前序申请）**：[`2026-09-04-review-request-95b7b35.md`](2026-09-04-review-request-95b7b35.md)（目标 L1 / PG-0，被审提交 `95b7b35`）
+  - **历史代码轨（已被本轮合并涵盖）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md)（目标 L4 / PG-3，被审提交 `42b5c07`）
 - **当前定级状态**：
-  - **文档轨 · PRD 设计同步（轨 A）**：**`73576c5` 轮未获授予**。票型 3 否决（Claude `NO_APPROVE` P1×3、Grok `NO_APPROVE` P1×1、Codex `REJECT` P1×4）+ 1 授予（Muse `YES_APPROVE`）。
-  - **文档轨 · 用例体系（轨 B）**：**`73576c5` 轮改判为未获授予**，连续两轮全票授予的态势中断。Claude 与 Grok 均**推翻自己前两轮的 `YES_APPROVE`**——用例正文相对 `cd285dd` 零变更（已 diff 证实），但本轮轨 A 把 `review_disposition.schema.json` 收成 `additionalProperties: false`，UC-6 `:36` 的 `generated_at` 随之不再合法，轨 B 申请 §3.2「UC6 → PASS」经两方独立机验为 **FAIL**。
-  - **历史文档定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
-  - **代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；L4 / PG-3 终局认证仍在复审中（仅 GLM 1 份，按 GUIDELINES §8「沉默 ≠ 同意」不计多数）。
+  - **综合编排与代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；当前提审 `d042395` 正式申请 L3 全量认证并提请 L4 / PG-3 准入。
+  - **文档体系定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
+
+### 综合编排轨：CLI 生产就绪、动态运行态探活与全周期合并轨（`f9ff6bf` → `d042395`，当前提审轮）
+
+- **被审提交**：`d042395`；工作区 HEAD 同步
+- **合并提交审计范围**：涵盖自 `95b7b35` 以来在主干累积的全部 20 个提交（`f9ff6bf` 至 `d042395`），共 46 个文件变更，+5108 / -193 lines
+- **申请入口**：[`2026-09-07-review-request-d042395.md`](2026-09-07-review-request-d042395.md)
+- **目标定级**：**L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审**
+- **机验与质量门禁状态**：
+  - 自动化单元与集成测试：`128/128 PASS`（`Ran 128 tests in 66s, OK`）；
+  - Python 编译：`python3 -m compileall -q src tests` $\rightarrow$ `0 Errors`；
+  - Markdown 控制字符：全库 228 份文档 `0 控制字符 (100% CLEAN)`；
+  - Schema 契约库一致性：`docs/schemas/` ↔ `src/macao/schemas/` 8 份契约文件逐字节一致；
+  - 真实宿主环境验证：在 `/home/debian/english_learning_system` 运行 `macao probe --dry-run` 与 `macao logs --probe` 实测全部通过。
+- **本轮核心核验资产**：
+  1. **CLI 交互与全生命周期控制**：`macao init` 智能向导与 4 人团推荐、`macao clean` 隔离区清理与 `--all`/`--restore` 回退、`checkpoint`/`cancel`/`merge`；
+  2. **动态探活引擎 (`macao probe`)**：`SessionLocator` 跨 CLI 原生会话物理定位（零 LLM 开销）、物理事实对账进度三元组（Last/Now/Next）、`git worktree list` 真实探测（拒绝伪造占位符）、`--dry-run` 严格只读零 DDL；
+  3. **全链路日志与审计**：`probe_*.log` 探活审计日志与 `macao logs --probe` 终端查阅、`PTYSession` 伪终端截获与 ANSI 清洗、`macao audit` 不可变账本；
+  4. **标准模板库 (`templates/`)**：12 份标准工作流指南与产物 Manifest 模板；
+  5. **技术专文与实操手册**：`docs/PROBE_TECHNICAL_DESIGN.md`、`docs/CLI_OPERATIONAL_GUIDE.md`、`docs/TECH_INTRODUCE.md`、`docs/PLAN.md`。
+
+---
 
 
 ### 文档轨：PRD v2.5 设计同步轨 与 用例体系轨（`cd285dd` → `73576c5`，当前轮）
