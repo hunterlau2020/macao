@@ -76,5 +76,9 @@ python3 -m macao.cli.main logs --probe
    - 审查阶段由 `PTYSession` 实时截获终端输出、剥离 ANSI 码并落盘至 `.macao/logs/reviewers/<reviewer_id>_r<round>.log`，支持 `macao logs -r <id>` 随时审计。
 
 5. **当前测试与交付状态**：
-   - 128 项测试全部通过（`Ran 128 tests in 52.914s, OK`）；
+   - 128 项测试全部通过（`Ran 128 tests in 66s, OK`）；
    - 主干分支保持清洁并与 `origin/main` 实时同步。
+
+6. **研发方法论：实战实操先于纸面定论（拒绝纯纸上谈兵）**：
+   - 涉及多 Agent CLI 进程组、PTY 交互、Session 发现与 Worktree 沙箱的复杂机制，光靠纸面推演无法想透；
+   - 必须先在真实工程（如 `english_learning_system`，场景 C）中实操演练，暴露真实深水区物理问题后，返回代码库深度打磨自愈，再带着实操证据合并提审。
