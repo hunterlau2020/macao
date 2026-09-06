@@ -6,6 +6,7 @@ import time
 import math
 import shutil
 import subprocess
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import yaml
@@ -212,6 +213,70 @@ def get_canonical_agent_info(cli_id: str, role: str = "dev") -> Dict[str, Any]:
         "cli": cli_name,
         "adapter": adapter
     }
+
+
+def parse_reviewer_selection(sel_str: str, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Parses user selection for reviewers supporting:
+    - Count shorthand: '4' or '前4' or 'top 4' (takes the first K candidates)
+    - Delimited numbers: '1,2,3,4', '1，2，3，4', '1 2 3 4', '1、2、3、4', '1;2;3;4'
+    - Ranges: '1-4', '1~4'
+    - Names/IDs: 'opencode, agy, cursor, codex' or 'rev-codex, rev-kimi'
+    - 'all' or '全部'
+    """
+    s = sel_str.strip()
+    if not s or s.lower() in ("all", "全部"):
+        return list(candidates)
+
+    # Check for count shorthand: '4', '前4', '前4位', 'top 4'
+    m_count = re.match(r"^(?:前|top\s*)?(\d+)(?:位|个)?$", s, re.IGNORECASE)
+    if m_count:
+        cnt = int(m_count.group(1))
+        if 2 <= cnt <= len(candidates):
+            return candidates[:cnt]
+
+    # Normalize delimiters: replace Chinese commas, dunhao, semicolons with ASCII comma
+    normalized = re.sub(r"[，、;；\s]+", ",", s)
+    tokens = [t.strip() for t in normalized.split(",") if t.strip()]
+
+    chosen = []
+    chosen_ids = set()
+
+    for t in tokens:
+        # Check range: 1-4 or 1~4
+        m_range = re.match(r"^(\d+)[-~](\d+)$", t)
+        if m_range:
+            start, end = int(m_range.group(1)), int(m_range.group(2))
+            for idx in range(start, end + 1):
+                if 1 <= idx <= len(candidates):
+                    cand = candidates[idx - 1]
+                    if cand["id"] not in chosen_ids:
+                        chosen.append(cand)
+                        chosen_ids.add(cand["id"])
+            continue
+
+        # Check integer index
+        if t.isdigit():
+            idx = int(t)
+            if 1 <= idx <= len(candidates):
+                cand = candidates[idx - 1]
+                if cand["id"] not in chosen_ids:
+                    chosen.append(cand)
+                    chosen_ids.add(cand["id"])
+            continue
+
+        # Check by name/cli
+        t_low = t.lower()
+        for cand in candidates:
+            c_id = cand["id"].lower()
+            c_cli = cand["cli"].lower()
+            if t_low == c_id or t_low == c_cli or t_low in c_id or t_low in c_cli:
+                if cand["id"] not in chosen_ids:
+                    chosen.append(cand)
+                    chosen_ids.add(cand["id"])
+                break
+
+    return chosen
 
 
 def format_annotated_macao_yaml(
@@ -510,11 +575,11 @@ def run_interactive_init(
 
     target_file = (project_root / target_path).resolve()
     if target_file.exists() and not force:
-        if non_interactive or not sys.stdin.isatty():
+        if non_interactive:
             console.print(f"[yellow]提示: 配置文件 '{target_path}' 已存在 (already exists)。使用 --force 可强制重新生成。[/yellow]")
             return yaml.safe_load(target_file.read_text(encoding="utf-8")) or {}
 
-        overwrite = click.confirm(f"配置文件 '{target_path}' 已存在，是否重新配置并覆盖？", default=False)
+        overwrite = click.confirm(f"配置文件 '{target_path}' 已存在 (already exists)，是否重新配置并覆盖？", default=False)
         if not overwrite:
             console.print("[yellow]已取消初始化，保持现有配置不变。[/yellow]")
             return yaml.safe_load(target_file.read_text(encoding="utf-8")) or {}
@@ -525,7 +590,7 @@ def run_interactive_init(
 
     # 1. Project Name
     default_name = project_root.name or "my-project"
-    if non_interactive or not sys.stdin.isatty():
+    if non_interactive:
         proj_name = default_name
     else:
         proj_name = click.prompt("1. 请输入项目名称", default=default_name)
@@ -549,7 +614,7 @@ def run_interactive_init(
     # 3. Choose Executor
     if custom_executor:
         exec_cand = next((c for c in detected_clis if c["id"] == custom_executor or c["cli"] == custom_executor), {"id": custom_executor, "cli": custom_executor})
-    elif non_interactive or not sys.stdin.isatty():
+    elif non_interactive:
         exec_cand = next((c for c in detected_clis if c["id"] in ("claude-code", "claude")), detected_clis[0])
     else:
         default_idx = "1"
@@ -579,37 +644,32 @@ def run_interactive_init(
     for r in recommended_reviewers:
         r["vote_weight"] = 1
 
-    if non_interactive or not sys.stdin.isatty():
+    if non_interactive:
         final_reviewers = recommended_reviewers
     else:
-        console.print(f"\n[bold green]3. 推荐独立代码审查团队 (Reviewers，共 {len(recommended_reviewers)} 位专家席位):[/bold green]")
+        console.print(f"\n[bold green]3. 独立代码审查团队配置 (Reviewers，共检测到 {len(recommended_reviewers)} 位可用专家席位):[/bold green]")
         for idx, r in enumerate(recommended_reviewers, 1):
-            console.print(f"  • [bold white]{r['id']}[/bold white] (调取命令: {r['cli']}, 适配器: {r['adapter']}, 投票权重: 1)")
+            console.print(f"  [{idx}] [bold white]{r['id']}[/bold white] (调取命令: {r['cli']}, 适配器: {r['adapter']}, 投票权重: 1)")
 
-        use_default = click.confirm("是否采用上述推荐的全部独立审查专家席位？", default=True)
-        if use_default:
-            final_reviewers = recommended_reviewers
-        else:
-            sel_str = click.prompt("请输入需要的审查员序号（逗号分隔，如 1,2,3，至少需 2 位）", default=",".join(str(i) for i in range(1, len(recommended_reviewers)+1)))
-            chosen_revs = []
-            for part in sel_str.split(","):
-                try:
-                    idx = int(part.strip()) - 1
-                    if 0 <= idx < len(recommended_reviewers):
-                        chosen_revs.append(recommended_reviewers[idx])
-                except Exception:
-                    pass
-            if len(chosen_revs) < 2:
-                console.print("[yellow]至少需要 2 位审查员才能满足法定仲裁席位，已自动补齐推荐席位。[/yellow]")
-                final_reviewers = recommended_reviewers
-            else:
+        def_str = ",".join(str(i) for i in range(1, len(recommended_reviewers) + 1))
+        while True:
+            sel_str = click.prompt(
+                f"\n请选择需要的审查员序号（支持 '1,2,3,4'、'1-4'、'4' 选择前4位，或直接回车采用全部）",
+                default=def_str
+            )
+            chosen_revs = parse_reviewer_selection(sel_str, recommended_reviewers)
+            if len(chosen_revs) >= 2:
                 final_reviewers = chosen_revs
+                console.print(f"  [cyan]✓ 已选定 {len(final_reviewers)} 位独立审查员:[/cyan] [bold]{', '.join(r['id'] for r in final_reviewers)}[/bold]")
+                break
+            else:
+                console.print(f"[red]✗ 输入解析后仅识别到 {len(chosen_revs)} 位审查员。根据 Draft-07 仲裁规范，至少需要 2 位审查员才能达成法定仲裁席位，请重新输入。[/red]")
 
     # 5. Git & CI
     git_info = detect_git_context(project_root)
     ci_cmd = detect_ci_command(project_root)
 
-    if not (non_interactive or not sys.stdin.isatty()):
+    if not non_interactive:
         console.print(f"\n[bold green]4. Git 仓库合并主干与远端设置:[/bold green]")
         console.print(f"  • 目标主干分支 (default_branch): [bold white]{git_info['branch']}[/bold white]")
         console.print(f"  • Git 远端名称 (remote_name): [bold white]{git_info['remote'] or '无 (null)'}[/bold white]")

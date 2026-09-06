@@ -149,6 +149,59 @@ class TestCleanAndRollback(unittest.TestCase):
             self.assertEqual(res_exec.exit_code, 0)
             self.assertIn("No executor session logs", res_exec.output)
 
+    def test_reviewer_selection_parsing_and_4_reviewers_flow(self):
+        """Verify parse_reviewer_selection handles various formats and interactive 4-reviewer selection."""
+        from macao.cli.wizard import parse_reviewer_selection
+        import yaml
+
+        candidates = [
+            {"id": "rev-opencode", "cli": "opencode"},
+            {"id": "rev-agy", "cli": "agy"},
+            {"id": "rev-cursor", "cli": "agent"},
+            {"id": "rev-codex", "cli": "codex"},
+            {"id": "rev-kimi", "cli": "kimi"},
+        ]
+
+        # 1. Shorthand count '4'
+        self.assertEqual(len(parse_reviewer_selection("4", candidates)), 4)
+        self.assertEqual(len(parse_reviewer_selection("前4位", candidates)), 4)
+
+        # 2. Chinese comma and dunhao
+        self.assertEqual(len(parse_reviewer_selection("1，2，3，4", candidates)), 4)
+        self.assertEqual(len(parse_reviewer_selection("1、2、3、4", candidates)), 4)
+
+        # 3. Ranges
+        self.assertEqual(len(parse_reviewer_selection("1-4", candidates)), 4)
+        self.assertEqual(len(parse_reviewer_selection("1~4", candidates)), 4)
+
+        # 4. CLI names
+        self.assertEqual(len(parse_reviewer_selection("opencode, agy, cursor, codex", candidates)), 4)
+
+        # 5. Full interactive init selecting 4 reviewers
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=self.tmpdir):
+            proj_dir = Path("my_app_4rev")
+            proj_dir.mkdir()
+            old_cwd = os.getcwd()
+            os.chdir(str(proj_dir))
+            try:
+                # Provide inputs:
+                # 1. Project name: enter (default)
+                # 2. Executor: enter (default)
+                # 3. Reviewers: "1,2,3,4"
+                # 4. Git confirm: enter (default)
+                res = runner.invoke(cli, ["init", "--force"], input="\n\n1,2,3,4\n\n")
+                self.assertEqual(res.exit_code, 0, f"Init failed: {res.output}")
+
+                content = Path("macao.yaml").read_text(encoding="utf-8")
+                cfg = yaml.safe_load(content)
+                self.assertEqual(len(cfg["team"]["reviewers"]), 4)
+                self.assertEqual(cfg["policy"]["minimum_winning_seats"], 3)
+                self.assertEqual(cfg["policy"]["seat_quorum_required"], 3)
+                self.assertEqual(cfg["policy"]["weight_quorum_required"], 3)
+            finally:
+                os.chdir(old_cwd)
+
 
 if __name__ == "__main__":
     unittest.main()
