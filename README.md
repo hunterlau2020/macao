@@ -59,6 +59,8 @@ macao live-run
 
 ## 🛠️ CLI 命令行工具集 (Command Reference)
 
+> 📖 完整参数详解、端到端实战工作流与排错速查请参阅：[《MACAO 实战操作与命令参考手册》](docs/CLI_OPERATIONAL_GUIDE.md)
+
 | 命令 | 用途与说明 |
 |---|---|
 | `macao setup` | 智能环境自检向导，交互式探测并生成定制化 `macao.yaml` |

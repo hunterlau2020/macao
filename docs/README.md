@@ -7,12 +7,13 @@
 | # | 文档 | 定位 |
 |---|------|------|
 | 1 | [`EXECUTIVE_SUMMARY.md`](EXECUTIVE_SUMMARY.md) | 执行摘要与快速参考，最快了解全貌 |
-| 2 | [`MACAO_PRD_v2.md`](MACAO_PRD_v2.md) | **权威基准**：流程/产物协议/状态机/架构/配置/用户旅程/边界（第一～十六部分） |
-| 3 | [`TECH_INTRUDUCE.md`](TECH_INTRUDUCE.md) | **技术架构与实现说明**：技术选型、组件落地矩阵、CLI 交互设计与模块全景 |
-| 4 | [`PLAN.md`](PLAN.md) | **技术开发计划**：8 周 MVP 迭代任务分解、里程碑（M0~M3）与交付验收标准 |
-| 5 | [`ROADMAP.md`](ROADMAP.md) | **技术路线图**：8 周 MVP 与未来演进路线（v1.1 ~ v2.0） |
-| 6 | [`IMPROVEMENT_SUMMARY.md`](IMPROVEMENT_SUMMARY.md) | v1.0 → v2.x 改进对比与版本演进说明 |
-| 7 | [`SRSv1.md`](SRSv1.md) | v1.0 历史基线（暂定名 "A"），**仅供追溯，不得用于实现** |
+| 2 | [`CLI_OPERATIONAL_GUIDE.md`](CLI_OPERATIONAL_GUIDE.md) | **实战操作与命令参考手册**：端到端工作流、全命令矩阵与实操指引 |
+| 3 | [`MACAO_PRD_v2.md`](MACAO_PRD_v2.md) | **权威基准**：流程/产物协议/状态机/架构/配置/用户旅程/边界（第一～十六部分） |
+| 4 | [`TECH_INTRUDUCE.md`](TECH_INTRUDUCE.md) | **技术架构与实现说明**：技术选型、组件落地矩阵、CLI 交互设计与模块全景 |
+| 5 | [`PLAN.md`](PLAN.md) | **技术开发计划**：8 周 MVP 迭代任务分解、里程碑（M0~M3）与交付验收标准 |
+| 6 | [`ROADMAP.md`](ROADMAP.md) | **技术路线图**：8 周 MVP 与未来演进路线（v1.1 ~ v2.0） |
+| 7 | [`IMPROVEMENT_SUMMARY.md`](IMPROVEMENT_SUMMARY.md) | v1.0 → v2.x 改进对比与版本演进说明 |
+| 8 | [`SRSv1.md`](SRSv1.md) | v1.0 历史基线（暂定名 "A"），**仅供追溯，不得用于实现** |
 
 ## 规范与治理
 
