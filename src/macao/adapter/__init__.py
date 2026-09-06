@@ -7,7 +7,8 @@ from macao.adapter.codex import CodexAdapter
 from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.kimi import KimiAdapter
-from macao.adapter.mock import MockAgentAdapter
+from macao.adapter.cursor import CursorAgentAdapter
+from macao.adapter.session_locator import SessionLocator
 
 __all__ = [
     "AgentAdapter",
@@ -17,6 +18,8 @@ __all__ = [
     "CodexAdapter",
     "OpenCodeAdapter",
     "AntigravityAdapter",
+    "CursorAgentAdapter",
     "KimiAdapter",
     "MockAgentAdapter",
+    "SessionLocator",
 ]

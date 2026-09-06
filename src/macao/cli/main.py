@@ -599,10 +599,26 @@ def status():
 @click.option("-n", "--lines", default=50, help="Number of lines to display")
 @click.option("-r", "--reviewer", default=None, help="Inspect raw session log for specific reviewer (or 'all' / 'list')")
 @click.option("-e", "--executor", "executor_flag", default=None, help="Inspect raw session log for executor (or 'all' / 'list')")
+@click.option("-p", "--probe", "probe_flag", is_flag=True, help="Inspect latest probe audit log")
 @click.option("-f", "--follow", is_flag=True, help="Follow log output in real-time")
-def logs_cmd(lines: int, reviewer: Optional[str], executor_flag: Optional[str], follow: bool):
-    """View orchestration system logs, reviewer agent terminal logs, or executor logs."""
+def logs_cmd(lines: int, reviewer: Optional[str], executor_flag: Optional[str], probe_flag: bool, follow: bool):
+    """View orchestration system logs, reviewer agent terminal logs, executor logs, or probe audit logs."""
     import time
+
+    # 0. Probe Audit Logs
+    if probe_flag:
+        probe_log_dir = Path(".macao/logs/probe")
+        if not probe_log_dir.exists() or not list(probe_log_dir.glob("*.log")):
+            console.print("[yellow]No probe audit logs found in .macao/logs/probe/[/yellow]")
+            return
+        matches = sorted(probe_log_dir.glob("*.log"))
+        target = matches[-1]
+        console.print(f"[bold cyan]Probe Audit Log: {target}[/bold cyan]\n")
+        content = target.read_text(encoding="utf-8", errors="replace")
+        all_lines = content.splitlines()
+        for line in all_lines[-lines:]:
+            console.print(line)
+        return
 
     # 1. Reviewer CLI Session Logs
     if reviewer:

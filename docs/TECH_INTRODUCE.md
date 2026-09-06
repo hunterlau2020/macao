@@ -375,44 +375,57 @@ PYTHONPATH=src python3 -m macao.cli.main override resolve --choice APPROVED --no
 
 ## 七、动态探活机制、隔离工作区与日志架构 (Dynamic Probing & Worktree Lifecycle)
 
-### 1. 探活核心原则（Zero-Cost & Read-Only Probe）
-`macao probe` 是 MACAO 体系中的**前置环境与状态轻量级健康探测工具**，其核心设计遵循三大硬性工程约束：
-1. **真实宿主环境探测（Native CLI Preflight）**：
-   - 探活时各适配器（如 `AntigravityAdapter`, `ClaudeCodeAdapter`, `CodexAdapter`, `OpenCodeAdapter`, `CursorAgentAdapter` 等）直接执行本地系统探针（`shutil.which` + `<cli> --version`），在毫秒级内获取真实安装的客户端版本（如 `agy 1.1.27`, `opencode 1.18.29`, `agent 2026.09.02-c22c1a3`, `claude 2.1.263`, `codex 2.1.0`）；
-   - **严禁探活期调用大模型**：探活的目标是验证“工具链基础设施是否健全、仲裁门槛能否达成”，绝不在探活阶段向大模型发请求，杜绝 API 延迟、网络阻塞与 Token 费用浪费。
-2. **严格只读零副作用（Zero-Mutation Guarantee via `--dry-run`）**：
-   - 系统使用 SQLite 只读 URI `file:...state.db?mode=ro` 连入持久化层；
-   - 若当前项目尚未创建任务（`.macao/state.db` 不存在），探活程序**绝不擅自创建数据库文件或初始化 DDL**，保证对被测代码库 100% 零修改、零写锁。
-3. **输出形式多样化**：
-   - 终端彩色 Rich 表格渲染；
-   - `--json` 格式化机器可读输出，便于自动化 CI 流水线或守护进程（Daemon）消费。
+### 1. 探活核心原则与命令分工（Preflight vs Probe）
+MACAO 对“静态环境预检”与“项目运行态探测”进行了明确的职责解耦：
+1. **`macao preflight`（静态宿主基础设施预检）**：
+   - 仅检测宿主操作系统、`PATH` 中的 CLI 工具（如 `agy`, `opencode`, `agent`, `claude`, `codex`, `kimi`）是否安装、版本号、执行模式，以及 Git 和 SQLite WAL 支持。
+   - 纯静态预检，不依赖特定代码仓库，不读取业务或会话状态。
+2. **`macao probe`（项目动态运行态与团队探针）**：
+   - 结合具体的项目代码仓库、Git 状态、真实评审产物与 CLI 会话，探测协同团队的当前运行态。
+   - **严格只读零副作用（Zero-Mutation Guarantee via `--dry-run`）**：使用 SQLite 只读 URI `file:...state.db?mode=ro` 连入持久化层；若 `.macao/state.db` 不存在，绝不擅自创建数据库文件或初始化 DDL。
+   - **毫秒级零 Token 开销**：探活的目标是验证“运行态连通性与共识可达性”，严禁探活期调用大模型 API。
+   - **全链路探活审计日志**：每次 probe 自动将结构化探测过程落盘至 `.macao/logs/probe/probe_<timestamp>.log`，支持 `macao logs --probe`（或 `macao logs -p`）随时查看。
 
-### 2. 接管现有项目（场景 C）的未纳管开发识别（Untracked Dev Detection）
-在将 MACAO 引入已有开发项目（如 `english_learning_system`）时，往往存在“执行者已经在写代码，工作区存在大量改动，但尚未在 MACAO 中建立任务工单”的客观情况：
-- **脱节问题**：若编排器机械地仅以 `state.db` 是否有活跃任务来判定，会导致输出 `IDLE: No active task assigned; waiting for task dispatch`，严重脱离实际开发态；
-- **自愈识别机制**：
-  - 当 `state.db` 中无活跃任务时，`TeamProber` 主动解析本地 Git 状态（`git status --porcelain`）；
-  - 若工作区存在未提交修改（Dirty files），执行者状态被精准标定为 **`ACTIVE_DEV (UNTRACKED)`**，并展示脏文件计数；
-  - 编排看板与最终指引明确提示开发者：“检测到工作区正在进行未纳管开发，可通过 `macao task create` 纳管或直接提审”，实现无缝平滑接管。
+### 2. 原生会话定位器（SessionLocator Architecture）
+为解决“MACAO 作为编排器如何感知各 CLI 当前正在哪个对话会话中”的难题，MACAO 实现了底层的原生会话探测组件 `SessionLocator`（[`src/macao/adapter/session_locator.py`](file:///home/debian/macao/src/macao/adapter/session_locator.py)）：
+- **零 LLM 开销的物理探测**：直接读取各 CLI 客户端落盘在本地的会话存储引擎，毫秒级定位当前仓库绑定的最新活跃 Session ID：
+  - **Google Antigravity (`agy`)**：解析 `~/.gemini/antigravity-cli/history.jsonl`，按 workspace 绝对路径匹配最新 `conversationId`。
+  - **Claude Code (`claude`)**：扫描 `~/.claude/projects/<sanitized-path>/`，按修改时间排序获取最新 UUID 会话。
+  - **OpenCode (`opencode`)**：直连 `~/.local/share/opencode/opencode.db` SQLite 数据库，按 workspace 查询最新 `session.id`。
+  - **Codex CLI (`codex`)**：解析 `~/.codex/session_index.jsonl` 或会话目录索引。
+  - **Cursor Agent (`agent`)**：扫描 `~/.cursor/chats/` 结构化配置。
+- **无缝恢复与断点追踪**：无需人类手动查找会话 ID，MACAO 在探活和接管时即可自动建立起对执行者上下文的物理关联。
 
-### 3. Reviewer 隔离工作区的生命周期（Ephemeral & Lazy-allocated Worktree）
-MACAO 的审查员必须遵循“严格无状态”与“物理零污染”原则，Reviewer 的 Git Worktree 具有以下全生命周期行为：
-1. **待命态（Lazy & Not Spawned）**：
-   - 在任务未提审时，探测输出显示为 `.macao/worktrees/<rev_id> (NOT_SPAWNED)`；
-   - 编排器绝不在平时预先克隆或挂载工作树，避免占用磁盘空间与 Git 分支锁。
-2. **提审原子挂载（Ephemeral Detached Checkout）**：
-   - 当执行者完成检查点（`macao task checkpoint --review`）时，编排器以提审的 Commit SHA 为基准，通过 `git worktree add --detach .macao/worktrees/<rev_id>/<task_id>/r<round> <commit_sha>` 为每位审查员创建独立的物理沙箱；
-   - 审查员在此沙箱中执行静态分析、只读测试与审查推理，无论产生任何临时产物，均不会污染开发分支或主分支。
-3. **评审终局原子清理（Atomic Teardown）**：
-   - 审查员完成 `.review.yml` 签署落票或轮次结束后，编排器通过 `git worktree remove --force` 将隔离工作树彻底物理移除，恢复干净的仓库树。
+### 3. 不介入业务与工作进度三元组（Progress Triplet: Last / Now / Next）
+根据 PRD §1 与 `PRODUCT-FACTS.md` 规范，MACAO 严格遵循“不介入业务代码逻辑、不做主观语义推测”的底线原则。对于项目的真实开发状态，MACAO 依托**底层物理事实**构建进度三元组（Progress Triplet）：
+1. **`Last`（上一个已完成的任务）**：
+   - 直接读取 Git 提交历史（`git log -n 5`），过滤非功能性变动，提取出由 Executor 最新提交的功能性 Commit（如 `fix B1/B2/IDEM-RACE round 44`）。
+2. **`Now`（当前正在进行的工作态）**：
+   - 扫描工作区物理评审单（`docs/reviews/*-review-request-*.md`）及 Git 暂存/未暂存状态；
+   - 若存在物理提审文件，直接识别为 `Pending Review Request: <file>`；
+   - 若存在脏文件，标定为 `Active Coding (<n> modified files)`。
+3. **`Next`（下一步计划）**：
+   - 解析提审单中待落票的 Reviewer 名单（如 `docs/reviews/*-review-result-*.md`），列出 `Awaiting Reviewers: [rev-opencode, rev-cursor, ...]`；
+   - 指引开发者下一步是等待审查员完成投票、还是使用 `macao task create` 正式纳管。
 
-### 4. 终端会话日志（PTY Transcript Logs）的分层架构
-- **为什么 `macao logs -r` 在探活期为空？**
-  - 探活阶段不启动评审会话，不调起长周期 AI 进程，自然不会产生日志。
-- **审查阶段的实时截获机制**：
-  - 当提审触发审查时，`LiveAgentDispatcher` 通过 `PTYSession` 挂载伪终端；
-  - 审查 AI 输出的每行文本均经过 ANSI 转义序列清洗，并实时写入 `.macao/logs/reviewers/<reviewer_id>_r<round>.log`；
-  - 开发者可随时通过 `macao logs -r <reviewer_id>` 或 `macao logs -r all` 调阅审查员完整的“思考与交互全过程”，实现完全透明可审计的审查黑匣子追踪。
+### 4. 审查员工作区（Worktree）真实探测与按需挂载
+在多 Agent 协同体系中，Reviewer 物理工作区的存在形式是**按需可选**的，绝不应机械臆测：
+1. **拒绝假象与硬编码**：
+   - 彻底摒弃机械输出假路径（如 `.macao/worktrees/<rev> (NOT_SPAWNED)`）的做法。
+   - `TeamProber` 调用 `git worktree list --porcelain` 探查当前底层真实的 Worktree 挂载列表。
+2. **单仓库原地审查（In-repo Shared Workspace）**：
+   - 若项目当前采用原地直接评审（或审查员使用只读模式直接在当前仓库检视），准确如实展示为：`In-repo (Shared Workspace / Direct Review)`。
+3. **隔离工作区生命周期（按需挂载与原子卸载）**：
+   - 若提审触发时配置了隔离 Worktree，通过 `git worktree add --detach .macao/worktrees/<rev_id>/<task_id>/r<round> <commit_sha>` 挂载独立沙箱；
+   - 评审终局投票归档后，原子执行 `git worktree remove --force` 彻底卸载恢复干净工作区。
+
+### 5. 全链路日志架构（PTY Transcripts & Audit Logs）
+- **探活审计日志（Probe Audit Logs）**：
+  - 探活期生成的探测报告、CLI 版本信息、发现的会话 ID 与状态判断均落盘至 `.macao/logs/probe/probe_<timestamp>.log`。
+  - 通过 `macao logs --probe`（或 `macao logs -p`）直接查看最近一次探测日志。
+- **审查与执行 PTY 日志（PTY Transcript Logs）**：
+  - 任务执行与审查阶段，由 `PTYSession` 实时截获终端输出、剥离 ANSI 码并落盘至 `.macao/logs/reviewers/<reviewer_id>_r<round>.log`。
+  - 支持 `macao logs -r <id>` 或 `macao logs -e` 随时调阅透明可追溯的 AI 思考与交互全过程。
 
 ---
 *本文档由技术团队维护，随代码库与 PRD 演进保持同步更新。*

@@ -195,10 +195,10 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
     exec_info = probe.get("executor", {})
     exec_table = Table(title="[bold green]1. Configured Executor (Implementation Agent)[/bold green]", border_style="green")
     exec_table.add_column("Agent ID", style="bold cyan")
-    exec_table.add_column("CLI & Model", style="yellow")
+    exec_table.add_column("CLI & Session", style="yellow")
     exec_table.add_column("Status", style="bold")
     exec_table.add_column("Current Worktree (Branch & State)", style="white")
-    exec_table.add_column("Work Progress & Details", style="bold")
+    exec_table.add_column("Work Progress (Last, Current, Next)", style="bold")
 
     st_color = "green" if exec_info.get("status") == "READY" else "red"
     st_text = f"[{st_color}]{exec_info.get('status')}[/{st_color}]"
@@ -212,6 +212,8 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         prog_styled = "[dim green]IDLE[/dim green]"
     elif prog == "ACTIVE_DEV (UNTRACKED)":
         prog_styled = "[bold yellow]ACTIVE_DEV (UNTRACKED)[/bold yellow]"
+    elif prog == "REVIEW_PENDING":
+        prog_styled = "[bold magenta]REVIEW_PENDING[/bold magenta]"
     elif prog in ("CODING_IN_PROGRESS", "REWORK"):
         prog_styled = "[bold yellow]CODING_IN_PROGRESS[/bold yellow]"
     elif prog == "CHECKPOINT_SUBMITTED":
@@ -223,10 +225,29 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
     else:
         prog_styled = f"[cyan]{prog}[/cyan]"
 
-    p_desc = exec_info.get("progress_desc", "")
-    prog_cell = f"{prog_styled}\n[dim]{p_desc}[/dim]" if p_desc else prog_styled
+    triplet = exec_info.get("progress_triplet") or {}
+    last_c = triplet.get("last_completed")
+    curr_t = triplet.get("current_task")
+    next_p = triplet.get("next_planned")
 
-    cli_model = f"{exec_info.get('cli', 'N/A')}" + (f" ({exec_info.get('model')})" if exec_info.get("model") else "")
+    if last_c and curr_t and next_p:
+        prog_cell = (
+            f"{prog_styled}\n"
+            f"[cyan]• Last:[/cyan] [dim]{last_c[:60]}[/dim]\n"
+            f"[cyan]• Now:[/cyan] [dim]{curr_t[:60]}[/dim]\n"
+            f"[cyan]• Next:[/cyan] [dim]{next_p[:60]}[/dim]"
+        )
+    else:
+        p_desc = exec_info.get("progress_desc", "")
+        prog_cell = f"{prog_styled}\n[dim]{p_desc}[/dim]" if p_desc else prog_styled
+
+    cli_base = f"{exec_info.get('cli', 'N/A')}" + (f" ({exec_info.get('model')})" if exec_info.get("model") else "")
+    exec_sess = exec_info.get("session")
+    if exec_sess and exec_sess.get("session_id"):
+        sid_short = exec_sess.get("session_id")[:14]
+        cli_model = f"{cli_base}\n[dim cyan]sess: {sid_short}...[/dim cyan]\n[dim]({exec_sess.get('last_active', 'active')})[/dim]"
+    else:
+        cli_model = cli_base
 
     exec_table.add_row(
         str(exec_info.get("id", "N/A")),
@@ -245,9 +266,9 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         border_style="blue"
     )
     rev_table.add_column("Agent ID", style="bold cyan")
-    rev_table.add_column("CLI (Weight)", style="yellow")
+    rev_table.add_column("CLI (Weight & Sess)", style="yellow")
     rev_table.add_column("Status", style="bold")
-    rev_table.add_column("Isolated Worktree", style="white")
+    rev_table.add_column("Worktree (Sandbox / Repo)", style="white")
     rev_table.add_column("Review Progress & Verdict", style="bold")
 
     for r in rev_list:
@@ -255,13 +276,16 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         rst_text = f"[{rst_color}]{r.get('status')}[/{rst_color}]"
 
         r_wt = r.get("worktree", {})
+        wt_type = r_wt.get("type", "isolated_worktree")
         wt_exists = r_wt.get("exists", False)
         wt_path_str = r_wt.get("relative_path") or r_wt.get("expected_path", "")
-        if wt_exists:
-            wt_badge = f"[green]ACTIVE @ {r_wt.get('commit', 'HEAD')}[/green]"
+
+        if wt_type == "in_repo":
+            wt_cell = "[dim]In-repo (Shared Workspace)[/dim]"
+        elif wt_exists:
+            wt_cell = f"{wt_path_str} ([green]ACTIVE @ {r_wt.get('commit', 'HEAD')}[/green])"
         else:
-            wt_badge = "[dim]NOT_SPAWNED[/dim]"
-        wt_cell = f"{wt_path_str} ({wt_badge})"
+            wt_cell = f"{wt_path_str} ([dim]NOT_SPAWNED[/dim])"
 
         r_rev = r.get("review", {})
         r_prog = r_rev.get("progress", "IDLE")
@@ -276,6 +300,8 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
                 r_prog_disp = "[yellow]COMPLETED (ABSTAINED)[/yellow]"
             else:
                 r_prog_disp = f"[bold green]COMPLETED ({r_vote})[/bold green]"
+        elif r_prog == "AWAITING_REVIEW":
+            r_prog_disp = f"[bold cyan]{r_rev.get('status_display', 'AWAITING_REVIEW')}[/bold cyan]"
         elif r_prog == "IN_PROGRESS":
             r_prog_disp = "[bold yellow]IN_PROGRESS (Reviewing...)[/bold yellow]"
         elif r_prog == "PENDING":
@@ -289,6 +315,9 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         rev_cell = f"{r_prog_disp}\n[dim]{details_str}[/dim]" if (details_str and details_str != "Standby (Awaiting task dispatch)") else r_prog_disp
 
         cli_disp = f"{r.get('cli', 'N/A')} (w:{r.get('weight', 1.0):.1f})"
+        r_sess = r.get("session")
+        if r_sess and r_sess.get("session_id"):
+            cli_disp += f"\n[dim]sess: {r_sess.get('session_id')[:10]}...[/dim]"
 
         rev_table.add_row(
             str(r.get("id", "N/A")),
@@ -303,6 +332,7 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
     git = probe.get("git", {})
     active = probe.get("active_task")
     state_store = probe.get("state_store", {})
+    phys_reviews = probe.get("physical_reviews", {})
 
     summary_table = Table(title="[bold magenta]3. Workspace & Consensus Readiness[/bold magenta]", border_style="magenta")
     summary_table.add_column("Dimension", style="bold white", width=22)
@@ -316,6 +346,13 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
     ss_color = "green" if "CONNECTED" in ss_status else "dim"
     summary_table.add_row("State Store", state_store.get("path", ".macao/state.db"), f"[{ss_color}]{ss_status}[/{ss_color}]")
 
+    if phys_reviews.get("has_pending_request"):
+        summary_table.add_row(
+            "Review Baseline",
+            f"{phys_reviews.get('latest_request_file')} (Baseline: {phys_reviews.get('latest_request_baseline')})",
+            "[bold yellow]AWAITING REVIEW VERDICTS[/bold yellow]"
+        )
+
     if active:
         summary_table.add_row(
             "Active Task",
@@ -328,6 +365,12 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
                 "Active Task",
                 f"None ({git.get('modified_files_count', 0)} files uncommitted in git)",
                 "[bold yellow]UNTRACKED DEV (Run 'macao task create' to adopt)[/bold yellow]"
+            )
+        elif phys_reviews.get("has_pending_request"):
+            summary_table.add_row(
+                "Active Task",
+                f"Review Request Pending ({phys_reviews.get('latest_request_baseline')[:8]})",
+                "[bold cyan]SCENARIO_C (Adopt via 'macao task create --review')[/bold cyan]"
             )
         else:
             summary_table.add_row("Active Task", "None (Idle)", "[bold green]READY FOR NEW TASK[/bold green]")
@@ -349,6 +392,11 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
                     f"  [yellow]• Note: Detected active development in working tree ({git.get('modified_files_count', 0)} uncommitted files).[/yellow]\n"
                     "  [dim]• Run 'macao task create --title \"...\"' to adopt existing changes into a managed task and trigger review.[/dim]\n"
                 )
+            elif phys_reviews.get("has_pending_request"):
+                console.print(
+                    f"  [cyan]• Detected pending review request: '{phys_reviews.get('latest_request_file')}'.[/cyan]\n"
+                    f"  [dim]• Reviewers can inspect baseline commit '{phys_reviews.get('latest_request_baseline')}' directly.[/dim]\n"
+                )
             else:
                 console.print("  [dim]→ Run 'macao task create --title \"...\"' to dispatch a new task.[/dim]\n")
         elif active.get("state") in ("CODING", "REWORK"):
@@ -367,5 +415,8 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         console.print(
             f"[bold red]✗ Pre-execution Probing Blocked:[/bold red]\n  - {reasons}\n"
         )
+
+    if probe.get("log_file"):
+        console.print(f"[dim]Audit Log: {probe.get('log_file')} | View with 'macao logs --probe'[/dim]\n")
 
 

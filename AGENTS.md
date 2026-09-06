@@ -18,7 +18,7 @@ MACAO (Multi-Agent CLI Agent Orchestrator) lives in `src/macao/`. Its key archit
 Run commands from project root `/home/debian/macao`:
 
 ```bash
-# 1. Run all unit and integration tests (126 tests)
+# 1. Run all unit and integration tests (128 tests)
 python3 -m unittest discover tests
 
 # 2. Run specific test file
@@ -32,6 +32,9 @@ python3 -m macao.cli.main probe --json
 
 # 5. Run static health diagnosis (pure read-only)
 python3 -m macao.cli.main doctor
+
+# 6. View probe audit logs
+python3 -m macao.cli.main logs --probe
 ```
 
 ## Coding Style & Naming Conventions
@@ -56,20 +59,22 @@ python3 -m macao.cli.main doctor
    - MACAO 是外层**流程编排器与物理产物信差**，绝不代替审查员做业务语义判断或篡改业务 Diff。
    - 执行者负责编写代码自评，审查员独立在沙箱中给出裁定（`.review.yml`），MACAO 负责路由、仲裁与状态推进。
 
-2. **动态探活规范（`macao probe` 与 `--dry-run`）**：
-   - **真实本地探活**：调用本地子进程 `shutil.which` + `<cli> --version` 探活已安装的真实 CLI（如 `agy 1.1.27`, `opencode 1.18.29`, `agent 2026.09.02-c22c1a3`, `claude 2.1.263`, `codex 2.1.0`），**严禁在探活阶段调用 LLM**。
-   - **严格只读零副作用**：通过 `file:...state.db?mode=ro` 连接 SQLite；若 `.macao/state.db` 不存在，绝不创建文件或初始化 DDL。
-   - **场景 C（已有项目接管）识别**：若 `state.db` 无任务，但 Git 检测到未提交修改（Dirty files），准确识别并展示为 **`ACTIVE_DEV (UNTRACKED)`**，指引开发者通过 `macao task create` 纳管，绝不机械报 `IDLE`。
+2. **动态运行态探活规范（`macao probe` 与 `preflight` 的严格分工）**：
+   - **`preflight` 专司基础设施预检**：检查本地 CLI 安装路径与版本（`shutil.which` + `<cli> --version`）；
+   - **`probe` 专司项目鲜活运行态**：
+     - **SessionLocator 会话发现**：自动定位 `agy`, `claude`, `opencode`, `codex`, `agent/cursor`, `kimi` 本地活跃 session，获取最近活动时间与上下文；
+     - **Git 与评审物理事实对账（三问进度）**：结合最新 commit 与 `docs/reviews/` 下的 `*-review-request-*.md`，精准推断 **上一个完成任务 (Last)**、**当前任务 (Now)** 与 **下一步计划 (Next)**，杜绝假空报 `IDLE`；
+     - **严格只读零副作用**：SQLite 只读连接（`file:...state.db?mode=ro`），绝不擅自初始化 DDL；
+     - **全流程日志留痕**：探活审计完整记录至 `.macao/logs/probe/probe_<timestamp>.log`，支持 `macao logs --probe` 随时溯源。
 
-3. **审查员工作区（Worktree）生命周期**：
-   - **按需延迟挂载（Ephemeral & Lazy-allocated）**：任务未提审时，Reviewer 工作区状态为 `(NOT_SPAWNED)`，不占磁盘与 Git 锁。
-   - **提审挂载**：仅在 `macao task checkpoint --review` 触发时，通过 `git worktree add --detach .macao/worktrees/<rev_id>/<task_id>/r<round> <commit>` 建立独立隔离沙箱。
-   - **评审终局清理**：投票完成并归档后，原子执行 `git worktree remove --force` 彻底卸载。
+3. **工作区（Worktree）如实探测而非硬编**：
+   - **工作区是可选的**：评审规范与实际项目中，隔离 Worktree 只是沙箱手段之一，单仓项目直接使用 `In-repo (Shared Workspace)`，绝不硬编虚构的 `.macao/worktrees/... (NOT_SPAWNED)` 路径；
+   - **真实 Git 探查**：通过 `git worktree list --porcelain` 检视本地实际挂载的工作树，如实呈现。
 
 4. **终端会话日志（PTY Transcript Logs）机制**：
-   - 探活阶段不启动评审会话，不调起长周期 AI，因此探活期日志为空。
+   - 探活阶段自动落盘探活审计日志至 `.macao/logs/probe/`；
    - 审查阶段由 `PTYSession` 实时截获终端输出、剥离 ANSI 码并落盘至 `.macao/logs/reviewers/<reviewer_id>_r<round>.log`，支持 `macao logs -r <id>` 随时审计。
 
 5. **当前测试与交付状态**：
-   - 126 项测试全部通过（`Ran 126 tests in 46.136s, OK`）；
+   - 128 项测试全部通过（`Ran 128 tests in 52.914s, OK`）；
    - 主干分支保持清洁并与 `origin/main` 实时同步。

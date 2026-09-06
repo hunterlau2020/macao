@@ -1,6 +1,6 @@
 # MACAO 详细技术开发计划 (PLAN.md)
 
-> **版本**：v1.2（Phase 0 / Phase 1 / Phase 2 全量闭环，Phase 3 CLI 与动态探活生产就绪，自动化测试 126 项全绿）
+> **版本**：v1.2（Phase 0 / Phase 1 / Phase 2 全量闭环，Phase 3 CLI 与动态探活生产就绪，自动化测试 128 项全绿）
 > **基准**：基于 [`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威 PRD v2.3.1）、[`docs/TECH_INTRODUCE.md`](TECH_INTRODUCE.md) 与 [`docs/ROADMAP.md`](ROADMAP.md)
 > **周期**：8 周（4 个两周迭代阶段）实现 MVP 交付，后续平滑演进至 v1.1+。
 
@@ -24,14 +24,14 @@
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ Phase 2 (Week 5-6): 合并流水线、安全沙箱与容灾治理 (Merge Pipeline & Resilience) [代码完成/通过] │
 │ ├─ MERGING 中间态流水线（Rebase 检查、Fast-forward 合并、CI Gate 门禁） (PASS)            │
-│ ├─ Reviewer 独立 Git Worktree 沙箱生命周期（按需挂载与终局清理） (PASS)                   │
+│ ├─ Reviewer 真实 Git Worktree 沙箱生命周期（按需挂载、单仓原地直审与终局清理） (PASS)     │
 │ ├─ Consensus Deadlock 人工接管触发（10 分钟时限）与 E7/E9/E10 落地 (PASS)                │
 │ ├─ agmsg 消息重试与死信队列（DLQ）治理 (PASS)                                           │
 │ └─ 里程碑 M2 进度: 返工循环 (S2) 与死锁接管 (S3/S6) 异常分支生产级闭环 (PASS)             │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ Phase 3 (Week 7-8): CLI 生产就绪、全场景演练与 MVP 验收 (UX, E2E & PG-3 Gate) [核心就绪]    │
-│ ├─ Click + Rich 完整交互终端、macao probe (--dry-run / --json) 与场景 C 识别 (PASS)      │
-│ ├─ 六场景（S1~S6）端到端集成测试演练与 126 项自动化测试全部通过 (PASS)                    │
+│ ├─ Click + Rich 完整交互终端、SessionLocator 原生会话探测与探活审计日志 (PASS)           │
+│ ├─ 六场景（S1~S6）端到端集成测试演练与 128 项自动化测试全部通过 (PASS)                    │
 │ ├─ 成本计量（Usage Meter）与 PTY 会话终端日志实时截获与脱敏 (PASS)                        │
 │ └─ 里程碑 M3 进度: 满足全部 MVP 成功指标，待通过 PG-3 门禁正式交付                          │
 └────────────────────────────────────────────────────────────────────────────────────────┘
@@ -114,13 +114,13 @@
 
 | 任务编号 | 任务名称 | 负责模块 | 详细说明与验收要求 | 当前状态 |
 |---|---|---|---|---|
-| **Task 3.1** | Click + Rich + prompt_toolkit 完整交互集成 | `src/macao/cli/` | 实现高颜值彩色状态看板（`macao status` 实时渲染 FSM 状态、Checkpoint、当前轮次与产物清单）；实现动态探活与预检（`macao probe --dry-run`、`macao doctor`、场景 C 未纳管开发精准识别）；实现交互式任务创建引导（`macao task create` 向导）与 Deadlock 光标选择。 | ✅ **已完成**<br>（测试通过） |
+| **Task 3.1** | Click + Rich + prompt_toolkit 完整交互集成 | `src/macao/cli/` | 实现高颜值彩色状态看板（`macao status` 实时渲染 FSM 状态、Checkpoint、当前轮次与产物清单）；实现动态探活与预检（`macao probe --dry-run`、`macao doctor`、场景 C 未纳管开发精准识别）；实现原生会话定位器（`SessionLocator`）、真实 Worktree 探测、开发进度三元组（Last/Now/Next）与探活审计日志落盘（`macao logs --probe`）；实现交互式任务创建引导（`macao task create` 向导）与 Deadlock 光标选择。 | ✅ **已完成**<br>（测试通过） |
 | **Task 3.2** | 成本与 Token 计量统计 (Usage Meter) | `src/macao/cli/` & `storage` | 统计各 Phase（开发/评审）各 CLI 消耗的 Token 用量与估算 USD 成本，支持 `macao usage` 查询与预算熔断；审查期 PTY 会话日志（`macao logs -r`）落盘审计。 | ✅ **已完成**<br>（测试通过） |
-| **Task 3.3** | 六大业务场景端到端自动化验收套件 (E2E SIM Suite) | `tests/` | 覆盖 S1（双批准）、S2（CI 失败回退）、S3（1:1 平票死锁）、S4（超时弃权）、S5（达到最大返工轮次）、S6（重试与手动取消），全量 126 项单元与集成测试。 | ✅ **已完成**<br>（测试通过） |
+| **Task 3.3** | 六大业务场景端到端自动化验收套件 (E2E SIM Suite) | `tests/` | 覆盖 S1（双批准）、S2（CI 失败回退）、S3（1:1 平票死锁）、S4（超时弃权）、S5（达到最大返工轮次）、S6（重试与手动取消），全量 128 项单元与集成测试。 | ✅ **已完成**<br>（测试通过） |
 | **Task 3.4** | 文档与发布交付 | `docs/` | 编写《MACAO 用户操作指南》与《CLI Adapter 开发者接入规范》；建立 `AGENTS.md` 规则与内存规范；依据 `docs/MACAO_REVIEW_GUIDELINES.md` 申请并通过 **PG-3 / L4 门禁**。 | 🟢 **进行中**<br>（文档与架构规范就绪） |
 
 ### 3. 里程碑交付物 (Milestone M3)
-- ✅ **高覆盖率自动化测试**：全量 126 项自动化测试全部通过（49s 执行完毕）；
+- ✅ **高覆盖率自动化测试**：全量 128 项自动化测试全部通过（66s 执行完毕）；
 - ✅ **真实环境探活验证**：在宿主环境与实际开发工程（如 `english_learning_system`）实机执行 `macao probe --dry-run` 验证通过；
 - 🎯 **MVP 交付就绪**：MACAO v0.1.0-mvp 具备生产级可用性。
 
@@ -151,7 +151,7 @@
 ## 📋 质量门禁与研发准则 (Engineering Guidelines)
 
 1. **门禁晋级硬约束**：
-   - 每个 Phase 结束前必须经过 `tests/` 自动化测试套件全绿验证（当前 22 项测试全绿）；
+   - 每个 Phase 结束前必须经过 `tests/` 自动化测试套件全绿验证（当前 128 项测试全绿）；
    - 涉及数据结构或接口变更，必须先修改 `docs/schemas/` 中的 Schema 并跑通正反 fixtures 后方可修改业务代码。
 2. **零静默假设原则**：
    - 严禁在无明确显式产物（`.dev.yml` / `.review.yml` / `vote_result.json`）时自动跨状态流转；

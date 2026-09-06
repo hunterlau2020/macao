@@ -182,6 +182,85 @@ class TestTeamProbeAndDispatch(unittest.TestCase):
         self.assertEqual(res3.exit_code, 0)
         self.assertIn("successfully created", res3.output)
 
+    def test_session_locator_discovery(self):
+        from macao.adapter.session_locator import SessionLocator
+        import tempfile
+        import json
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            # 1. Test unknown cli returns None
+            self.assertIsNone(SessionLocator.find_session("unknown-cli", tmp_path))
+
+            # 2. Test agy mock session locator
+            mock_home = tmp_path / "mock_home"
+            mock_hist = mock_home / ".gemini" / "antigravity-cli" / "history.jsonl"
+            mock_hist.parent.mkdir(parents=True, exist_ok=True)
+            mock_hist.write_text(
+                json.dumps({
+                    "workspace": str(tmp_path),
+                    "conversationId": "test-conv-12345",
+                    "timestamp": 1788700000000,
+                    "display": "Implement feature X"
+                }) + "\n",
+                encoding="utf-8"
+            )
+
+            import unittest.mock as mock
+            with mock.patch("pathlib.Path.home", return_value=mock_home):
+                found = SessionLocator.find_session("agy", tmp_path)
+                self.assertIsNotNone(found)
+                self.assertEqual(found["session_id"], "test-conv-12345")
+                self.assertEqual(found["cli"], "agy")
+
+            # 3. Test claude mock session locator
+            claude_proj = mock_home / ".claude" / "projects" / f"-{tmp_path.name}"
+            claude_proj.mkdir(parents=True, exist_ok=True)
+            sess_file = claude_proj / "session-uuid-999.jsonl"
+            sess_file.write_text('{"type": "message"}\n', encoding="utf-8")
+
+            with mock.patch("pathlib.Path.home", return_value=mock_home):
+                c_found = SessionLocator.find_session("claude", tmp_path)
+                self.assertIsNotNone(c_found)
+                self.assertEqual(c_found["session_id"], "session-uuid-999")
+                self.assertEqual(c_found["cli"], "claude")
+
+    def test_probe_physical_reviews_and_triplet(self):
+        self._create_mock_config("physical-review-proj")
+        prober = TeamProber(".")
+
+        # Create docs/reviews with a review request
+        rev_dir = Path("docs/reviews")
+        rev_dir.mkdir(parents=True, exist_ok=True)
+        req_file = rev_dir / "2026-09-07-review-request-test1234.md"
+        req_file.write_text("# 评审申请 — 单元测试功能\n\nBaseline: test1234\n", encoding="utf-8")
+        import subprocess
+        subprocess.run(["git", "add", "-A"], check=True)
+        subprocess.run(["git", "commit", "-m", "docs(review): review request test1234"], check=True)
+
+        res = prober.probe()
+        self.assertTrue(res["valid_config"])
+        self.assertTrue(res["physical_reviews"]["has_pending_request"])
+        self.assertEqual(res["physical_reviews"]["latest_request_baseline"], "test1234")
+        self.assertEqual(res["executor"]["progress"], "REVIEW_PENDING")
+        self.assertIn("last_completed", res["executor"]["progress_triplet"])
+        self.assertIn("current_task", res["executor"]["progress_triplet"])
+        self.assertIn("next_planned", res["executor"]["progress_triplet"])
+
+        # Reviewers should be marked as AWAITING_REVIEW
+        for r in res["reviewers"]:
+            self.assertEqual(r["review"]["progress"], "AWAITING_REVIEW")
+
+        # Verify probe log was written
+        self.assertIsNotNone(res["log_file"])
+        log_path = Path(res["log_file"])
+        self.assertTrue(log_path.exists())
+
+        # Test CLI logs --probe
+        res_logs = self.runner.invoke(cli, ["logs", "--probe"])
+        self.assertEqual(res_logs.exit_code, 0)
+        self.assertIn("Probe Audit Log", res_logs.output)
+
 
 if __name__ == "__main__":
     unittest.main()

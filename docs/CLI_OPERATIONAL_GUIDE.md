@@ -136,22 +136,25 @@ flowchart TD
   ```
 
 * **终端探测报告全景解析**：
-  运行后系统输出四重结构化矩阵：
+  运行后系统输出结构化审计矩阵：
   1. **Configured Executor（开发执行者状态与进度）**：
-     - **CLI 工具与模型**：如 `dev-agy (agy)`、版本号、探活状态（`READY` / `MISSING`）。
+     - **CLI 工具与原生会话（Native Session Discovery）**：如 `dev-agy (agy)`、版本号、探活状态（`READY` / `MISSING`），以及通过 `SessionLocator` 自动发现的底层原生活跃 Session ID（无需调用 LLM，毫秒级定位）。
      - **当前工作区（Current Worktree）**：主仓库物理路径、Git 当前工作分支、最新 HEAD Commit Hash、分支干净度（`clean` 或脏文件计数）。
-     - **工作进度（Work Progress）**：`IDLE`（空闲就绪）、`CODING_IN_PROGRESS`（特性分支实现中）、`CHECKPOINT_SUBMITTED`（检查点已提交待审查）、`WAITING_REVIEW`（代码已提交，等待评审投票）、`READY_TO_MERGE`（审查通过待合并）。
-  2. **Configured Reviewers（审查团席位、隔离工作区与评审进度）**：
-     - **审查员席位与权重**：如 `rev-opencode (1.0)`、`rev-cursor (1.0)` 等。
-     - **隔离工作区（Isolated Worktree）**：显示目标 Worktree 相对路径（如 `.macao/worktrees/<rev_id>/<task_id>/r<round>`），并标记其物理存在状态（`ACTIVE @ <commit>` 或 `NOT_SPAWNED`）。
-     - **评审进度（Review Progress）**：`IDLE`（待命）、`WAITING_DEV`（等待开发检查点）、`IN_PROGRESS`（审查会话执行中）、`COMPLETED (APPROVED / CHANGES_REQ / ABSTAINED)`（已完成审查并落票）。
-     - **评审详情**：展示落票结论与总结。
+     - **工作进度三元组（Progress Triplet: Last / Now / Next）**：
+       - `Last`: 上一个已完成的任务或功能提交（由 Git 提交历史自动提取）。
+       - `Now`: 当前正在进行的工作（例如待评审请求 `Pending Review Request: <file>`，或 `Active Coding` 脏改动）。
+       - `Next`: 下一步计划（如等待审查员裁决 `Awaiting Reviewers: [...]`，或待派发下一阶段任务）。
+  2. **Configured Reviewers（审查团席位、真实工作区与评审进度）**：
+     - **审查员席位与权重**：如 `rev-opencode (1.0)`、`rev-cursor (1.0)` 等，及探活就绪状态。
+     - **真实工作区检测（True Worktree Detection）**：通过 `git worktree list --porcelain` 探查真实工作树。若单仓库原地开发评审，准确展示为 `In-repo (Shared Workspace / Direct Review)`；若存在独立 Worktree，展示其实际物理路径；**绝不硬编码虚假路径或 `(NOT_SPAWNED)` 假象**。
+     - **评审进度（Review Progress）**：主动检索物理评审产物（`docs/reviews/`），准确反映真实评审状态（`AWAITING_REVIEW (@ <commit>)`、`APPROVED`、`CHANGES_REQ` 等）。
   3. **Workspace & Consensus Readiness（工作区与共识法定人数）**：
      - **Git Repository**：分支名、HEAD 提交及未暂存文件统计。
      - **State Store**：显示 `.macao/state.db` 状态（`CONNECTED (RO)` 只读直连，或未初始化时显示 `NOT_INITIALIZED`，绝不擅自创建空数据库）。
      - **Active Task**：当前活跃任务 ID、标题、轮次与 FSM 状态。
      - **Consensus Quorum**：就绪审查者数与法定仲裁门槛（如 `4/4 Ready (Required: 3) -> ACHIEVABLE`）。
-  4. **最终裁决与行动指引（Verdict & Guidance）**：
+  4. **探活审计日志与行动指引（Audit Trail & Guidance）**：
+     - 每次 probe 均记录完整探测链路至 `.macao/logs/probe/probe_<timestamp>.log`，支持 `macao logs --probe` 随时回溯。
      - 通过状态给出明确下一步建议（如 `macao task create`、`macao task checkpoint` 或 `macao merge approve`）。
 
 
@@ -329,6 +332,11 @@ macao logs -r
 
 # 5. 查看执行者 (Executor) 的原始 PTY 交互会话
 macao logs -e
+
+# 6. 查看最近一次动态探活 (Probe) 的完整审计日志
+macao logs --probe
+# 简写模式
+macao logs -p
 ```
 
 ### 2. macao audit（不可变状态账本）
