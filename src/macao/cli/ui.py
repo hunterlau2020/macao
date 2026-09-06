@@ -210,6 +210,8 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
     prog = exec_info.get("progress", "IDLE")
     if prog == "IDLE":
         prog_styled = "[dim green]IDLE[/dim green]"
+    elif prog == "ACTIVE_DEV (UNTRACKED)":
+        prog_styled = "[bold yellow]ACTIVE_DEV (UNTRACKED)[/bold yellow]"
     elif prog in ("CODING_IN_PROGRESS", "REWORK"):
         prog_styled = "[bold yellow]CODING_IN_PROGRESS[/bold yellow]"
     elif prog == "CHECKPOINT_SUBMITTED":
@@ -321,7 +323,14 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
             f"[bold yellow]IN PROGRESS ({active['state']})[/bold yellow]"
         )
     else:
-        summary_table.add_row("Active Task", "None (Idle)", "[bold green]READY FOR NEW TASK[/bold green]")
+        if not git.get("is_clean", True):
+            summary_table.add_row(
+                "Active Task",
+                f"None ({git.get('modified_files_count', 0)} files uncommitted in git)",
+                "[bold yellow]UNTRACKED DEV (Run 'macao task create' to adopt)[/bold yellow]"
+            )
+        else:
+            summary_table.add_row("Active Task", "None (Idle)", "[bold green]READY FOR NEW TASK[/bold green]")
 
     q_achieve = quorum.get("achievable", False)
     q_str = f"{quorum.get('ready_count')}/{quorum.get('total_configured')} Ready (Required: {quorum.get('minimum_winning_seats')})"
@@ -335,7 +344,13 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
             f"[bold green]✓ Pre-execution Probing Passed:[/bold green] Executor '{exec_info.get('id')}' and {quorum.get('ready_count')} reviewer(s) are operational."
         )
         if not active:
-            console.print("  [dim]→ Run 'macao task create --title \"...\"' to dispatch a new task.[/dim]\n")
+            if not git.get("is_clean", True):
+                console.print(
+                    f"  [yellow]• Note: Detected active development in working tree ({git.get('modified_files_count', 0)} uncommitted files).[/yellow]\n"
+                    "  [dim]• Run 'macao task create --title \"...\"' to adopt existing changes into a managed task and trigger review.[/dim]\n"
+                )
+            else:
+                console.print("  [dim]→ Run 'macao task create --title \"...\"' to dispatch a new task.[/dim]\n")
         elif active.get("state") in ("CODING", "REWORK"):
             if exec_info.get("progress") == "CHECKPOINT_SUBMITTED":
                 console.print(f"  [dim]→ Checkpoint submitted. Run 'macao task checkpoint' to dispatch {quorum.get('total_configured')} reviewers.[/dim]\n")

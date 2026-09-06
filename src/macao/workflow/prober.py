@@ -349,6 +349,17 @@ class TeamProber:
             else:
                 exec_probe["progress"] = task_state
                 exec_probe["progress_desc"] = f"Task currently in state {task_state}."
+        else:
+            if not git_info["is_clean"]:
+                mod_count = git_info.get("modified_files_count", 0)
+                exec_probe["progress"] = "ACTIVE_DEV (UNTRACKED)"
+                exec_probe["progress_desc"] = (
+                    f"Working tree has {mod_count} uncommitted file(s); "
+                    "run 'macao task create' to adopt/track with MACAO"
+                )
+            else:
+                exec_probe["progress"] = "IDLE"
+                exec_probe["progress_desc"] = "No active task assigned; workspace clean"
 
         # 4. Probe Reviewers
         reviewers_cfg = team.get("reviewers", [])
