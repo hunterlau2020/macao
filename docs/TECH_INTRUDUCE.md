@@ -163,7 +163,114 @@ MACAO 是一个面向 AI 软件开发团队的**跨终端 CLI Coding Agent 编�
 
 ---
 
-## 四、工程源码目录结构与模块说明
+## 四、CLI 运行态架构：PTY-Wrapper、Headless 参数与无状态 Reviewer 技术选择
+
+在 MACAO 中，各个底层 AI CLI（Claude Code, OpenCode, Codex, Antigravity, Cursor Agent, Kimi）的自动化调度是编排体系的执行基石。本节深入剖析 MACAO 采用的 **PTY-Wrapper 伪终端封装**、**各 CLI Headless 参数矩阵**、**Session Resume 异构生态** 以及 **无状态 Reviewer 的架构权衡与 Token 优化策略**。
+
+### 1. 为什么采用“PTY-Wrapper + Headless 免交互参数”技术方案？
+
+#### (1) 普通后台管道（`subprocess.PIPE`）的致命局限
+现代 AI 命令行工具专为人类开发者设计，本质是具备丰富光标交互和状态动画的**终端用户界面（TUI）**：
+1. **强制 TTY 检测**：主流 CLI（如 Claude Code、Cursor Agent 等）在启动时会检测 `sys.stdin.isatty()`。若采用常规的 `subprocess.Popen(..., stdin=PIPE, stdout=PIPE)` 管道调用，CLI 会识别为非终端管道而直接报错退出。
+2. **交互式授权弹窗（Interactive Confirmation）**：AI CLI 在执行文件读写、运行 Shell 脚本、修改代码时，默认会弹出 `[y/N]` 或交互式菜单等待人类按键授权。若以普通后台进程挂起，CLI 将永久阻塞在等待输入状态，导致任务死锁。
+
+#### (2) MACAO PTY-Wrapper 的技术实现
+MACAO 放弃了侵入式的 Hook / 插件魔改，采用纯原生的 **PTY-Wrapper（伪终端包装器）** 方案（见 [`src/macao/adapter/pty_session.py`](file:///home/debian/macao/src/macao/adapter/pty_session.py)）：
+* **虚拟 TTY 分配**：底层通过 Python POSIX `pty.openpty()` 分配主从虚拟终端文件描述符，将从设备挂载至子进程的 `stdin/stdout/stderr`，使 CLI 坚信自己正运行在一个真实的交互式终端窗口中。
+* **进程组生命周期与零僵尸保障（Zero Zombie Guarantee）**：子进程启动时通过 `preexec_fn=os.setsid` 建立独立会话与进程组。当任务完成或触发 SLA 超时时，PTY 会话管理器直接向进程组广播 `SIGTERM`（超时强行 `SIGKILL`），彻底回收 CLI 及其可能派生的编译器、单元测试、Node 等所有子孙进程，杜绝进程泄露。
+* **ANSI 终端序列动态清洗与两级自愈**：通过 [`macao.utils.ansi.strip_ansi()`](file:///home/debian/macao/src/macao/utils/ansi.py) 过滤所有 ANSI 颜色转义码、进度条回车符与终端控制字符；结合 `ReviewExtractor` 正则提取 Markdown 栅栏中的结构化 YAML 产物，实施 Draft-07 Schema 校验，即使大模型附带自然语言客套话也能实现 100% 确定性解析。
+
+---
+
+### 2. 各 AI CLI 启动参数与 Headless 运行矩阵
+
+MACAO 启动各个 CLI 时，根据各工具的原生能力注入专属的 Headless 免确认与模型控制参数：
+
+| AI CLI 工具 | 核心 Headless / 免确认参数 | 模型透传参数 | 完整启动命令示例 | 运行时职责 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Claude Code** | `--dangerously-skip-permissions`<br>*(跳过所有文件读写/命令执行的确认授权)* | `--model <model>` | `claude --dangerously-skip-permissions --model claude-3-7-sonnet` | Executor / Reviewer |
+| **OpenCode** | `--quiet`<br>*(静默模式，关闭交互式动画与确认)* | `-m <model>` | `opencode --quiet -m "GLM 5.3 max"` | Executor / Reviewer |
+| **Codex CLI** | `--quiet`<br>*(静默批处理执行模式)* | `-m <model>` | `codex --quiet -m "o3-mini"` | Executor / Reviewer |
+| **Google Antigravity (agy)** | `--quiet`<br>*(无头批处理/任务模式)* | `--model <model>` | `agy --quiet --model gemini-2.0-pro` | Executor / Reviewer |
+| **Cursor Agent (agent)** | `--trust --sandbox enabled -p`<br>*(信任当前目录、启用安全沙箱、-p 非交互提示词)* | `--model <model>` | `agent --trust --sandbox enabled -p --model "claude-3.5-sonnet"` | Executor / Reviewer |
+| **Kimi CLI** | `--non-interactive`<br>*(非交互纯文本输入输出)* | `--model <model>` | `kimi --non-interactive --model kimi-k1.5` | Executor / Reviewer |
+
+#### 四维参数与上下文交互模型
+MACAO 与底层 CLI 的交互由 4 个维度严密定义：
+1. **免确认 Flags**：如 `--dangerously-skip-permissions`, `--quiet`, `--non-interactive`，实现无人值守全自动运行；
+2. **模型参数（Model Specification）**：从 `macao.yaml` 声明的 `team.executor.model` 或 `team.reviewers[i].model` 动态透传，支持精确指定各模型权重；
+3. **工作区物理隔离路径（`cwd`）**：
+   - **Executor**：`cwd` 指向主代码仓库，工作在 `feature/<branch>` 特性分支；
+   - **Reviewer**：`cwd` 严格指向由 `git worktree add --detach` 建立的物理隔离沙箱（`.macao/worktrees/<rev_id>/<task_id>/r<round>/`），Reviewer 无论执行任何只读分析或命令，均物理隔离于主干与特性分支；
+4. **结构化 Prompt 注入（PTY Stdin）**：会话建立后通过伪终端管道写入标准任务/审查指令（包含验收标准、审查说明及期望写回的 `.dev.yml` 或 `.review.yml` 路径）。
+
+---
+
+### 3. Session 机制与各 CLI 的 Session 语法现状
+
+各个主流 CLI 实际上均具备原生会话恢复（Session Resume）命令：
+```bash
+# Codex CLI
+Usage: codex resume [OPTIONS] [SESSION_ID] [PROMPT]
+
+# Cursor Agent (agent)
+Usage: agent resume [options]
+
+# Kimi CLI
+Usage: kimi -S, --session [id]            Resume a session.
+
+# OpenCode
+Usage: opencode -s, --session            session id to continue
+
+# Claude Code
+Usage: claude --resume [id]               Resume previous conversation
+Usage: claude -c                         Continue recent conversation
+```
+
+#### 分工治理：Executor 与 Reviewer 的本质分歧
+在编排体系中，不同角色的会话生命周期策略截然不同：
+* **Executor（开发执行者）$\rightarrow$ 适合状态延续（Stateful Resume）**：
+  - 执行者负责大型工程的代码实现，对项目背景、架构分层有较长的理解成本；
+  - 若评审不通过需要返工（Round 2），通过 Session Resume 继续上一轮会话，能够保留思维脉络与工程感知，大幅提升修改效率并节省冷启动开销。
+* **Reviewer（代码审查者）$\rightarrow$ 必须坚持严格无状态（Stateless & Isolated）**。
+
+---
+
+### 4. 核心技术争鸣：无状态 Reviewer 会不会导致 Token 浪费？
+
+#### (1) 直觉疑问
+“如果 Reviewer 必须严格无状态，每次启动 Session 都是一张白纸，它是否需要花费巨量的 Token 去到处 `ls` 探查项目结构、寻找哪些测试工具可用、测试脚本放在哪里？”
+
+#### (2) MACAO 的架构解法：`review_context` 结构化靶向打包（PRD §5.2）
+**如果直接裸调 CLI，上述 Token 浪费确实不可避免；但 MACAO 正是通过 `review_context` 契约彻底化解了这一问题。**
+
+MACAO 在派发审查任务前，由编排器在宿主工作区预先完成分析，打包生成标准化的 `review_context`（校验遵循 [`docs/schemas/review_context.schema.json`](file:///home/debian/macao/docs/schemas/review_context.schema.json)），并作为 Prompt 直接注入给 Reviewer：
+1. **靶向代码变更清单（`code_changes`）**：
+   - 精确指定本次 Commit 的增删文件列表（`files_list`）、增删行数以及 `git diff` 引用；
+   - Reviewer 一进入会话即明确审查靶心（通常只有几十至数百行变更），无需通读几万行源码；
+2. **现成质量快照与测试命令（`quality_snapshot`）**：
+   - 包含已通过的测试数（`tests.passed`）、覆盖率（`coverage`）以及具体的测试执行命令（如 `pytest tests/test_api.py`）；
+   - Reviewer 无需消耗 Token 猜测测试框架（pytest? jest? cargo?），直接调用现有指令复核；
+3. **开发者自评与审查重点提示（`executor_self_assessment.review_focus`）**：
+   - 执行者在提交检查点时已明确指出：“重点关注并发安全与线程竞争”或“检查日期跨月边界值”；
+   - Reviewer 带着明确的目标切入审查。
+
+**结合 `review_strategy: "delta_plus_focus"` 增量审查策略，无状态 Reviewer 的单次上下文窗口开销被严格压制在 3,000 ~ 8,000 Token 以内，完全杜绝了盲目翻看代码库的无效损耗。**
+
+#### (3) 为什么即使有轻微冷启动，评审也绝不能复用长 Session？（代价与收益权衡）
+若为了省去冷启动而让 Reviewer 长期复用 Session，在生产环境中会带来毁灭性代价：
+1. **Token 计费反噬（Context Inflation）**：
+   - LLM 是按每次交互的**输入 Token 总量计费**的。若审查者累积了 Round 1、Round 2 甚至前序任务的历史，上下文将迅速膨胀到 5~10 万 Token；
+   - **Reviewer 哪怕只输出一句简单的评价，开发者都要为庞大的历史上下文重复买单**！相比之下，无状态冷启动注入 3,000 Token 靶向数据，综合开销反而显著更低；
+2. **长上下文注意力稀释（Lost in the Middle）**：
+   - 随着 Session 膨胀，大模型对边界缺陷、竞态死锁与细微类型漏洞的敏感度会断崖式下滑；
+3. **偏见与顺从性陷阱（Confirmation Bias & Sycophancy）**：
+   - 若 Round 1 Reviewer 提了意见，Round 2 在同一 Session 内复用，当 Executor 说“我已按要求修复”，复用 Session 的 Reviewer 极易产生老好人顺从效应，直接草率给出 `APPROVE`；
+   - **冷启动的本质是“双盲独立复审”**：每次只认此时此刻物理磁盘上的代码客观事实，这是工业级确定性共识门禁的生命线。
+
+---
+
+## 五、工程源码目录结构与模块说明
 
 ```text
 macao/
@@ -226,7 +333,7 @@ macao/
 
 ---
 
-## 五、运行与验证指引
+## 六、运行与验证指引
 
 ### 1. 运行自动化测试套件（22 项全绿）
 ```bash
