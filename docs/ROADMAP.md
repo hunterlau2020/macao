@@ -1,7 +1,7 @@
 # MACAO 技术开发路线图 (Technical Development Roadmap)
 
 > **版本**：v1.1
-> **基准**：基于 [`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威 PRD v2.3.1）、[`docs/TECH_INTRUDUCE.md`](TECH_INTRUDUCE.md) 与 [`docs/PLAN.md`](PLAN.md)
+> **基准**：基于 [`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威 PRD v2.3.1）、[`docs/TECH_INTRODUCE.md`](TECH_INTRODUCE.md) 与 [`docs/PLAN.md`](PLAN.md)
 > **周期**：8 周（4 个两周迭代阶段）实现 MVP 交付，后续平滑演进至 v1.1+。
 
 ---

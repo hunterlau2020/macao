@@ -3,7 +3,7 @@
 - **评审日期**：2026-08-27
 - **评审人**：zcode（独立评审，GLM）
 - **评审性质**：架构级技术评审（非 L1~L4 定级轮；对 `[2026-08-27-review-request-Phase0-Phase1-Code.md]` 交付物的技术面横向评审，与同日三份 L2 定级报告互补）
-- **评审对象**：commit `435eeea` 时点的 `src/macao/`（27 文件）+ `tests/`（9 套件）+ `pyproject.toml` + `docs/TECH_INTRUDUCE.md` 选型声明
+- **评审对象**：commit `435eeea` 时点的 `src/macao/`（27 文件）+ `tests/`（9 套件）+ `pyproject.toml` + `docs/TECH_INTRODUCE.md` 选型声明
 - **证据方式**：全量通读源码与测试 + 本机实测（win32 / Python 3.11.9）；缺陷级发现的逐条证据见同日 `2026-08-27-review-result-435eeea-zcode.md`（P0 ×2 + P1 ×7 + P2 ×6 + P3 ×8），本报告只做**模式级归纳与结构性判断**，不重复逐条清单
 - **整改核对**：评审完成于 `435eeea`；**附录一**逐项核对 commit `23dfad5`（P0/P1 全量整改提交）后的最新状态
 
@@ -22,7 +22,7 @@
 | 选型 | 判断 |
 |---|---|
 | SQLite + WAL 单机状态存储 | 正确：MVP 零运维、单文件可审计、与 PRD §11.4/§11.6 一致 |
-| **手写确定性 FSM 而非引入 LangGraph** | 实际上是**正确决定**：确定性状态机不需要 LLM 图编排框架；`TECH_INTRUDUCE.md:77` 已如实降级为"预留接口"——比盲目引入框架的判断力更好 |
+| **手写确定性 FSM 而非引入 LangGraph** | 实际上是**正确决定**：确定性状态机不需要 LLM 图编排框架；`TECH_INTRODUCE.md:77` 已如实降级为"预留接口"——比盲目引入框架的判断力更好 |
 | Click + Rich | 正确：与 §14 用户旅程的"增强型 CLI"定位匹配 |
 | jsonschema + `docs/schemas` 单一契约源 | 好实践：产物校验与文档契约同源（`core/schema.py` 直读 docs/schemas） |
 | AEP 信封 + SQLite 消息表 | 与 §11.6"agmsg 本地形态 = SQLite 消息表"一致 |

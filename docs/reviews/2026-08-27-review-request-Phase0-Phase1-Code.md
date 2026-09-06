@@ -24,7 +24,7 @@
 自 PRD v2.3.1 审批申请（commit `403ddc7`）以来，本次提交共完成以下三大类交付物：
 
 ### 1. 技术设计与规划文档体系 (`docs/`)
-- [`docs/TECH_INTRUDUCE.md`](../TECH_INTRUDUCE.md)：系统总体架构设计、技术组件选型落地矩阵、增强型 CLI（Click + Rich + prompt_toolkit）与全屏 TUI 的全方位对比剖析与演进路径；
+- [`docs/TECH_INTRODUCE.md`](../TECH_INTRODUCE.md)：系统总体架构设计、技术组件选型落地矩阵、增强型 CLI（Click + Rich + prompt_toolkit）与全屏 TUI 的全方位对比剖析与演进路径；
 - [`docs/PLAN.md`](../PLAN.md) (升级至 v1.1)：8 周 MVP 研发详细计划、Phase 0~3 任务分解（WBS）以及当前 Phase 0/1 的完成状态；
 - [`docs/ROADMAP.md`](../ROADMAP.md) (升级至 v1.1)：中长期技术演进路线（MVP -> v1.1 -> v1.2 -> v2.0）；
 - [`docs/EXPERT_QUALITY.md`](../EXPERT_QUALITY.md)：四轮 16 份评审报告的专家质量评分与排班规则；

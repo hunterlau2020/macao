@@ -1,7 +1,7 @@
 # MACAO 详细技术开发计划 (PLAN.md)
 
 > **版本**：v1.1（Phase 0 / Phase 1 代码开发完成，自动化测试 22 项全绿）
-> **基准**：基于 [`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威 PRD v2.3.1）、[`docs/TECH_INTRUDUCE.md`](TECH_INTRUDUCE.md) 与 [`docs/ROADMAP.md`](ROADMAP.md)
+> **基准**：基于 [`docs/MACAO_PRD_v2.md`](MACAO_PRD_v2.md)（权威 PRD v2.3.1）、[`docs/TECH_INTRODUCE.md`](TECH_INTRODUCE.md) 与 [`docs/ROADMAP.md`](ROADMAP.md)
 > **周期**：8 周（4 个两周迭代阶段）实现 MVP 交付，后续平滑演进至 v1.1+。
 
 ---

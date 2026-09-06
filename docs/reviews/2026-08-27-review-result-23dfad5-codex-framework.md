@@ -15,7 +15,7 @@
 
 ### P0：把 worktree 当安全沙箱是错误的技术边界
 
-`execution_mode=SANDBOXED` 只存在于 Capability Manifest（`src/macao/adapter/codex.py:19-28`、`src/macao/adapter/kimi.py:18-27`），实际启动仅以同一用户权限运行 CLI（`:48-52`），没有容器、用户/挂载命名空间、网络策略、命令白名单或凭据隔离。`git worktree` 仅分离 checkout，不限制进程读取父目录、改动其他路径或联网；因此不能兑现技术总览所称的“物理隔离沙箱”（`docs/TECH_INTRUDUCE.md:78,195-196`）。
+`execution_mode=SANDBOXED` 只存在于 Capability Manifest（`src/macao/adapter/codex.py:19-28`、`src/macao/adapter/kimi.py:18-27`），实际启动仅以同一用户权限运行 CLI（`:48-52`），没有容器、用户/挂载命名空间、网络策略、命令白名单或凭据隔离。`git worktree` 仅分离 checkout，不限制进程读取父目录、改动其他路径或联网；因此不能兑现技术总览所称的“物理隔离沙箱”（`docs/TECH_INTRODUCE.md:78,195-196`）。
 
 **要求**：将 Reviewer 定位降为“隔离 checkout、非安全 sandbox”，或在真实联调前接入可验证的 OS 级边界（例如 rootless container/bubblewrap、只读挂载、临时凭据、网络默认拒绝），并将该边界作为 preflight 的硬失败条件。
 
@@ -75,7 +75,7 @@ domain (state machine, vote rules, immutable protocol types)
 
 ### P2：工程声明与实际 Phase/测试范围漂移
 
-`docs/PLAN.md` 明确把合并、沙箱、DLQ、脱敏及完整 CLI 交互放在 Phase 2/3 待开展（`:25-36,96-120`），但 `TECH_INTRUDUCE.md` 称“全量组件均已实现”、并把 agmsg、TTL/DLQ、签字、prompt_toolkit 写成已落地（`:69-82`）。实际依赖中 `prompt_toolkit` 仅是 dev extra 且源码未使用（`pyproject.toml:29-33`），`usage` 只是占位输出（`src/macao/cli/main.py:206-213`）。
+`docs/PLAN.md` 明确把合并、沙箱、DLQ、脱敏及完整 CLI 交互放在 Phase 2/3 待开展（`:25-36,96-120`），但 `TECH_INTRODUCE.md` 称“全量组件均已实现”、并把 agmsg、TTL/DLQ、签字、prompt_toolkit 写成已落地（`:69-82`）。实际依赖中 `prompt_toolkit` 仅是 dev extra 且源码未使用（`pyproject.toml:29-33`），`usage` 只是占位输出（`src/macao/cli/main.py:206-213`）。
 
 **要求**：将技术说明改为“已实现 / Mock 验证 / 待实现 / 待实机验证”四种状态；将门禁从“测试总数”改为能力矩阵和反例覆盖清单。
 
