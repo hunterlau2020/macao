@@ -113,7 +113,7 @@ def cli(ctx, is_init):
         ctx.invoke(init_cmd)
         ctx.exit()
     elif ctx.invoked_subcommand is None:
-        pass
+        click.echo(ctx.get_help())
 
 
 @cli.command()
