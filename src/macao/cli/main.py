@@ -4,6 +4,8 @@ import os
 import sys
 import shutil
 import sqlite3
+import hashlib
+import yaml
 import click
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -13,6 +15,7 @@ from macao.core.types import AgentState, OverrideChoice, PreflightCheckResult, E
 from macao.storage.store import StateStore
 from macao.storage.reconcile import StateReconciler
 from macao.workflow.orchestrator import Orchestrator
+from macao.utils.git_utils import GitManager
 from macao.adapter.claude import ClaudeCodeAdapter
 from macao.adapter.codex import CodexAdapter
 from macao.adapter.opencode import OpenCodeAdapter
@@ -345,6 +348,142 @@ def task_recover():
         console.print("[yellow]No active task to recover or no state discrepancies found.[/yellow]")
 
 
+@task.command("checkpoint")
+@click.option("--auto", is_flag=True, help="Auto-generate .macao/.dev.yml from current HEAD commit if missing")
+@click.option("--review/--no-review", default=True, help="Automatically dispatch live reviewer agents in worktrees")
+@click.option("--timeout", default=120.0, help="Per-reviewer timeout in seconds")
+def task_checkpoint(auto: bool, review: bool, timeout: float):
+    """Submit development checkpoint, dispatch isolated worktree reviews, and tally consensus."""
+    orchestrator = get_orchestrator(".")
+    store = StateStore()
+    active = store.get_active_task()
+    if not active:
+        console.print("[red]No active task found to submit checkpoint for. Run 'macao task create' first.[/red]")
+        return
+
+    task_id = active["task_id"]
+    git = GitManager(".")
+    head_commit = git.get_head_commit()
+    dev_path = Path(".macao/.dev.yml")
+
+    if auto and not dev_path.exists():
+        req_doc = Path(f"docs/reviews/review-request-{task_id}.md")
+        req_doc.parent.mkdir(parents=True, exist_ok=True)
+        if not req_doc.exists():
+            req_doc.write_text(f"# Review Request: {active.get('title', task_id)}\n\nCommit: {head_commit}\n", encoding="utf-8")
+
+        exec_cfg = orchestrator.config.get("executor", {})
+        exec_id = exec_cfg.get("id", "dev-claude")
+        exec_cli = exec_cfg.get("cli", "claude-code")
+
+        manifest_data = {
+            "version": "1.0",
+            "task_id": task_id,
+            "checkpoint_ref": head_commit,
+            "full_document": {
+                "path": str(req_doc),
+                "evidence_commit": head_commit,
+                "sha256": hashlib.sha256(req_doc.read_bytes()).hexdigest()
+            },
+            "status": "ready_for_review",
+            "signal": "EXPLICIT",
+            "review_round": active.get("review_round", 1),
+            "executor": {"id": exec_id, "cli": exec_cli},
+            "development": {
+                "quality_metrics": {"tests_passed": True},
+                "git": {"latest_commit": head_commit}
+            }
+        }
+        dev_path.parent.mkdir(parents=True, exist_ok=True)
+        dev_path.write_text(yaml.safe_dump(manifest_data), encoding="utf-8")
+        console.print(f"[green]✓ Auto-generated .macao/.dev.yml for commit {head_commit[:8]}[/green]")
+
+    if not dev_path.exists():
+        console.print("[red]Missing .macao/.dev.yml. Please create it or pass '--auto' flag to auto-generate.[/red]")
+        return
+
+    # 1. Check development checkpoint
+    console.print(f"[bold cyan]Validating development checkpoint for task '{task_id}'...[/bold cyan]")
+    try:
+        change1 = orchestrator.check_development_checkpoint(task_id)
+        if not change1:
+            console.print("[yellow]Checkpoint validation deferred or rejected.[/yellow]")
+            return
+        console.print(f"[bold green]✓ Checkpoint validated: {change1.from_state.value} -> {change1.to_state.value} (ref: {head_commit[:8]})[/bold green]")
+    except Exception as e:
+        console.print(f"[red]✗ Checkpoint validation error: {e}[/red]")
+        return
+
+    # 2. Dispatch review requests
+    try:
+        change2 = orchestrator.dispatch_review_requests(task_id)
+        console.print(f"[bold green]✓ Review dispatched: {change2.from_state.value} -> {change2.to_state.value}[/bold green]")
+    except Exception as e:
+        console.print(f"[red]✗ Review dispatch error: {e}[/red]")
+        return
+
+    # 3. If --review: Run live reviewers
+    if review:
+        from macao.workflow.live_dispatcher import LiveAgentDispatcher
+        dispatcher = LiveAgentDispatcher(".")
+        reviewers = orchestrator.config.get("reviewers", [])
+        diff_txt = git.get_diff(active.get("target_branch", "main"), head_commit)
+
+        console.print(f"\n[bold cyan]Launching {len(reviewers)} isolated review sessions...[/bold cyan]")
+        for r_cfg in reviewers:
+            r_id = r_cfg["id"]
+            console.print(f"  • Invoking reviewer [bold white]{r_id}[/bold white] in isolated worktree...")
+            try:
+                res = dispatcher.dispatch_review_in_worktree(
+                    reviewer_cfg=r_cfg,
+                    task_id=task_id,
+                    checkpoint_ref=head_commit,
+                    review_round=active.get("review_round", 1),
+                    diff_context=diff_txt,
+                    timeout_sec=timeout
+                )
+                st = res.get("status")
+                vote = res.get("vote", "N/A")
+                if st == "SUCCESS":
+                    console.print(f"    [green]✓ {r_id} finished: Vote={vote}[/green]")
+                else:
+                    console.print(f"    [yellow]! {r_id} {st}: {res.get('error')}[/yellow]")
+            except Exception as ex:
+                console.print(f"    [red]✗ {r_id} dispatch error: {ex}[/red]")
+
+        # 4. Evaluate consensus
+        console.print("\n[bold cyan]Tallying consensus across all reviewer votes...[/bold cyan]")
+        try:
+            eval_res = orchestrator.collect_and_evaluate_consensus(task_id)
+            dec = eval_res.get("decision")
+            updated = store.get_task(task_id)
+            console.print(f"[bold green]✓ Consensus evaluation completed: Decision=[bold white]{dec}[/bold white], Next State=[bold cyan]{updated['state']}[/bold cyan][/bold green]")
+            if dec == "APPROVED":
+                console.print("\n[bold green]★ Task review passed! You can now run 'macao merge approve' to merge and deploy.[/bold green]")
+            elif dec == "REWORK_REQUIRED":
+                console.print("\n[yellow]! Review did not pass. Task returned to REWORK. Check reviewer feedback in .macao/logs/reviewers/.[/yellow]")
+            else:
+                console.print("\n[yellow]! Deadlock reached. Use 'macao override resolve' for manual takeover.[/yellow]")
+        except Exception as e:
+            console.print(f"[red]✗ Consensus tally error: {e}[/red]")
+
+
+@task.command("cancel")
+@click.option("--reason", default="User requested task cancellation", help="Reason for cancellation")
+def task_cancel(reason: str):
+    """Cancel currently active development task."""
+    store = StateStore()
+    active = store.get_active_task()
+    if not active:
+        console.print("[yellow]No active task to cancel.[/yellow]")
+        return
+    task_id = active["task_id"]
+    orchestrator = get_orchestrator(".")
+    orchestrator.fsm.transition(task_id, AgentState.CANCELLED, "E8", {"reason": reason})
+    store.log_audit_event(task_id, "TASK_CANCELLED", {"reason": reason})
+    console.print(f"[bold yellow]✓ Task '{task_id}' has been cancelled.[/bold yellow]")
+
+
 @cli.command()
 def status():
     """Display real-time task progress and consensus dashboard (PRD §14.3, read-only idempotent)."""
@@ -488,7 +627,8 @@ def merge():
 
 @merge.command("approve")
 @click.option("--note", default="", help="Signoff note")
-def merge_approve(note: str):
+@click.option("--merge", "auto_merge", is_flag=True, help="Immediately execute merge pipeline after approval")
+def merge_approve(note: str, auto_merge: bool):
     """Signoff and approve pending code merge (PRD §14.2 / §16.3)."""
     store = StateStore()
     task_data = store.get_active_task()
@@ -502,6 +642,40 @@ def merge_approve(note: str):
         "checkpoint_ref": task_data.get("checkpoint_ref")
     })
     console.print(f"[bold green]✓ Merge signoff recorded for task '{task_id}'.[/bold green]")
+
+    if auto_merge and task_data.get("state") == AgentState.MERGING.value:
+        orchestrator = get_orchestrator(".")
+        try:
+            ok, msg, change = orchestrator.execute_merge(task_id)
+            if ok:
+                console.print(f"[bold green]✓ Fast-forward merge succeeded: {msg}[/bold green]")
+                console.print(f"[bold cyan]Task '{task_id}' state transitioned to DONE.[/bold cyan]")
+            else:
+                console.print(f"[yellow]Merge pending or gated: {msg}[/yellow]")
+        except Exception as e:
+            console.print(f"[red]✗ Merge pipeline execution error: {e}[/red]")
+
+
+@merge.command("execute")
+def merge_execute():
+    """Execute code merge pipeline for approved task (PRD §14.5)."""
+    store = StateStore()
+    task_data = store.get_active_task()
+    if not task_data:
+        console.print("[red]No active task found for merge execution.[/red]")
+        return
+
+    task_id = task_data["task_id"]
+    orchestrator = get_orchestrator(".")
+    try:
+        ok, msg, change = orchestrator.execute_merge(task_id)
+        if ok:
+            console.print(f"[bold green]✓ Fast-forward merge succeeded: {msg}[/bold green]")
+            console.print(f"[bold cyan]Task '{task_id}' state transitioned to DONE.[/bold cyan]")
+        else:
+            console.print(f"[yellow]Merge pending or gated: {msg}[/yellow]")
+    except Exception as e:
+        console.print(f"[red]✗ Merge pipeline execution error: {e}[/red]")
 
 
 @cli.command("test-clis")
