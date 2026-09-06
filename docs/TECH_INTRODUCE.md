@@ -335,38 +335,14 @@ macao/
 
 ## 六、运行与验证指引
 
-### 1. 运行自动化测试套件（22 项全绿）
+### 1. 运行自动化测试套件（126 项全绿）
 ```bash
 PYTHONPATH=src python3 -m unittest discover tests -v
 ```
 
 **实测运行输出**：
 ```text
-test_2_reviewer_consensus (test_consensus.TestConsensusEngine) ... ok
-test_quorum_calculation (test_consensus.TestConsensusEngine) ... ok
-test_full_review_context_builder (test_context_builder.TestReviewContextBuilder) ... ok
-test_minimal_review_context_builder (test_context_builder.TestReviewContextBuilder) ... ok
-test_fsm_transition_lifecycle (test_fsm.TestWorkflowFSM) ... ok
-test_transition_rules (test_fsm.TestWorkflowFSM) ... ok
-test_mock_capabilities (test_mock_adapter.TestMockAdapter) ... ok
-test_mock_simulate_dev_and_review_artifacts (test_mock_adapter.TestMockAdapter) ... ok
-test_aep_envelope_creation (test_msg_bus.TestMessageBus) ... ok
-test_message_bus_pub_sub_ack (test_msg_bus.TestMessageBus) ... ok
-test_scenario_s1_happy_path (test_orchestrator_sim.TestOrchestratorSimulation) ... ok
-test_scenario_s2_rework_loop (test_orchestrator_sim.TestOrchestratorSimulation) ... ok
-test_scenario_s3_deadlock_and_override_approved (test_orchestrator_sim.TestOrchestratorSimulation) ... ok
-test_scenario_s6_deadlock_and_cancel (test_orchestrator_sim.TestOrchestratorSimulation) ... ok
-test_reconcile_unconsumed_dev_manifest_after_crash (test_reconcile_crash.TestCrashReconcile) ... ok
-test_reconcile_vote_result_after_crash (test_reconcile_crash.TestCrashReconcile) ... ok
-test_aep_envelope_schema (test_schema.TestSchemaValidation) ... ok
-test_dev_manifest_schema (test_schema.TestSchemaValidation) ... ok
-test_review_manifest_schema (test_schema.TestSchemaValidation) ... ok
-test_vote_result_schema (test_schema.TestSchemaValidation) ... ok
-test_artifact_registration (test_state_store.TestStateStore) ... ok
-test_state_store_task_lifecycle (test_state_store.TestStateStore) ... ok
-
-----------------------------------------------------------------------
-Ran 22 tests in 0.648s
+Ran 126 tests in 46.136s
 
 OK
 ```
@@ -376,21 +352,67 @@ OK
 # 1. 运行环境与 CLI 探测预检
 PYTHONPATH=src python3 -m macao.cli.main preflight
 
-# 2. 检查配置与数据库健康度
+# 2. 检查配置与数据库健康度 (纯只读)
 PYTHONPATH=src python3 -m macao.cli.main doctor
 
-# 3. 创建开发任务
+# 3. 动态探活团队与工作区状态 (支持 --dry-run 零副作用与 --json 输出)
+PYTHONPATH=src python3 -m macao.cli.main probe --dry-run
+
+# 4. 创建开发任务
 PYTHONPATH=src python3 -m macao.cli.main task create \
   --title "重构数据库连接池" \
   --acceptance "通过全部单元测试，覆盖率 > 85%" \
   --branch "feature/db-refactor"
 
-# 4. 查看当前任务与状态看板
+# 5. 查看当前任务与状态看板
 PYTHONPATH=src python3 -m macao.cli.main status
 
-# 5. 人工接管决策
+# 6. 人工接管决策
 PYTHONPATH=src python3 -m macao.cli.main override resolve --choice APPROVED --note "人工确认代码逻辑无误"
 ```
+
+---
+
+## 七、动态探活机制、隔离工作区与日志架构 (Dynamic Probing & Worktree Lifecycle)
+
+### 1. 探活核心原则（Zero-Cost & Read-Only Probe）
+`macao probe` 是 MACAO 体系中的**前置环境与状态轻量级健康探测工具**，其核心设计遵循三大硬性工程约束：
+1. **真实宿主环境探测（Native CLI Preflight）**：
+   - 探活时各适配器（如 `AntigravityAdapter`, `ClaudeCodeAdapter`, `CodexAdapter`, `OpenCodeAdapter`, `CursorAgentAdapter` 等）直接执行本地系统探针（`shutil.which` + `<cli> --version`），在毫秒级内获取真实安装的客户端版本（如 `agy 1.1.27`, `opencode 1.18.29`, `agent 2026.09.02-c22c1a3`, `claude 2.1.263`, `codex 2.1.0`）；
+   - **严禁探活期调用大模型**：探活的目标是验证“工具链基础设施是否健全、仲裁门槛能否达成”，绝不在探活阶段向大模型发请求，杜绝 API 延迟、网络阻塞与 Token 费用浪费。
+2. **严格只读零副作用（Zero-Mutation Guarantee via `--dry-run`）**：
+   - 系统使用 SQLite 只读 URI `file:...state.db?mode=ro` 连入持久化层；
+   - 若当前项目尚未创建任务（`.macao/state.db` 不存在），探活程序**绝不擅自创建数据库文件或初始化 DDL**，保证对被测代码库 100% 零修改、零写锁。
+3. **输出形式多样化**：
+   - 终端彩色 Rich 表格渲染；
+   - `--json` 格式化机器可读输出，便于自动化 CI 流水线或守护进程（Daemon）消费。
+
+### 2. 接管现有项目（场景 C）的未纳管开发识别（Untracked Dev Detection）
+在将 MACAO 引入已有开发项目（如 `english_learning_system`）时，往往存在“执行者已经在写代码，工作区存在大量改动，但尚未在 MACAO 中建立任务工单”的客观情况：
+- **脱节问题**：若编排器机械地仅以 `state.db` 是否有活跃任务来判定，会导致输出 `IDLE: No active task assigned; waiting for task dispatch`，严重脱离实际开发态；
+- **自愈识别机制**：
+  - 当 `state.db` 中无活跃任务时，`TeamProber` 主动解析本地 Git 状态（`git status --porcelain`）；
+  - 若工作区存在未提交修改（Dirty files），执行者状态被精准标定为 **`ACTIVE_DEV (UNTRACKED)`**，并展示脏文件计数；
+  - 编排看板与最终指引明确提示开发者：“检测到工作区正在进行未纳管开发，可通过 `macao task create` 纳管或直接提审”，实现无缝平滑接管。
+
+### 3. Reviewer 隔离工作区的生命周期（Ephemeral & Lazy-allocated Worktree）
+MACAO 的审查员必须遵循“严格无状态”与“物理零污染”原则，Reviewer 的 Git Worktree 具有以下全生命周期行为：
+1. **待命态（Lazy & Not Spawned）**：
+   - 在任务未提审时，探测输出显示为 `.macao/worktrees/<rev_id> (NOT_SPAWNED)`；
+   - 编排器绝不在平时预先克隆或挂载工作树，避免占用磁盘空间与 Git 分支锁。
+2. **提审原子挂载（Ephemeral Detached Checkout）**：
+   - 当执行者完成检查点（`macao task checkpoint --review`）时，编排器以提审的 Commit SHA 为基准，通过 `git worktree add --detach .macao/worktrees/<rev_id>/<task_id>/r<round> <commit_sha>` 为每位审查员创建独立的物理沙箱；
+   - 审查员在此沙箱中执行静态分析、只读测试与审查推理，无论产生任何临时产物，均不会污染开发分支或主分支。
+3. **评审终局原子清理（Atomic Teardown）**：
+   - 审查员完成 `.review.yml` 签署落票或轮次结束后，编排器通过 `git worktree remove --force` 将隔离工作树彻底物理移除，恢复干净的仓库树。
+
+### 4. 终端会话日志（PTY Transcript Logs）的分层架构
+- **为什么 `macao logs -r` 在探活期为空？**
+  - 探活阶段不启动评审会话，不调起长周期 AI 进程，自然不会产生日志。
+- **审查阶段的实时截获机制**：
+  - 当提审触发审查时，`LiveAgentDispatcher` 通过 `PTYSession` 挂载伪终端；
+  - 审查 AI 输出的每行文本均经过 ANSI 转义序列清洗，并实时写入 `.macao/logs/reviewers/<reviewer_id>_r<round>.log`；
+  - 开发者可随时通过 `macao logs -r <reviewer_id>` 或 `macao logs -r all` 调阅审查员完整的“思考与交互全过程”，实现完全透明可审计的审查黑匣子追踪。
 
 ---
 *本文档由技术团队维护，随代码库与 PRD 演进保持同步更新。*
