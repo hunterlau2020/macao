@@ -76,6 +76,47 @@ class TestCleanAndRollback(unittest.TestCase):
             self.assertEqual(res.exit_code, 0)
             self.assertEqual(Path("macao.yaml").read_text(encoding="utf-8"), "version: backup")
 
+    def test_interactive_init_chinese_comments_and_canonical_naming(self):
+        """Verify init uses current directory name, dev-/rev- naming, and Chinese comments."""
+        import yaml
+        from macao.core.schema import validate_config
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=self.tmpdir):
+            proj_dir = Path("my_english_app")
+            proj_dir.mkdir()
+            
+            # Run inside proj_dir
+            old_cwd = os.getcwd()
+            os.chdir(str(proj_dir))
+            try:
+                res = runner.invoke(cli, ["init", "--force", "--yes"])
+                self.assertEqual(res.exit_code, 0, f"init failed: {res.output}")
+                self.assertTrue(Path("macao.yaml").exists())
+
+                content = Path("macao.yaml").read_text(encoding="utf-8")
+                # 1. Project name must match directory name
+                self.assertIn('name: "my_english_app"', content)
+                self.assertNotIn('name: "macao-demo"', content)
+
+                # 2. Chinese comments present
+                self.assertIn("# 项目名称", content)
+                self.assertIn("# 主开发执行者", content)
+                self.assertIn("# 独立审查团", content)
+                self.assertIn("# 3. 共识", content)
+
+                # 3. Canonical naming
+                cfg = yaml.safe_load(content)
+                self.assertTrue(cfg["team"]["executor"]["id"].startswith("dev-"), f"Expected dev- prefix, got {cfg['team']['executor']['id']}")
+                for rev in cfg["team"]["reviewers"]:
+                    self.assertTrue(rev["id"].startswith("rev-"), f"Expected rev- prefix, got {rev['id']}")
+
+                # 4. Valid Draft-07 Schema
+                is_val, err = validate_config(cfg)
+                self.assertTrue(is_val, f"Schema validation error: {err}")
+            finally:
+                os.chdir(old_cwd)
+
 
 if __name__ == "__main__":
     unittest.main()

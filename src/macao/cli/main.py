@@ -23,70 +23,146 @@ from macao.adapter.mock import MockAgentAdapter
 from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status, render_audit_table
 
 
-DEFAULT_CONFIG_TEMPLATE = """# MACAO macao.yaml Orchestration Configuration (PRD §13)
+DEFAULT_CONFIG_TEMPLATE = """# ==============================================================================
+# MACAO 多 Agent 协同编排配置文件 (macao.yaml)
+# 遵循规范: Draft-07 Strict Schema (PRD §13)
+# ==============================================================================
+
+# 配置规范版本号（固定为 2.5）
 version: "2.5"
+
+# ------------------------------------------------------------------------------
+# 1. 项目基础信息与仓库设置
+# ------------------------------------------------------------------------------
 project:
+  # 项目名称（默认取项目根目录名）
   name: "macao-demo"
   repository:
+    # 工作区路径（相对路径，. 代表当前根目录）
     workspace_path: "."
+    # Git 远端名称（通常为 origin，无远端设为 null）
     remote_name: "origin"
+    # 主干分支名称（代码审查通过后的合并目标分支，通常为 main 或 master）
     default_branch: "main"
 
+# ------------------------------------------------------------------------------
+# 2. 多 Agent 团队配置（开发执行者与独立审查团）
+# ------------------------------------------------------------------------------
 team:
+  # 主开发执行者：负责根据任务需求编写代码、运行自测并提交就绪检查点
   executor:
-    id: "cc-ds4"
-    cli: "claude-code"
-    adapter: "claude-hook"
+    id: "dev-claude"             # 执行者唯一标识符（统一命名: dev-<cli>）
+    cli: "claude-code"           # 调用的底层 AI 命令行工具
+    adapter: "claude-hook"       # 通信适配器类型 (claude-hook / pty-wrapper)
+
+  # 独立审查团：在隔离工作树（Git Worktree）中并发独立审查代码并投票
   reviewers:
-    - id: "codex"
-      cli: "codex"
-      adapter: "pty-wrapper"
-      vote_weight: 1
-    - id: "opencode"
+    - id: "rev-codex"            # 审查员席位唯一标识符 (rev-<cli>)
+      cli: "codex"               # 调用的底层 AI 命令行工具
+      adapter: "pty-wrapper"     # 隔离适配器类型 (pty-wrapper 伪终端隔离)
+      vote_weight: 1             # 审查席位投票权重
+
+    - id: "rev-opencode"
       cli: "opencode"
       adapter: "pty-wrapper"
       vote_weight: 1
-    - id: "antigravity"
+
+    - id: "rev-agy"
       cli: "agy"
       adapter: "pty-wrapper"
       vote_weight: 1
 
+# ------------------------------------------------------------------------------
+# 3. 共识仲裁与审查策略
+# ------------------------------------------------------------------------------
 policy:
+  # 仲裁规则：weighted_2/3_v1 表示加权赞成票需达到或超过有效总票数的 2/3
   consensus_rule: "weighted_2/3_v1"
+  # 独裁者上限保护：若单个审查员权重达到或超过法定人数，自动封顶防止一人专断
   dictator_cap_enabled: true
+  # 最少获胜席位数：达成通过至少需要的赞成票数量
   minimum_winning_seats: 2
+  # 法定有效席位法定人数：参与有效投票（非超时弃权）的最少席位数
   seat_quorum_required: 2
+  # 法定有效权重法定人数：参与有效投票的最少权重之和
   weight_quorum_required: 2
+  # 最大返工轮次：审查打回后，最多允许执行者修复并重新提审的轮次（超限进入人工干预）
   max_rework_rounds: 3
+  # 审查策略：delta_plus_focus 表示重点审查增量 Diff 及执行者关注点
   review_strategy: "delta_plus_focus"
 
+# ------------------------------------------------------------------------------
+# 4. 代码合并管道与发布门禁
+# ------------------------------------------------------------------------------
 merge:
+  # 合并策略：ff_only 仅允许快速前进合并（Fast-Forward），保证线性干净的 Git 历史
   strategy: "ff_only"
+  # CI 自动化门禁测试命令：合并前在隔离环境中执行（如 pytest -q、npm test，无则为 null）
   ci_gate_command: null
+  # 人工签字放行：达成 2/3 评审共识后，是否仍需人类在终端执行 'macao merge approve' 显式确认
   require_human_signoff: true
+  # 合并前是否自动对齐变基到最新目标分支
   rebase_before_merge: false
 
+# ------------------------------------------------------------------------------
+# 5. 各环节超时 SLA 兜底控制
+# ------------------------------------------------------------------------------
 timeouts:
+  # 开发阶段超时上限（超时自动发出告警）
   development: "2h"
+  # 检查点合规性校验超时
   checkpoint_validation: "1m"
+  # 评审派发与工作树初始化超时
   review_request: "30m"
+  # 每个审查员在独立 Worktree 中的分析与响应超时（超时自动降级为 ABSTAIN 弃权）
   per_reviewer: "10m"
+  # 共识计票与仲裁阶段超时
   consensus_check: "1m"
 
+# ------------------------------------------------------------------------------
+# 6. 推理分析与诊断阈值
+# ------------------------------------------------------------------------------
 thresholds:
+  # 是否仅在日志中记录第二层反思与推理链
   layer2_inference_log_only: true
+  # 模型自诊断置信度阈值（低于此值可触发人工干预）
   llm_diagnosis_override_below: 0.7
 
+# ------------------------------------------------------------------------------
+# 7. 成本计量与控制
+# ------------------------------------------------------------------------------
 cost:
+  # 是否开启各 Agent Token 用量与成本计量
   usage_metering: true
+  # 月度预算上限（美元，null 表示不设硬限制）
   monthly_budget_usd: null
 
+# ------------------------------------------------------------------------------
+# 8. 安全沙箱与白名单控制
+# ------------------------------------------------------------------------------
 security:
-  allowed_clis: ["claude-code", "codex", "opencode", "agy", "antigravity", "kimi"]
+  # 允许由系统唤起调用的 AI CLI 绝对白名单，防止命令注入风险
+  allowed_clis:
+    - "claude-code"
+    - "claude"
+    - "codex"
+    - "opencode"
+    - "agy"
+    - "antigravity"
+    - "agent"
+    - "cursor"
+    - "kimi"
+    - "mock-cli"
+  # 是否将开发者的终端执行交互日志发送给审查员（通常设为 false 避免提示词偏见）
   send_terminal_logs_to_reviewers: false
+  # 是否自动在日志、信封中掩码敏感密钥与 API Token
   secrets_masking: true
 
+# ------------------------------------------------------------------------------
+# 9. 不可变审计日志归档保留
+# ------------------------------------------------------------------------------
 audit:
+  # 审计事件记录（SQLite state.db）在归档中的保留天数
   retention_days: 90
 """
 
@@ -187,15 +263,13 @@ def preflight():
 
 @cli.command("init")
 @click.option("--path", default="macao.yaml", help="Path to create macao.yaml")
-def init_cmd(path: str = "macao.yaml"):
-    """Initialize a default macao.yaml configuration file conforming to schema."""
-    p = Path(path)
-    if p.exists():
-        console.print(f"[yellow]Configuration file '{path}' already exists.[/yellow]")
-        return
-
-    p.write_text(DEFAULT_CONFIG_TEMPLATE, encoding="utf-8")
-    console.print(f"[bold green]✓ Initialized valid configuration template at '{path}'[/bold green]")
+@click.option("-y", "--yes", is_flag=True, help="Non-interactive mode with default settings")
+@click.option("-f", "--force", is_flag=True, help="Force overwrite existing configuration")
+def init_cmd(path: str = "macao.yaml", yes: bool = False, force: bool = False):
+    """Initialize macao.yaml configuration with interactive wizard and Chinese comments."""
+    from macao.cli.wizard import run_interactive_init
+    project_root = Path(".").resolve()
+    run_interactive_init(project_root=project_root, target_path=path, non_interactive=yes, force=force)
 
 
 @cli.command()
@@ -411,42 +485,22 @@ def test_clis(target_cli: str):
 
 
 @cli.command("setup")
-@click.option("--executor", default="opencode", help="Default executor CLI")
-@click.option("--model", default="GLM 5.3 max", help="Executor model name")
+@click.option("--executor", default=None, help="Default executor CLI (e.g. claude-code, opencode, codex)")
+@click.option("--model", default=None, help="Executor model name")
+@click.option("-y", "--yes", is_flag=True, help="Non-interactive mode with default settings")
 @click.option("--force", is_flag=True, help="Force overwrite existing configuration")
-def setup_wizard(executor: str, model: str, force: bool):
+def setup_wizard(executor: Optional[str], model: Optional[str], yes: bool, force: bool):
     """Run interactive setup wizard to auto-detect environment and configure macao.yaml."""
-    from macao.cli.wizard import probe_available_clis, generate_smart_config, ensure_gitignore_isolation
-    import yaml
-    import shutil
-    import time
-
-    print_banner()
-    console.print("[bold cyan]Running MACAO Smart Setup Wizard...[/bold cyan]\n")
-
-    clis = probe_available_clis()
-    console.print(f"[green]✓ Detected {len(clis)} available AI Agent CLIs on system:[/green]")
-    for c in clis:
-        console.print(f"  • [bold white]{c['cli']}[/bold white] ({c['version']}) -> [dim]{c['binary']}[/dim]")
-
+    from macao.cli.wizard import run_interactive_init
     project_root = Path(".").resolve()
-    cfg_file = project_root / "macao.yaml"
-    if cfg_file.exists() and not force:
-        backup_file = project_root / f"macao.yaml.bak.{int(time.time())}"
-        shutil.copy(cfg_file, backup_file)
-        console.print(f"[yellow]Notice: Existing macao.yaml backed up to {backup_file.name}[/yellow]")
-
-    cfg = generate_smart_config(project_root, executor_cli=executor, executor_model=model, detected_clis=clis)
-
-    yaml_str = yaml.safe_dump(cfg, sort_keys=False)
-    cfg_file.write_text(yaml_str, encoding="utf-8")
-    console.print(f"\n[bold green]✓ Generated valid and tailored macao.yaml configuration![/bold green]")
-
-    isolated = ensure_gitignore_isolation(project_root)
-    if isolated:
-        console.print("[green]✓ Updated .gitignore with .macao/worktrees/ and *.db runtime isolation.[/green]")
-
-    console.print("\n[bold cyan]Setup completed! You can now run 'macao doctor' or 'macao task create' to begin.[/bold cyan]\n")
+    run_interactive_init(
+        project_root=project_root,
+        target_path="macao.yaml",
+        non_interactive=yes,
+        force=force,
+        custom_executor=executor,
+        custom_model=model
+    )
 
 
 @cli.command("daemon")
