@@ -110,26 +110,50 @@ flowchart TD
 
 ## 三、协同任务调度与管理 (Phase 2)
 
-### 1. macao task probe（任务执行前动态状态探测与派发识别）
+### 1. macao probe / macao task probe（动态状态探测、工作区定位与派发前置检视）
 
 * **为什么需要前置动态探测？**
   在多 Agent 协同体系中，盲目派发任务是极其危险的。如果不做动态状态探测：
-  1. 不清楚当前项目配置的执行者（Executor）是否安装、连通、处于空闲还是故障状态。
-  2. 不清楚审查团（Reviewers）是否有足够的健康席位满足法定仲裁（Quorum）门槛（若 4 人评审团有 2 个 CLI 无法唤起，则 3 票仲裁门槛永远无法达成，任务必然死锁）。
-  3. 不清楚当前代码仓库是否已有未完结的活跃任务（Active Task），容易引发分支冲突。
-  4. 不清楚**任务究竟会被派给谁**（明确哪位 Agent 负责写代码，哪几位负责审查）。
+  1. 不清楚当前项目配置的执行者（Executor）与审查团（Reviewers）是否安装、连通、处于空闲还是正在作业。
+  2. 不清楚执行者当前位于哪个工作区/分支/提交，当前工作进度到哪一步（是处于编码中 `CODING_IN_PROGRESS`，还是已生成提审检查点 `CHECKPOINT_SUBMITTED`）。
+  3. 不清楚审查员是否已分配独立的 Git Worktree 沙箱、沙箱是否真实存在于磁盘、当前审查状态是未开始、审查中（`IN_PROGRESS`）还是已完成投票（`COMPLETED`）。
+  4. 不清楚审查团（Reviewers）是否有足够的健康席位满足法定仲裁（Quorum）门槛（若 4 人评审团有 2 个 CLI 无法唤起，则 3 票仲裁门槛永远无法达成，任务必然死锁）。
+  5. 在接管现有项目时，需要验证只读状态，确保探测过程**绝对不修改或创建 `state.db`**。
 
-* **命令**：
+* **命令用法**：
   ```bash
-  macao task probe
+  # 基础动态探测（只读幂等）
+  macao probe
+
+  # 显式只读预检模式（严格保证不对 state.db 或 Git 进行任何修改/创建，适合脚本与CI测试）
+  macao probe --dry-run
+
+  # JSON 结构化机器可读输出（用于自动化探活管道）
+  macao probe --json
+
+  # 兼容任务子命令别名
+  macao task probe [--dry-run] [--json]
   ```
 
-* **终端探测报告展示**：
-  运行后系统将动态探活并输出结构化矩阵：
-  - **Executor 状态**：明确当前项目的开发执行者（如 `dev-agy (agy)` 或 `dev-claude (claude-code)`）、版本号、PATH 路径与就绪状态；明确声明任务派发归属。
-  - **Reviewers 阵容**：列出全部配置的审查者席位、投票权重、连通性及版本。
-  - **Quorum 仲裁可行性评估**：实时计算 `已就绪审查者数 / 总审查者数`，对比 `minimum_winning_seats`，提前验证共识门槛能否达成。
-  - **工作区与活跃任务**：检测当前 Git 分支干净度与是否存在正在进行的活跃任务。
+* **终端探测报告全景解析**：
+  运行后系统输出四重结构化矩阵：
+  1. **Configured Executor（开发执行者状态与进度）**：
+     - **CLI 工具与模型**：如 `dev-agy (agy)`、版本号、探活状态（`READY` / `MISSING`）。
+     - **当前工作区（Current Worktree）**：主仓库物理路径、Git 当前工作分支、最新 HEAD Commit Hash、分支干净度（`clean` 或脏文件计数）。
+     - **工作进度（Work Progress）**：`IDLE`（空闲就绪）、`CODING_IN_PROGRESS`（特性分支实现中）、`CHECKPOINT_SUBMITTED`（检查点已提交待审查）、`WAITING_REVIEW`（代码已提交，等待评审投票）、`READY_TO_MERGE`（审查通过待合并）。
+  2. **Configured Reviewers（审查团席位、隔离工作区与评审进度）**：
+     - **审查员席位与权重**：如 `rev-opencode (1.0)`、`rev-cursor (1.0)` 等。
+     - **隔离工作区（Isolated Worktree）**：显示目标 Worktree 相对路径（如 `.macao/worktrees/<rev_id>/<task_id>/r<round>`），并标记其物理存在状态（`ACTIVE @ <commit>` 或 `NOT_SPAWNED`）。
+     - **评审进度（Review Progress）**：`IDLE`（待命）、`WAITING_DEV`（等待开发检查点）、`IN_PROGRESS`（审查会话执行中）、`COMPLETED (APPROVED / CHANGES_REQ / ABSTAINED)`（已完成审查并落票）。
+     - **评审详情**：展示落票结论与总结。
+  3. **Workspace & Consensus Readiness（工作区与共识法定人数）**：
+     - **Git Repository**：分支名、HEAD 提交及未暂存文件统计。
+     - **State Store**：显示 `.macao/state.db` 状态（`CONNECTED (RO)` 只读直连，或未初始化时显示 `NOT_INITIALIZED`，绝不擅自创建空数据库）。
+     - **Active Task**：当前活跃任务 ID、标题、轮次与 FSM 状态。
+     - **Consensus Quorum**：就绪审查者数与法定仲裁门槛（如 `4/4 Ready (Required: 3) -> ACHIEVABLE`）。
+  4. **最终裁决与行动指引（Verdict & Guidance）**：
+     - 通过状态给出明确下一步建议（如 `macao task create`、`macao task checkpoint` 或 `macao merge approve`）。
+
 
 ---
 

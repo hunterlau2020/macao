@@ -72,10 +72,87 @@ class TestTeamProbeAndDispatch(unittest.TestCase):
         self._create_mock_config("probe-cli-proj")
         result = self.runner.invoke(cli, ["task", "probe"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("MACAO Team & Environment Pre-dispatch Probe", result.output)
+        self.assertIn("MACAO Team & Environment Dynamic Probe", result.output)
         self.assertIn("dev-mock", result.output)
         self.assertIn("rev-mock-1", result.output)
         self.assertIn("Pre-execution Probing Passed", result.output)
+
+    def test_probe_root_command_dry_run_zero_side_effects(self):
+        self._create_mock_config("dry-run-test-proj")
+        db_path = Path(".macao/state.db")
+        self.assertFalse(db_path.exists())
+
+        result = self.runner.invoke(cli, ["probe", "--dry-run"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("MACAO Team & Environment Dynamic Probe", result.output)
+        self.assertIn("DRY-RUN", result.output)
+        self.assertIn("Configured Executor", result.output)
+        self.assertIn("Configured Reviewers", result.output)
+
+        # STRICT ASSERTION: state.db must NOT exist after --dry-run
+        self.assertFalse(db_path.exists(), "State database should NOT be created during --dry-run probe")
+
+    def test_probe_json_output(self):
+        self._create_mock_config("json-test-proj")
+        import json
+        result = self.runner.invoke(cli, ["probe", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        data = json.loads(result.output)
+        self.assertTrue(data["valid_config"])
+        self.assertEqual(data["executor"]["id"], "dev-mock")
+        self.assertEqual(len(data["reviewers"]), 3)
+        self.assertIn("worktree", data["executor"])
+        self.assertIn("progress", data["executor"])
+        self.assertIn("worktree", data["reviewers"][0])
+        self.assertIn("review", data["reviewers"][0])
+
+    def test_probe_executor_and_reviewer_progress_and_worktree(self):
+        self._create_mock_config("progress-test-proj")
+
+        # 1. Create a task
+        res_create = self.runner.invoke(cli, ["task", "create", "--title", "Feature Alpha"])
+        self.assertEqual(res_create.exit_code, 0)
+
+        prober = TeamProber(".")
+        res = prober.probe()
+        self.assertIsNotNone(res["active_task"])
+        self.assertEqual(res["executor"]["progress"], "CODING_IN_PROGRESS")
+        self.assertEqual(res["reviewers"][0]["review"]["progress"], "WAITING_DEV")
+        self.assertEqual(res["reviewers"][0]["worktree"]["status"], "NOT_SPAWNED")
+
+        # 2. Simulate dev checkpoint submission
+        dev_path = Path(".macao/.dev.yml")
+        dev_path.parent.mkdir(parents=True, exist_ok=True)
+        dev_path.write_text(yaml.dump({
+            "version": "1.0",
+            "checkpoint_ref": "abc12345",
+            "status": "ready_for_review"
+        }), encoding="utf-8")
+
+        res2 = prober.probe()
+        self.assertEqual(res2["executor"]["progress"], "CHECKPOINT_SUBMITTED")
+
+        # 3. Simulate reviewer worktree and manifest
+        active_task_id = res["active_task"]["task_id"]
+        rev_wt = Path(".macao/worktrees/rev-mock-1") / active_task_id / "r1"
+        rev_wt.mkdir(parents=True, exist_ok=True)
+        rev_manifest = Path(".macao/.reviews/rev-mock-1.review.yml")
+        rev_manifest.parent.mkdir(parents=True, exist_ok=True)
+        rev_manifest.write_text(yaml.dump({
+            "version": "1.0",
+            "vote": "YES_APPROVE",
+            "opinion": {
+                "status": "APPROVED",
+                "vote": "YES_APPROVE",
+                "summary": "Implementation looks solid"
+            }
+        }), encoding="utf-8")
+
+        res3 = prober.probe()
+        r1_probe = next(r for r in res3["reviewers"] if r["id"] == "rev-mock-1")
+        self.assertEqual(r1_probe["worktree"]["status"], "ACTIVE")
+        self.assertEqual(r1_probe["review"]["progress"], "COMPLETED")
+        self.assertEqual(r1_probe["review"]["vote"], "YES_APPROVE")
 
     def test_task_create_dry_run(self):
         self._create_mock_config("dry-run-proj")
@@ -83,7 +160,8 @@ class TestTeamProbeAndDispatch(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Dry-run probe passed", result.output)
         # Verify no task database was created
-        store = StateStore(); self.assertIsNone(store.get_active_task())
+        db_path = Path(".macao/state.db")
+        self.assertFalse(db_path.exists())
 
     def test_task_create_blocking_when_active_task_exists(self):
         self._create_mock_config("active-task-proj")
@@ -107,3 +185,4 @@ class TestTeamProbeAndDispatch(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

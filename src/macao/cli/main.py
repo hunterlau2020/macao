@@ -299,15 +299,39 @@ def doctor():
         console.print(f"[red]✗ macao.yaml configuration error: {e}[/red]")
 
     # 2. Database Check (Read-only query, no side effects)
-    try:
-        store = StateStore()
-        active = store.get_active_task()
-        if active:
-            console.print(f"[green]✓ State Store connected (Active task: {active['task_id']}, state: {active['state']})[/green]")
-        else:
-            console.print("[green]✓ State Store connected (No active task)[/green]")
-    except Exception as e:
-        console.print(f"[red]✗ State Store error: {e}[/red]")
+    db_file = Path(".macao/state.db")
+    if db_file.exists():
+        try:
+            conn = sqlite3.connect(f"file:{db_file.resolve()}?mode=ro", uri=True, timeout=5.0)
+            conn.row_factory = sqlite3.Row
+            cur = conn.execute(
+                "SELECT * FROM tasks WHERE state NOT IN (?, ?) ORDER BY created_at DESC LIMIT 1",
+                ("DONE", "CANCELLED")
+            )
+            active = cur.fetchone()
+            conn.close()
+            if active:
+                console.print(f"[green]✓ State Store connected (Active task: {active['task_id']}, state: {active['state']})[/green]")
+            else:
+                console.print("[green]✓ State Store connected (No active task)[/green]")
+        except Exception as e:
+            console.print(f"[red]✗ State Store error: {e}[/red]")
+    else:
+        console.print("[dim]• State Store: Not initialized (.macao/state.db will be created on first task)[/dim]")
+
+
+@cli.command("probe")
+@click.option("--dry-run", is_flag=True, help="Read-only probe: Inspect team and environment without modifying state.db or git")
+@click.option("--json", "as_json", is_flag=True, help="Output probe results as JSON")
+def probe_cmd(dry_run: bool, as_json: bool):
+    """Dynamically probe executor, reviewers, git worktrees, and active task progress."""
+    prober = TeamProber(".", dry_run=dry_run)
+    res = prober.probe()
+    if as_json:
+        import json
+        click.echo(json.dumps(res, indent=2, default=str))
+    else:
+        render_team_probe_report(res, dry_run=dry_run)
 
 
 @cli.group()
@@ -317,11 +341,17 @@ def task():
 
 
 @task.command("probe")
-def task_probe():
+@click.option("--dry-run", is_flag=True, help="Read-only probe: Inspect team and environment without modifying state.db or git")
+@click.option("--json", "as_json", is_flag=True, help="Output probe results as JSON")
+def task_probe(dry_run: bool, as_json: bool):
     """Dynamically probe executor and reviewer agent readiness before dispatching tasks."""
-    prober = TeamProber(".")
+    prober = TeamProber(".", dry_run=dry_run)
     res = prober.probe()
-    render_team_probe_report(res)
+    if as_json:
+        import json
+        click.echo(json.dumps(res, indent=2, default=str))
+    else:
+        render_team_probe_report(res, dry_run=dry_run)
 
 
 @task.command("create")
@@ -335,11 +365,11 @@ def task_probe():
 @click.option("-f", "--force", is_flag=True, help="Force task creation even if active task exists or warnings occur")
 def task_create(title: Optional[str], description: str, acceptance: str, branch: str, target: str, probe: bool, dry_run: bool, force: bool):
     """Create and start a new development task with dynamic team probing."""
-    prober = TeamProber(".")
+    prober = TeamProber(".", dry_run=dry_run)
     probe_result = prober.probe()
 
     if dry_run:
-        render_team_probe_report(probe_result)
+        render_team_probe_report(probe_result, dry_run=True)
         if probe_result.get("can_dispatch"):
             console.print("[bold cyan]ℹ Dry-run probe passed: Team and environment are ready for task dispatch.[/bold cyan]")
         else:
