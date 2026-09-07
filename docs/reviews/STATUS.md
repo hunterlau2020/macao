@@ -3,17 +3,33 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-07（登记 `961bcfe` 轮 4 份专家评审报告与处置单，总计结论类 **150 份**（146 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **43 份**、处置单 **2 份**（新增 `2026-09-07-disposition-961bcfe.md`），双向对账 100% 吻合）
+- **最新更新时间**：2026-09-08（登记 `7bc8d70` 轮复审申请单 `2026-09-08-review-request-7bc8d70.md`，总计结论类 **150 份**（146 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **44 份**（新增 `2026-09-08-review-request-7bc8d70.md`）、处置单 **2 份**，双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **综合编排与探活轨（`961bcfe` 轮评审结论为 REWORK；全部 P0/P1/P2 阻断项已彻底闭环，162 项测试全绿）**：
-    1. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 本轮处置与闭环报告（P0-1、P1-1～P1-10、Codex P1-03/04 全部闭环，测试扩增至 162 项全绿）
-    2. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 本轮复审申请（受审提交 **`961bcfe`**）
-    3. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 前序处置报告（`d042395`，8 项 P1 闭环）
+  - **综合编排与探活轨（`7bc8d70` 轮已提交复审申请，目标 L3/PG-2 全量认证并提请 L4/PG-3 准入；涵盖 `48eea58` 全量 P0/P1 闭环与 `7bc8d70` 方法论 v1.1 升级，162 项测试全绿）**：
+    1. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 本轮复审申请（受审提交 **`7bc8d70`**，审计范围 `961bcfe..7bc8d70`）
+    2. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 前序处置与闭环报告（`961bcfe`，P0-1、P1-1～P1-10、Codex P1-03/04 全部闭环，测试扩增至 162 项全绿）
+    3. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 前序复审申请（受审提交 **`961bcfe`**）
+    4. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`，8 项 P1 闭环）
   - **文档轨（前序申请）**：[`2026-09-04-review-request-95b7b35.md`](2026-09-04-review-request-95b7b35.md)（目标 L1 / PG-0，被审提交 `95b7b35`）
   - **历史代码轨（已被本轮合并涵盖）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md)（目标 L4 / PG-3，被审提交 `42b5c07`）
 - **当前定级状态**：
-  - **综合编排与代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；`961bcfe` 完成新一轮 P0/P1 缺陷闭环（fail-closed 精确匹配、immutable=1 消除侧车、会话全路径真实绑定、clean 双清幽灵引用、单一活动任务下沉、退出码 fail-closed、事实 F-25/F-26 固化、场景 C 优先级修复与 `task adopt` 全功能、检查点完整性哈希与归属校验），自动化测试套件扩增至 162 项全绿。
+  - **综合编排与代码轨**：**提请 L3 SCENARIO-VERIFIED / PG-2 全量认证与 L4/PG-3 准入评审**；受审提交 `7bc8d70` 涵盖 `48eea58` 全量 P0/P1 闭环与 `7bc8d70` 方法论 v1.1 升级，162 项测试全绿，0 WAL 侧车，0 尾随空白。
   - **文档体系定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
+
+### 综合编排轨：P0/P1 缺陷闭环与评审方法论 v1.1 升级（`7bc8d70` 轮，待评审）
+
+- **受审提交**：`7bc8d70`（涵盖提交 `48eea58` 与 `7bc8d70`，基线 `961bcfe`）
+- **申请入口**：[`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md)
+- **目标定级**：**L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审**
+- **当前状态**：待评审专家独立机验与裁决
+- **核心交付内容**：
+  1. 彻底闭环 `961bcfe` 轮四方专家指出的全部 14 项 P0/P1 缺陷（P0-1、P1-1～P1-10、Codex P1-01～04）；
+  2. 实现存量项目接管命令 `macao task adopt` 及其 `--dry-run` 模式（UC-11 场景 C 落地）；
+  3. 严格落实 Fail-Closed：未知 CLI 拒绝派发并标记 MISSING，只读连接注入 `&immutable=1` 彻底消除 WAL 侧车，单一活动任务内核下沉；
+  4. 评审方法论 [`docs/MACAO_REVIEW_GUIDELINES.md`](../MACAO_REVIEW_GUIDELINES.md) 正式升级至 **v1.1**，吸收固化验证命令作用域、复现证据归档、已知简化表、L4 OPS 10 项必测矩阵、严重级域定义与可达性联合定级、以及反例击穿纪律；
+  5. 全量自动化测试扩增至 **162 项全绿（162/162 PASS）**，`git show --check 7bc8d70` 0 错误。
+
+---
 
 ### 综合编排轨：P0/P1 缺陷彻底闭环与场景 C 规范（`961bcfe` 轮，共识仲裁：REWORK，已完成闭环）
 
