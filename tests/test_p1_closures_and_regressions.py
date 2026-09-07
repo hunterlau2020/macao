@@ -365,6 +365,267 @@ class TestP1ClosuresAndRegressions(unittest.TestCase):
         active_new = store.get_active_task()
         self.assertEqual(active_new["title"], "Task 2")
 
+    # --- P0-1: Unrecognized CLI not in ADAPTER_MAP fails closed ---
+    def test_p0_1_unrecognized_cli_not_in_adapter_map_fails_closed(self):
+        self._init_git_repo()
+        extra = {
+            "team": {
+                "reviewers": [
+                    {"id": "cursor", "cli": "definitely-not-installed-xyz", "adapter": "pty-wrapper", "vote_weight": 2.0},
+                    {"id": "codex", "cli": "totally-bogus-bin-qqq", "adapter": "pty-wrapper", "vote_weight": 2.0},
+                    {"id": "rev-mock", "cli": "mock-cli", "adapter": "pty-wrapper", "vote_weight": 1.0}
+                ]
+            }
+        }
+        self._write_config(extra)
+        prober = TeamProber(".", dry_run=True)
+        res = prober.probe()
+
+        # Ghost seats must NOT be reported as READY or borrow other adapter versions
+        for r in res["reviewers"]:
+            if r["id"] in ("cursor", "codex"):
+                self.assertEqual(r["status"], "MISSING")
+                self.assertFalse(r["installed"])
+                self.assertIn("not in ADAPTER_MAP", r["error"])
+
+        # Quorum must not be achievable
+        self.assertFalse(res["quorum"]["achievable"])
+        self.assertFalse(res["can_dispatch"])
+        self.assertEqual(res["quorum"]["total_effective_weight"], 1.0)
+
+    # --- P1-2: WAL mode state.db dry-run zero sidecars ---
+    def test_p1_2_wal_mode_dry_run_zero_sidecars(self):
+        self._init_git_repo()
+        self._write_config()
+
+        # Create .macao/state.db in WAL mode
+        db_dir = Path(".macao")
+        db_dir.mkdir(parents=True, exist_ok=True)
+        db_file = db_dir / "state.db"
+        conn = sqlite3.connect(str(db_file))
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("CREATE TABLE tasks (task_id TEXT PRIMARY KEY, title TEXT, state TEXT, created_at TEXT, updated_at TEXT)")
+        conn.commit()
+        conn.close()
+
+        # Clean any sidecars before probe
+        for sidecar in db_dir.glob("state.db-*"):
+            sidecar.unlink()
+
+        before_files = set(os.listdir(".macao"))
+        self.assertEqual(before_files, {"state.db"})
+
+        # Run probe --dry-run
+        runner = CliRunner()
+        res = runner.invoke(cli, ["probe", "--dry-run"])
+        self.assertEqual(res.exit_code, 0)
+
+        after_files = set(os.listdir(".macao"))
+        # STRICT ASSERTION: No -shm or -wal sidecars may be created
+        self.assertEqual(before_files, after_files, f"Dry-run created sidecars: {after_files - before_files}")
+
+    # --- P1-3: Secrets masking in probe --json ---
+    def test_p1_3_secrets_masking_in_probe_json(self):
+        self._init_git_repo()
+        self._write_config({
+            "team": {
+                "executor": {
+                    "id": "dev-pi",
+                    "cli": "pi",
+                    "adapter": "pty-wrapper"
+                }
+            }
+        })
+
+        # Create a fake session containing GitHub PAT
+        mock_home = Path(self.tmpdir) / "mock_home"
+        pi_sessions = mock_home / ".pi" / "agent" / "sessions"
+        resolved_proj = Path(".").resolve()
+        sanitized_dir = "--" + str(resolved_proj).strip("/").replace("/", "-") + "--"
+        s_folder = pi_sessions / sanitized_dir
+        s_folder.mkdir(parents=True, exist_ok=True)
+
+        token = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"
+        s_file = s_folder / "2026-09-07T10-00-00_sid1.jsonl"
+        with open(s_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "session", "id": "sid1", "cwd": str(resolved_proj)}) + "\n")
+            f.write(json.dumps({"type": "session_info", "name": token}) + "\n")
+
+        with patch("pathlib.Path.home", return_value=mock_home):
+            runner = CliRunner()
+            res = runner.invoke(cli, ["probe", "--dry-run", "--json"])
+            self.assertEqual(res.exit_code, 0)
+            self.assertNotIn(token, res.output, "Plaintext GitHub PAT must not appear in probe --json")
+            self.assertIn("******", res.output)
+
+    # --- P1-4: Claude session locator rejects foreign cwd ---
+    def test_p1_4_claude_rejects_foreign_cwd(self):
+        mock_home = Path(self.tmpdir) / "mock_home"
+        claude_base = mock_home / ".claude" / "projects"
+        resolved_proj = Path(".").resolve()
+        sanitized_dir = "-" + str(resolved_proj).lstrip("/").replace("/", "-")
+        target_dir = claude_base / sanitized_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write session with foreign cwd
+        foreign_file = target_dir / "sess1.jsonl"
+        with open(foreign_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "user", "cwd": "/home/foreign/repo", "message": {"content": "foreign task"}}) + "\n")
+
+        with patch("pathlib.Path.home", return_value=mock_home):
+            sessions = SessionLocator.list_sessions("claude", resolved_proj)
+            self.assertEqual(sessions, [], "Mismatched cwd must be rejected fail-closed")
+
+    # --- P1-5: Clean removes worktree and prunes git ---
+    def test_p1_5_clean_removes_worktree_and_prunes_git(self):
+        self._init_git_repo()
+        self._write_config()
+
+        from macao.utils.git_utils import GitManager
+        git = GitManager(".")
+        # Create worktree
+        wt_dir = Path(".macao/worktrees/rev-codex/task-1/r1")
+        wt_dir.parent.mkdir(parents=True, exist_ok=True)
+        git.create_isolated_worktree("rev-codex", "task-1", 1, "main")
+
+        # Verify worktree registered
+        code, out, _ = git._run("worktree", "list", "--porcelain")
+        self.assertIn("rev-codex", out)
+
+        runner = CliRunner()
+        res = runner.invoke(cli, ["clean"])
+        self.assertEqual(res.exit_code, 0)
+
+        # Verify worktree list is completely clean of ghosts
+        code, out_after, _ = git._run("worktree", "list", "--porcelain")
+        self.assertNotIn("rev-codex", out_after)
+
+    # --- P1-6: task create --no-probe --force cancels old task ---
+    def test_p1_6_task_create_no_probe_force_cancels_old_task(self):
+        self._init_git_repo()
+        self._write_config()
+
+        runner = CliRunner()
+        res1 = runner.invoke(cli, ["task", "create", "--title", "TaskA", "--no-probe"])
+        self.assertEqual(res1.exit_code, 0)
+
+        # Without force, second task is rejected
+        res2_reject = runner.invoke(cli, ["task", "create", "--title", "TaskB", "--no-probe"])
+        self.assertNotEqual(res2_reject.exit_code, 0)
+
+        # With force, second task succeeds and cancels old task
+        res2_force = runner.invoke(cli, ["task", "create", "--title", "TaskB", "--no-probe", "--force"])
+        self.assertEqual(res2_force.exit_code, 0)
+
+        store = StateStore()
+        active_tasks = store.get_active_tasks()
+        self.assertEqual(len(active_tasks), 1)
+        self.assertEqual(active_tasks[0]["title"], "TaskB")
+
+    # --- P1-7: CLI non-zero exit codes on invalid config ---
+    def test_p1_7_cli_non_zero_exit_codes_on_invalid_config(self):
+        self._init_git_repo()
+        runner = CliRunner()
+
+        # 1. Missing macao.yaml -> probe exit code != 0
+        res_probe = runner.invoke(cli, ["probe"])
+        self.assertNotEqual(res_probe.exit_code, 0)
+
+        # 2. Malformed YAML -> probe and doctor exit code != 0
+        Path("macao.yaml").write_text("invalid: yaml: [syntax", encoding="utf-8")
+        res_malformed = runner.invoke(cli, ["probe"])
+        self.assertNotEqual(res_malformed.exit_code, 0)
+        res_doctor = runner.invoke(cli, ["doctor"])
+        self.assertNotEqual(res_doctor.exit_code, 0)
+
+        # 3. Schema invalid -> task create --dry-run != 0
+        Path("macao.yaml").write_text("project:\n  name: 123\n", encoding="utf-8")
+        res_dry_create = runner.invoke(cli, ["task", "create", "--title", "T", "--dry-run"])
+        self.assertNotEqual(res_dry_create.exit_code, 0)
+
+    # --- P1-9: task create blocked when review pending (UC-2 E7) ---
+    def test_p1_9_task_create_blocked_when_review_pending(self):
+        self._init_git_repo()
+        self._write_config()
+
+        # Create physical review request document
+        req_dir = Path("docs/reviews")
+        req_dir.mkdir(parents=True, exist_ok=True)
+        (req_dir / "2026-09-07-review-request-961bcfe.md").write_text("# Review Request\nCommit: 961bcfe\n", encoding="utf-8")
+
+        runner = CliRunner()
+        # Normal task create must be blocked with UC-2 E7 error
+        res_block = runner.invoke(cli, ["task", "create", "--title", "New Task"])
+        self.assertNotEqual(res_block.exit_code, 0)
+        self.assertIn("UC-2 E7", res_block.output)
+        self.assertIn("macao task adopt", res_block.output)
+
+        # --force can override
+        res_force = runner.invoke(cli, ["task", "create", "--title", "New Task", "--force"])
+        self.assertEqual(res_force.exit_code, 0)
+
+    # --- P1-10: LiveAgentDispatcher handles pi and cursor ---
+    def test_p1_10_live_dispatcher_handles_pi_and_cursor(self):
+        from macao.workflow.live_dispatcher import LiveAgentDispatcher
+        dispatcher = LiveAgentDispatcher(project_root=".")
+        pi_adapter = dispatcher.get_adapter_for_reviewer({"id": "pi-rev", "cli": "pi"})
+        self.assertEqual(pi_adapter.cli_name, "pi")
+
+        cursor_adapter = dispatcher.get_adapter_for_reviewer({"id": "cursor-rev", "cli": "cursor"})
+        self.assertEqual(cursor_adapter.cli_name, "cursor")
+
+    # --- Codex P1-04: Checkpoint full_document sha256 validation ---
+    def test_checkpoint_full_document_sha256_validation(self):
+        self._init_git_repo()
+        self._write_config()
+
+        orch = Orchestrator(".")
+        task = orch.start_task(title="Dev Task", task_description="Desc")
+        t_id = task["task_id"]
+
+        import hashlib
+        req_file = Path("docs/reviews/req.md")
+        req_file.parent.mkdir(parents=True, exist_ok=True)
+        req_file.write_text("Official Review Request Content", encoding="utf-8")
+        true_sha = hashlib.sha256(req_file.read_bytes()).hexdigest()
+
+        dev_yml = Path(".macao/.dev.yml")
+        dev_yml.parent.mkdir(parents=True, exist_ok=True)
+
+        from macao.utils.git_utils import GitManager
+        git = GitManager(".")
+        head = git.get_head_commit()
+
+        # Tampered SHA256 -> check_development_checkpoint returns None
+        bad_manifest = {
+            "version": "1.0",
+            "task_id": t_id,
+            "checkpoint_ref": head,
+            "full_document": {
+                "path": "docs/reviews/req.md",
+                "evidence_commit": head,
+                "sha256": "tampered_fake_sha256" + "0" * 44
+            },
+            "status": "ready_for_review",
+            "signal": "EXPLICIT",
+            "review_round": 1,
+            "executor": {"id": "dev-mock", "cli": "mock-cli"},
+            "development": {
+                "quality_metrics": {"tests_passed": True},
+                "git": {"latest_commit": head}
+            }
+        }
+        import yaml
+        dev_yml.write_text(yaml.safe_dump(bad_manifest), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # True SHA256 -> check_development_checkpoint succeeds
+        bad_manifest["full_document"]["sha256"] = true_sha
+        dev_yml.write_text(yaml.safe_dump(bad_manifest), encoding="utf-8")
+        change = orch.check_development_checkpoint(t_id)
+        self.assertIsNotNone(change)
+        self.assertEqual(change.to_state, AgentState.READY_FOR_REVIEW)
+
 
 if __name__ == "__main__":
     unittest.main()

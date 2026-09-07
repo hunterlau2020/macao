@@ -132,6 +132,7 @@ class Orchestrator:
             "remote_name": raw_config.get("remote_name", repo.get("remote_name", "origin")),
             "target_branch": raw_config.get("target_branch", repo.get("default_branch", "main")),
             "executor_id": raw_config.get("executor_id", team.get("executor", {}).get("id", "claude-code")),
+            "executor": team.get("executor", {}),
             "reviewers": reviewers_list,
             "reviewer_ids": reviewer_ids,
             "timeouts": timeouts,
@@ -148,9 +149,20 @@ class Orchestrator:
         acceptance_criteria: Optional[Dict[str, Any]] = None,
         source_branch: Optional[str] = None,
         target_branch: str = "main",
-        task_id: Optional[str] = None
+        task_id: Optional[str] = None,
+        force: bool = False
     ) -> Dict[str, Any]:
         """E1: IDLE -> CODING (Task Initialization with collision-proof high-entropy ID)."""
+        active_tasks = self.store.get_active_tasks()
+        if active_tasks:
+            if not force:
+                raise RuntimeError(
+                    f"Active task '{active_tasks[0]['task_id']}' is already running in state '{active_tasks[0]['state']}'. "
+                    f"Cancel it before starting a new task or pass force=True."
+                )
+            for at in active_tasks:
+                self.cancel_task(at["task_id"], reason="Superseded by forced new task creation")
+
         # Create Task in store with collision-proof high-entropy ID and bounded retry (P0-1)
         for attempt in range(5):
             date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
@@ -273,6 +285,28 @@ class Orchestrator:
         tests_passed = quality.get("tests_passed") is True or quality.get("tests_exempt") is True
 
         if dev_rnd == rnd and status == "ready_for_review" and signal == "EXPLICIT" and latest_commit and tests_passed:
+            # Validate full_document integrity if provided (Codex P1-04)
+            full_doc = data.get("full_document")
+            if isinstance(full_doc, dict):
+                doc_path_str = full_doc.get("path")
+                doc_sha = full_doc.get("sha256")
+                if doc_path_str:
+                    doc_path = (self.root / doc_path_str).resolve()
+                    if not str(doc_path).startswith(str(self.root.resolve())):
+                        return None
+                    if doc_path.exists() and doc_path.is_file() and doc_sha and doc_sha != "0" * 64:
+                        calc_sha = hashlib.sha256(doc_path.read_bytes()).hexdigest()
+                        if calc_sha.lower() != doc_sha.lower():
+                            return None
+
+            # Validate executor attribution if specified in configuration (Codex P1-04)
+            exec_info = data.get("executor")
+            if isinstance(exec_info, dict) and exec_info.get("id"):
+                raw_exec_cfg = self.raw_config.get("team", {}).get("executor", {}) if isinstance(self.raw_config.get("team"), dict) else {}
+                cfg_exec_id = self.raw_config.get("executor_id") or raw_exec_cfg.get("id")
+                if cfg_exec_id and exec_info["id"] != cfg_exec_id:
+                    return None
+
             # 3. Check commit physically exists in git repository if git repo is present (PRD §2.1)
             if self.git and self.git.is_git_repository():
                 if not self.git.commit_exists(latest_commit):

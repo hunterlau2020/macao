@@ -27,7 +27,7 @@ from macao.adapter.cursor import CursorAgentAdapter
 from macao.adapter.kimi import KimiAdapter
 from macao.adapter.pi import PiAdapter
 from macao.adapter.mock import MockAgentAdapter
-from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status, render_audit_table, render_team_probe_report
+from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status, render_audit_table, render_team_probe_report, render_task_adopt_plan
 from macao.workflow.prober import TeamProber
 
 
@@ -294,6 +294,7 @@ def init_cmd(path: str = "macao.yaml", yes: bool = False, force: bool = False):
 def doctor():
     """Diagnose static configuration, SQLite state, and CLI readiness (PRD §14.4, read-only idempotent)."""
     print_banner()
+    has_error = False
 
     # 1. Config Check
     try:
@@ -304,12 +305,13 @@ def doctor():
             console.print("[yellow]! macao.yaml not found (run 'macao init' to create)[/yellow]")
     except Exception as e:
         console.print(f"[red]✗ macao.yaml configuration error: {e}[/red]")
+        has_error = True
 
     # 2. Database Check (Read-only query, no side effects)
     db_file = Path(".macao/state.db")
     if db_file.exists():
         try:
-            conn = sqlite3.connect(f"file:{db_file.resolve()}?mode=ro", uri=True, timeout=5.0)
+            conn = sqlite3.connect(f"file:{db_file.resolve()}?mode=ro&immutable=1", uri=True, timeout=5.0)
             conn.row_factory = sqlite3.Row
             cur = conn.execute(
                 "SELECT * FROM tasks WHERE state NOT IN (?, ?) ORDER BY created_at DESC LIMIT 1",
@@ -323,14 +325,19 @@ def doctor():
                 console.print("[green]✓ State Store connected (No active task)[/green]")
         except Exception as e:
             console.print(f"[red]✗ State Store error: {e}[/red]")
+            has_error = True
     else:
         console.print("[dim]• State Store: Not initialized (.macao/state.db will be created on first task)[/dim]")
+
+    if has_error:
+        sys.exit(2)
 
 
 @cli.command("probe")
 @click.option("--dry-run", is_flag=True, help="Read-only probe: Inspect team and environment without modifying state.db or git")
 @click.option("--json", "as_json", is_flag=True, help="Output probe results as JSON")
-def probe_cmd(dry_run: bool, as_json: bool):
+@click.option("--allow-degraded", is_flag=True, help="Exit with 0 even if team/environment cannot dispatch")
+def probe_cmd(dry_run: bool, as_json: bool, allow_degraded: bool):
     """Dynamically probe executor, reviewers, git worktrees, and active task progress."""
     prober = TeamProber(".", dry_run=dry_run)
     res = prober.probe()
@@ -339,6 +346,11 @@ def probe_cmd(dry_run: bool, as_json: bool):
         click.echo(json.dumps(res, indent=2, default=str))
     else:
         render_team_probe_report(res, dry_run=dry_run)
+
+    if not res.get("valid_config"):
+        sys.exit(2)
+    if not res.get("can_dispatch") and not allow_degraded:
+        sys.exit(2)
 
 
 @cli.group()
@@ -350,7 +362,8 @@ def task():
 @task.command("probe")
 @click.option("--dry-run", is_flag=True, help="Read-only probe: Inspect team and environment without modifying state.db or git")
 @click.option("--json", "as_json", is_flag=True, help="Output probe results as JSON")
-def task_probe(dry_run: bool, as_json: bool):
+@click.option("--allow-degraded", is_flag=True, help="Exit with 0 even if team/environment cannot dispatch")
+def task_probe(dry_run: bool, as_json: bool, allow_degraded: bool):
     """Dynamically probe executor and reviewer agent readiness before dispatching tasks."""
     prober = TeamProber(".", dry_run=dry_run)
     res = prober.probe()
@@ -359,6 +372,11 @@ def task_probe(dry_run: bool, as_json: bool):
         click.echo(json.dumps(res, indent=2, default=str))
     else:
         render_team_probe_report(res, dry_run=dry_run)
+
+    if not res.get("valid_config"):
+        sys.exit(2)
+    if not res.get("can_dispatch") and not allow_degraded:
+        sys.exit(2)
 
 
 @task.command("create")
@@ -379,26 +397,40 @@ def task_create(title: Optional[str], description: str, acceptance: str, branch:
         render_team_probe_report(probe_result, dry_run=True)
         if probe_result.get("can_dispatch"):
             console.print("[bold cyan]ℹ Dry-run probe passed: Team and environment are ready for task dispatch.[/bold cyan]")
+            return
         else:
             console.print("[bold red]✗ Dry-run probe failed: Task cannot be dispatched.[/bold red]")
-        return
+            sys.exit(1)
+
+    # UC-2 E7: Block task create if pending physical review request exists unless force
+    has_pending = probe_result.get("physical_reviews", {}).get("has_pending_request")
+    if has_pending and not force:
+        req_file = probe_result.get("physical_reviews", {}).get("latest_request_file", "review request")
+        render_team_probe_report(probe_result)
+        console.print(
+            f"[bold red]Cannot create new task (UC-2 E7):[/bold red] A pending review request exists ('{req_file}').\n"
+            f"[dim]Run 'macao task adopt' to adopt the in-flight review into MACAO, or pass '--force' to cancel and supersede.[/dim]"
+        )
+        sys.exit(1)
+
+    # Single active task invariant check (enforced whether --probe or --no-probe is passed)
+    store = StateStore()
+    active = store.get_active_task()
+    if active:
+        if not force:
+            render_team_probe_report(probe_result)
+            console.print(
+                f"[bold red]Cannot create new task:[/bold red] Active task '{active['task_id']}' is already running in state '{active['state']}'.\n"
+                f"[dim]Run 'macao status' to inspect, 'macao task cancel' to abort it, or pass '--force' to cancel the active task and proceed.[/dim]"
+            )
+            sys.exit(1)
+        else:
+            old_task_id = active["task_id"]
+            orch = get_orchestrator(".")
+            orch.cancel_task(old_task_id, reason="Superseded by forced new task creation")
+            console.print(f"[bold yellow]⚠ Superseded active task '{old_task_id}' (cancelled via E10).[/bold yellow]")
 
     if probe and probe_result.get("valid_config"):
-        active = probe_result.get("active_task")
-        if active:
-            if not force:
-                render_team_probe_report(probe_result)
-                console.print(
-                    f"[bold red]Cannot create new task:[/bold red] Active task '{active['task_id']}' is already running in state '{active['state']}'.\n"
-                    f"[dim]Run 'macao status' to inspect, 'macao task cancel' to abort it, or pass '--force' to cancel the active task and proceed.[/dim]"
-                )
-                sys.exit(1)
-            else:
-                old_task_id = active["task_id"]
-                orch = get_orchestrator(".")
-                orch.cancel_task(old_task_id, reason="Superseded by forced new task creation")
-                console.print(f"[bold yellow]⚠ Superseded active task '{old_task_id}' (cancelled via E10).[/bold yellow]")
-
         exec_info = probe_result.get("executor", {})
         if not exec_info.get("installed") and not force:
             render_team_probe_report(probe_result)
@@ -426,15 +458,14 @@ def task_create(title: Optional[str], description: str, acceptance: str, branch:
     orchestrator = get_orchestrator(".")
 
     crit_list = [c.strip() for c in acceptance.split("\n") if c.strip()]
-    if not crit_list:
-        crit_list = [acceptance.strip()]
 
     task_data = orchestrator.start_task(
         title=title,
         task_description=description or title,
         acceptance_criteria=crit_list,
         source_branch=branch,
-        target_branch=target
+        target_branch=target,
+        force=force
     )
 
     exec_id = probe_result.get("executor", {}).get("id", "dev-executor") if probe_result.get("valid_config") else "executor"
@@ -449,6 +480,178 @@ def task_create(title: Optional[str], description: str, acceptance: str, branch:
     console.print(f"  [bold]Branch[/bold]           : {task_data.get('source_branch', branch)} -> {task_data.get('target_branch', target)}")
     console.print(f"  [bold]Initial State[/bold]    : [green]{task_data['state']}[/green]")
     console.print(f"\n[dim]Next step: Executor '{exec_id}' implements task changes on branch, then run 'macao task checkpoint --auto --review'[/dim]")
+
+
+@task.command("adopt")
+@click.option("--from-request", default=None, help="Explicit path to review request markdown file")
+@click.option("--dry-run", is_flag=True, help="Preview adoption plan without modifying state or spawning processes")
+@click.option("--review/--no-review", default=True, help="Automatically dispatch missing reviewers after adopting into WAITING_REVIEW")
+@click.option("--timeout", default=120.0, help="Per-reviewer timeout in seconds")
+@click.option("-f", "--force", is_flag=True, help="Force task adoption even if an active task already exists in state store")
+def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout: float, force: bool):
+    """Adopt in-flight brownfield project state (Scenario C / UC-11) into MACAO FSM."""
+    prober = TeamProber(".", dry_run=True)
+    probe_result = prober.probe()
+
+    if not probe_result.get("valid_config"):
+        console.print(f"[bold red]Cannot adopt task:[/bold red] {probe_result.get('error')}")
+        sys.exit(1)
+
+    active = probe_result.get("active_task")
+    if active and not force:
+        console.print(
+            f"[bold red]Cannot adopt task:[/bold red] Active task '{active['task_id']}' is already running in state '{active['state']}'.\n"
+            f"[dim]Run 'macao status' to inspect, 'macao task cancel' to abort it, or pass '--force' to supersede and adopt.[/dim]"
+        )
+        sys.exit(1)
+
+    git_info = probe_result.get("git", {})
+    branch = git_info.get("branch", "main")
+    head_commit = git_info.get("commit", "unknown")
+    is_clean = git_info.get("is_clean", True)
+    mod_count = git_info.get("modified_files_count", 0)
+
+    phys_reviews = probe_result.get("physical_reviews", {})
+    has_pending = phys_reviews.get("has_pending_request", False)
+    latest_req_file = phys_reviews.get("latest_request_file")
+    latest_baseline = phys_reviews.get("latest_request_baseline")
+    latest_title = phys_reviews.get("latest_request_title")
+    missing_reviewers = phys_reviews.get("missing_reviewers", [])
+    submitted_reviewers = phys_reviews.get("submitted_reviewers", [])
+
+    # If --from-request specified, verify and override
+    if from_request:
+        req_path = Path(from_request)
+        if not req_path.exists():
+            console.print(f"[bold red]Specified request file '{from_request}' does not exist.[/bold red]")
+            sys.exit(1)
+        latest_req_file = str(req_path)
+        has_pending = True
+
+    # Scenario C physical state determination
+    if has_pending:
+        is_partial = len(submitted_reviewers) > 0
+        phys_st_name = (
+            f"态 3: 在途部分落票审查中 (已出票 {len(submitted_reviewers)}/{len(submitted_reviewers)+len(missing_reviewers)})"
+            if is_partial else
+            "态 2: 在途已提审待落票 (WAITING_REVIEW)"
+        )
+        target_st = AgentState.WAITING_REVIEW
+        checkpoint_ref = latest_baseline or head_commit
+        task_id = f"task-adopt-{checkpoint_ref[:8]}"
+        title = latest_title or f"Adopted Review Request @ {checkpoint_ref[:8]}"
+        assigned_role = "Reviewers Team"
+        assigned_agents = missing_reviewers
+        executor_status = "STANDBY (Preserved; no coding dispatched)"
+    elif not is_clean:
+        phys_st_name = f"态 1: 在途编码未提审 ({mod_count} uncommitted file(s))"
+        target_st = AgentState.CODING
+        checkpoint_ref = head_commit
+        task_id = f"task-adopt-dev-{head_commit[:8]}"
+        title = f"Adopted In-Flight Development ({branch})"
+        exec_id = probe_result.get("executor", {}).get("id", "dev-executor")
+        assigned_role = "Executor"
+        assigned_agents = [exec_id]
+        executor_status = f"ACTIVE (Assigned implementation to '{exec_id}')"
+    else:
+        console.print(
+            "[yellow]ℹ No in-flight review requests or uncommitted code found to adopt. Workspace is clean and IDLE.[/yellow]\n"
+            "[dim]Run 'macao task create --title \"...\"' to dispatch a new development task.[/dim]"
+        )
+        return
+
+    adopt_plan = {
+        "scenario": "Scenario C (In-Flight Brownfield Adoption / UC-11)",
+        "physical_state": phys_st_name,
+        "task_id": task_id,
+        "title": title,
+        "target_state": target_st.value,
+        "checkpoint_ref": checkpoint_ref,
+        "assigned_role": assigned_role,
+        "assigned_agents": assigned_agents,
+        "executor_status": executor_status,
+        "missing_reviewers": missing_reviewers if has_pending else [],
+        "submitted_reviewers": submitted_reviewers if has_pending else [],
+        "review": review
+    }
+
+    if dry_run:
+        render_task_adopt_plan(adopt_plan, dry_run=True)
+        console.print("\n[bold cyan]ℹ [DRY-RUN] Task adoption preview completed. Zero state or process mutations occurred.[/bold cyan]")
+        console.print("[dim]Run 'macao task adopt' without '--dry-run' to execute this adoption plan and ingest task into FSM.[/dim]\n")
+        return
+
+    # Execute adoption
+    orch = get_orchestrator(".")
+    if active and force:
+        orch.cancel_task(active["task_id"], reason="Superseded by task adopt")
+        console.print(f"[bold yellow]⚠ Superseded active task '{active['task_id']}' (cancelled via E10).[/bold yellow]")
+
+    store = StateStore()
+    store.create_task(
+        task_id=task_id,
+        title=title,
+        source_branch=branch,
+        target_branch="main"
+    )
+    store.update_task_state(
+        task_id=task_id,
+        state=target_st,
+        checkpoint_ref=checkpoint_ref,
+        review_round=1
+    )
+    store.log_audit_event(
+        task_id,
+        "TASK_ADOPTED",
+        {
+            "scenario": "SCENARIO_C",
+            "physical_state": phys_st_name,
+            "target_state": target_st.value,
+            "checkpoint_ref": checkpoint_ref,
+            "assigned_role": assigned_role,
+            "assigned_agents": assigned_agents,
+            "missing_reviewers": missing_reviewers if has_pending else []
+        }
+    )
+
+    render_task_adopt_plan(adopt_plan, dry_run=False)
+    console.print(f"\n[bold green]✓ Successfully adopted task '{task_id}' into state '{target_st.value}'![/bold green]")
+
+    if target_st == AgentState.WAITING_REVIEW:
+        if review and missing_reviewers:
+            from macao.workflow.live_dispatcher import LiveAgentDispatcher
+            dispatcher = LiveAgentDispatcher(".")
+            reviewers_cfg = orch.config.get("reviewers", [])
+            diff_txt = GitManager(".").get_diff("main", checkpoint_ref)
+
+            console.print(f"\n[bold cyan]Dispatching reviews to {len(missing_reviewers)} missing reviewer(s)...[/bold cyan]")
+            for r_cfg in reviewers_cfg:
+                r_id = r_cfg["id"]
+                if r_id in missing_reviewers:
+                    console.print(f"  • Invoking reviewer [bold white]{r_id}[/bold white] in isolated worktree...")
+                    try:
+                        res = dispatcher.dispatch_review_in_worktree(
+                            reviewer_cfg=r_cfg,
+                            task_id=task_id,
+                            checkpoint_ref=checkpoint_ref,
+                            review_round=1,
+                            diff_context=diff_txt,
+                            timeout_sec=timeout
+                        )
+                        st = res.get("status")
+                        vote = res.get("vote", "N/A")
+                        if st == "SUCCESS":
+                            console.print(f"    [green]✓ {r_id} finished: Vote={vote}[/green]")
+                        else:
+                            console.print(f"    [yellow]! {r_id} {st}: {res.get('error')}[/yellow]")
+                    except Exception as ex:
+                        console.print(f"    [red]✗ {r_id} dispatch error: {ex}[/red]")
+        else:
+            console.print("[bold cyan]ℹ Review dispatch deferred. Task is registered in WAITING_REVIEW state.[/bold cyan]")
+            console.print("[dim]Run 'macao task checkpoint --review' to launch reviewer processes when ready.[/dim]\n")
+    elif target_st == AgentState.CODING:
+        exec_id = assigned_agents[0] if assigned_agents else "executor"
+        console.print(f"\n[dim]Next step: Executor '{exec_id}' completes implementation, then run 'macao task checkpoint --auto --review'[/dim]\n")
 
 
 @task.command("recover")
@@ -1011,18 +1214,32 @@ def clean_cmd(clean_all: bool, restore: bool):
     # Branch 3: Default clean (safe cleanup of completed worktrees only, preserving state.db and logs)
     worktrees_dir = macao_dir / "worktrees"
     cleaned_wt_count = 0
+    git = GitManager(str(project_root))
+    if git.is_git_repository():
+        code, stdout, _ = git._run("worktree", "list", "--porcelain")
+        if code == 0:
+            for line in stdout.splitlines():
+                if line.startswith("worktree "):
+                    wt_p_str = line[len("worktree "):].strip()
+                    wt_p = Path(wt_p_str).resolve()
+                    if str(wt_p).startswith(str(worktrees_dir.resolve())):
+                        git.remove_worktree(wt_p)
+                        cleaned_wt_count += 1
+        git._run("worktree", "prune")
+
     if worktrees_dir.exists() and worktrees_dir.is_dir():
         for wt in worktrees_dir.iterdir():
             if wt.is_dir():
                 try:
-                    shutil.rmtree(wt, ignore_errors=True)
+                    git.remove_worktree(wt)
                     cleaned_wt_count += 1
                 except Exception:
-                    pass
-        if cleaned_wt_count > 0:
-            cleaned_items.append(f"Removed {cleaned_wt_count} temporary review worktree(s) in .macao/worktrees/")
-        else:
-            cleaned_items.append("Temporary worktrees directory .macao/worktrees/ is empty")
+                    shutil.rmtree(wt, ignore_errors=True)
+        if git.is_git_repository():
+            git._run("worktree", "prune")
+
+    if cleaned_wt_count > 0:
+        cleaned_items.append(f"Removed {cleaned_wt_count} temporary review worktree(s) in .macao/worktrees/")
     else:
         cleaned_items.append("No temporary worktrees found in .macao/worktrees/")
 

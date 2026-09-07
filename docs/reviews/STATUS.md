@@ -3,18 +3,52 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-07（完成 `d042395` 轮复审 4 份专家结论归档与处置闭环，总计结论类 **146 份**（142 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **42 份**、处置单 **1 份**，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-07（登记 `961bcfe` 轮 4 份专家评审报告与处置单，总计结论类 **150 份**（146 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **43 份**、处置单 **2 份**（新增 `2026-09-07-disposition-961bcfe.md`），双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **综合编排与探活轨（`d042395` 轮复审落票：多数否决待返工；P1 核心阻断项已全量闭环，145 项测试全绿）**：
-    1. [`2026-09-07-review-request-d042395.md`](2026-09-07-review-request-d042395.md) → 总入口合并申请（目标 **L3 SCENARIO-VERIFIED / PG-2 全量认证并提请 L4 / PG-3 准入**；被审提交 **`d042395`**）
-    2. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 评审处置与闭环报告（8 项 P1 全部闭环，测试套件扩增至 145 项）
+  - **综合编排与探活轨（`961bcfe` 轮评审结论为 REWORK；全部 P0/P1/P2 阻断项已彻底闭环，162 项测试全绿）**：
+    1. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 本轮处置与闭环报告（P0-1、P1-1～P1-10、Codex P1-03/04 全部闭环，测试扩增至 162 项全绿）
+    2. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 本轮复审申请（受审提交 **`961bcfe`**）
+    3. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 前序处置报告（`d042395`，8 项 P1 闭环）
   - **文档轨（前序申请）**：[`2026-09-04-review-request-95b7b35.md`](2026-09-04-review-request-95b7b35.md)（目标 L1 / PG-0，被审提交 `95b7b35`）
   - **历史代码轨（已被本轮合并涵盖）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md)（目标 L4 / PG-3，被审提交 `42b5c07`）
 - **当前定级状态**：
-  - **综合编排与代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；`d042395` 经四方会审收敛 8 项 P1 阻断，处置已全量闭环，待推进下一版本提审。
+  - **综合编排与代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；`961bcfe` 完成新一轮 P0/P1 缺陷闭环（fail-closed 精确匹配、immutable=1 消除侧车、会话全路径真实绑定、clean 双清幽灵引用、单一活动任务下沉、退出码 fail-closed、事实 F-25/F-26 固化、场景 C 优先级修复与 `task adopt` 全功能、检查点完整性哈希与归属校验），自动化测试套件扩增至 162 项全绿。
   - **文档体系定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
 
-### 综合编排轨：CLI 生产就绪、动态运行态探活与全周期合并轨（`f9ff6bf` → `d042395`）
+### 综合编排轨：P0/P1 缺陷彻底闭环与场景 C 规范（`961bcfe` 轮，共识仲裁：REWORK，已完成闭环）
+
+- **被审提交**：`961bcfe`
+- **申请入口**：[`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md)
+- **四方独立评审结论（4 份报告 / 4 位专家）**：**全票否决待返工（REWORK / 4 票否决）**
+  - **Codex**：[`2026-09-07-review-result-961bcfe-codex.md`](2026-09-07-review-result-961bcfe-codex.md) → **REJECT**（4 项 P1：Pi 适配器派发集成与验收标准丢失、Cursor 导入不存在类、UC-11 task adopt 缺失、检查点 SHA-256 与 executor 归属未校验；1 项 P2：git diff 格式空白）。
+  - **Grok**：[`2026-09-07-review-result-961bcfe-grok.md`](2026-09-07-review-result-961bcfe-grok.md) → **NO_APPROVE**（4 项 P1：WAL 产生 sidecar、会话跨项目未隔离、多活动任务孤立、退出码非零缺失；3 项 P2：三元组脏树与 pending 顺序、clean 残留 worktree、敏感词脱敏未接入）。
+  - **Kimi**：[`2026-09-07-review-result-961bcfe-kimi.md`](2026-09-07-review-result-961bcfe-kimi.md) → **REWORK**（2 项 P0：未知 CLI 模糊匹配伪造 READY、--dry-run 产生 WAL sidecars；5 项 P1：Claude 会话推定、clean 产生幽灵 worktree、密钥脱敏不全、非法配置退出码为 0、单一任务不变量未生效）。
+  - **Pi-Qwen**：[`2026-09-07-review-result-961bcfe-pi-qwen.md`](2026-09-07-review-result-961bcfe-pi-qwen.md) → **NO_APPROVE / REWORK**（1 项 P0：子串匹配破坏 fail-closed；4 项 P1：测试非确定性 flake、WAL 侧车破坏只读、进程边界退出码失效、事实 F-23/24 错位未固化）。
+- **处置闭环状态（详见 [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md)）**：
+  - **P0-1 (未知 CLI 借壳)**：移除子串匹配，未知 CLI 严格返回 `MISSING` 并阻断派发；
+  - **P1-1 (测试稳定排序)**：`session_locator.py` 引入 `(st_mtime, name)` 稳定排序，彻底消除 flake；
+  - **P1-2 (WAL 侧车消除)**：所有只读连接添加 `&immutable=1`，probe 期间 0 侧车落盘；
+  - **P1-3 (敏感凭据脱敏)**：`secrets.py` 扩充 6 大类规则，全面集成至 SessionLocator；
+  - **P1-4 (会话真实路径绑定)**：严格全路径比对与 `cwd` 校验，杜绝跨项目伪造；
+  - **P1-5 (clean 幽灵清理)**：`git worktree remove` + `git worktree prune` 彻底清理；
+  - **P1-6 (单一活动任务)**：不变量下沉至 `Orchestrator.start_task`，CLI 增加全局前置守卫；
+  - **P1-7 (进程边界退出码)**：非法配置探活/诊断严格退出非零码（2/1），支持 `--allow-degraded`；
+  - **P1-8 (产品事实固化)**：正式固化 **F-25**（探活只读零副作用）与 **F-26**（会话真实可验证绑定）；
+  - **P1-9 (待决评审优先)**：探活待决评审单优先级高于脏树，`task create` 严格阻断（UC-2 E7）；
+  - **P1-10 & Codex P1-01/02**：`LiveAgentDispatcher` 完整接入 Pi 与 Cursor，透传验收标准；
+  - **Codex P1-03**：实现完整 `macao task adopt` 命令，支持 `--dry-run` 观察模式；
+  - **Codex P1-04**：检查点正文校验完整 SHA-256 与 executor 真实归属；
+  - **P2-961-01**：修复所有 EOF 与行尾空白，`git diff --check` 返回 0。
+- **机验与质量门禁最新状态**：
+  - 自动化单元与集成测试：**162/162 PASS**（`Ran 162 tests in 85.444s, OK`）；
+  - Python 编译：`python3 -m compileall src tests` $\rightarrow$ `0 Errors`；
+  - 代码格式检查：`git diff --check` $\rightarrow$ `0 Errors`。
+
+---
+
+---
+
+### 前序轮次归档：CLI 生产就绪、动态运行态探活与全周期合并轨（`f9ff6bf` → `d042395`，Round 1）
 
 - **被审提交**：`d042395`
 - **合并提交审计范围**：涵盖自 `95b7b35` 以来在主干累积的全部 20 个提交（`f9ff6bf` 至 `d042395`），共 46 个文件变更，+5108 / -193 lines

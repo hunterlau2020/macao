@@ -268,8 +268,11 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
     # 2. Reviewers Table
     rev_list = probe.get("reviewers", [])
     quorum = probe.get("quorum", {})
+    min_w = quorum.get("minimum_winning_seats", 2)
+    seat_q = quorum.get("seat_quorum_required", 2)
+    weight_q = float(quorum.get("weight_quorum_required", 2.0))
     rev_table = Table(
-        title=f"[bold blue]2. Configured Reviewers ({len(rev_list)} Agents | Quorum Required: {quorum.get('minimum_winning_seats', 2)} of {len(rev_list)})[/bold blue]",
+        title=f"[bold blue]2. Configured Reviewers ({len(rev_list)} Agents | Quorum: min {min_w} win, {seat_q} seat-q, {weight_q:.1f} wt-q)[/bold blue]",
         border_style="blue"
     )
     rev_table.add_column("Agent ID", style="bold cyan")
@@ -318,35 +321,19 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         else:
             r_prog_disp = "[dim]IDLE (Standby)[/dim]"
 
-        details_str = str(r.get("details", ""))
-        rev_cell = f"{r_prog_disp}\n[dim]{details_str}[/dim]" if (details_str and details_str != "Standby (Awaiting task dispatch)") else r_prog_disp
-
-        cli_disp = f"{r.get('cli', 'N/A')} (w:{r.get('weight', 1.0):.1f})"
-        r_sess = r.get("session")
-        if r_sess and r_sess.get("session_id"):
-            sid_short = r_sess.get("session_id")[:10]
-            s_name = r_sess.get("session_name") or r_sess.get("title")
-            tot = r_sess.get("total_sessions", 1)
-            tot_suffix = f" [1 of {tot}]" if tot > 1 else ""
-            if s_name and s_name != sid_short:
-                sess_line = f"sess: {s_name} ({sid_short}...){tot_suffix}"
-            else:
-                sess_line = f"sess: {sid_short}...{tot_suffix}"
-            cli_disp += f"\n[dim]{sess_line}[/dim]"
-
         rev_table.add_row(
-            str(r.get("id", "N/A")),
-            cli_disp,
+            str(r.get("id")),
+            f"{r.get('cli')} (w:{r.get('weight', 1.0)})\n[dim]{(r.get('session') or {}).get('session_name') or 'no session'}[/dim]",
             rst_text,
             wt_cell,
-            rev_cell
+            r_prog_disp
         )
     console.print(rev_table)
 
-    # 3. Workspace & Active Task Summary
+    # 3. Summary & Quorum Table
     git = probe.get("git", {})
-    active = probe.get("active_task")
     state_store = probe.get("state_store", {})
+    active = probe.get("active_task")
     phys_reviews = probe.get("physical_reviews", {})
 
     summary_table = Table(title="[bold magenta]3. Workspace & Consensus Readiness[/bold magenta]", border_style="magenta")
@@ -375,23 +362,24 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
             f"[bold yellow]IN PROGRESS ({active['state']})[/bold yellow]"
         )
     else:
-        if not git.get("is_clean", True):
+        if phys_reviews.get("has_pending_request"):
+            base_disp = (phys_reviews.get('latest_request_baseline') or 'HEAD')[:8]
+            summary_table.add_row(
+                "Active Task",
+                f"Review Pending @ {base_disp} ({phys_reviews.get('latest_request_file')})",
+                "[bold cyan]SCENARIO_C (Adopt via 'macao task adopt')[/bold cyan]"
+            )
+        elif not git.get("is_clean", True):
             summary_table.add_row(
                 "Active Task",
                 f"None ({git.get('modified_files_count', 0)} files uncommitted in git)",
                 "[bold yellow]UNTRACKED DEV (Run 'macao task create' to adopt)[/bold yellow]"
             )
-        elif phys_reviews.get("has_pending_request"):
-            summary_table.add_row(
-                "Active Task",
-                f"Review Request Pending ({phys_reviews.get('latest_request_baseline')[:8]})",
-                "[bold cyan]SCENARIO_C (Adopt via 'macao task adopt' / UC-11)[/bold cyan]"
-            )
         else:
             summary_table.add_row("Active Task", "None (Idle)", "[bold green]READY FOR NEW TASK[/bold green]")
 
     q_achieve = quorum.get("achievable", False)
-    q_str = f"{quorum.get('ready_count')}/{quorum.get('total_configured')} Ready (Required: {quorum.get('minimum_winning_seats')})"
+    q_str = f"{quorum.get('ready_count')}/{quorum.get('total_configured')} seats ({quorum.get('total_effective_weight', 0.0):.1f}w) [Req: min {min_w} win, {seat_q} seat-q, {weight_q:.1f} wt-q]"
     summary_table.add_row("Consensus Quorum", q_str, "[bold green]ACHIEVABLE[/bold green]" if q_achieve else "[bold red]BLOCKED[/bold red]")
 
     console.print(summary_table)
@@ -402,15 +390,17 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
             f"[bold green]✓ Pre-execution Probing Passed:[/bold green] Executor '{exec_info.get('id')}' and {quorum.get('ready_count')} reviewer(s) are operational."
         )
         if not active:
-            if not git.get("is_clean", True):
+            if phys_reviews.get("has_pending_request"):
+                missing = phys_reviews.get("missing_reviewers", [])
+                missing_str = f" Awaiting: {', '.join(missing)}." if missing else ""
+                console.print(
+                    f"  [cyan]• Detected pending review request: '{phys_reviews.get('latest_request_file')}' (Baseline: {phys_reviews.get('latest_request_baseline', '')[:8]}).{missing_str}[/cyan]\n"
+                    "  [dim]• Run 'macao task adopt' to adopt this in-flight review into MACAO without resetting state.[/dim]\n"
+                )
+            elif not git.get("is_clean", True):
                 console.print(
                     f"  [yellow]• Note: Detected active development in working tree ({git.get('modified_files_count', 0)} uncommitted files).[/yellow]\n"
                     "  [dim]• Run 'macao task create --title \"...\"' to adopt existing changes into a managed task and trigger review.[/dim]\n"
-                )
-            elif phys_reviews.get("has_pending_request"):
-                console.print(
-                    f"  [cyan]• Detected pending review request: '{phys_reviews.get('latest_request_file')}'.[/cyan]\n"
-                    f"  [dim]• Reviewers can inspect baseline commit '{phys_reviews.get('latest_request_baseline')}' directly.[/dim]\n"
                 )
             else:
                 console.print("  [dim]→ Run 'macao task create --title \"...\"' to dispatch a new task.[/dim]\n")
@@ -435,3 +425,26 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         console.print(f"[dim]Audit Log: {probe.get('log_file')} | View with 'macao logs --probe'[/dim]\n")
 
 
+def render_task_adopt_plan(plan: Dict[str, Any], dry_run: bool = False) -> None:
+    """Renders Rich table for Scenario C task adoption plan."""
+    mode_str = " [DRY-RUN (Preview Only)]" if dry_run else ""
+    table = Table(title=f"MACAO Scenario C In-Flight Task Adoption Plan{mode_str}", border_style="cyan")
+    table.add_column("Dimension", style="bold yellow", width=25)
+    table.add_column("Observed / Planned Value", style="white", width=55)
+
+    table.add_row("Adoption Scenario", plan.get("scenario", "Scenario C (In-Flight Brownfield Adoption)"))
+    table.add_row("Physical Reality", plan.get("physical_state", "N/A"))
+    table.add_row("Adopted Task ID", f"[bold cyan]{plan.get('task_id')}[/bold cyan]")
+    table.add_row("Task Title", str(plan.get("title", "N/A")))
+    table.add_row("Target FSM State", f"[bold green]{plan.get('target_state')}[/bold green]")
+    table.add_row("Checkpoint Baseline", str(plan.get("checkpoint_ref", "HEAD")))
+    table.add_row("Assigned Responsibility", str(plan.get("assigned_role", "N/A")))
+    table.add_row("Target Agents", ", ".join(plan.get("assigned_agents", [])) or "None")
+    table.add_row("Executor Status", str(plan.get("executor_status", "STANDBY")))
+    if plan.get("missing_reviewers"):
+        table.add_row("Missing Reviewers", f"[bold red]{', '.join(plan.get('missing_reviewers'))}[/bold red]")
+    if plan.get("submitted_reviewers"):
+        table.add_row("Submitted Reviewers", f"[bold green]{', '.join(plan.get('submitted_reviewers'))}[/bold green]")
+    table.add_row("Review Dispatch Policy", "Dispatch to missing reviewers" if plan.get("review") else "Deferred (--no-review)")
+
+    console.print(table)

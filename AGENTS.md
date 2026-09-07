@@ -18,7 +18,7 @@ MACAO (Multi-Agent CLI Agent Orchestrator) lives in `src/macao/`. Its key archit
 Run commands from project root `/home/debian/macao`:
 
 ```bash
-# 1. Run all unit and integration tests (128 tests)
+# 1. Run all unit and integration tests (162 tests)
 python3 -m unittest discover tests
 
 # 2. Run specific test file
@@ -76,7 +76,7 @@ python3 -m macao.cli.main logs --probe
    - 审查阶段由 `PTYSession` 实时截获终端输出、剥离 ANSI 码并落盘至 `.macao/logs/reviewers/<reviewer_id>_r<round>.log`，支持 `macao logs -r <id>` 随时审计。
 
 5. **当前测试与交付状态**：
-   - 128 项测试全部通过（`Ran 128 tests in 66s, OK`）；
+   - 162 项测试全部通过（`Ran 162 tests in 85s, OK`）；
    - 主干分支保持清洁并与 `origin/main` 实时同步。
 
 6. **研发方法论：实战实操先于纸面定论（拒绝纯纸上谈兵）**：

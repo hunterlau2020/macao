@@ -54,11 +54,6 @@ class TeamProber:
 
     def _get_adapter(self, cli_name: str, agent_id: str, config: Optional[Dict[str, Any]] = None):
         cls = ADAPTER_MAP.get(cli_name.lower())
-        if not cls:
-            for k, v in ADAPTER_MAP.items():
-                if k in agent_id.lower() or k in cli_name.lower():
-                    cls = v
-                    break
         if cls:
             try:
                 return cls(agent_id=agent_id, config=config)
@@ -77,7 +72,7 @@ class TeamProber:
             return None, None, False
 
         try:
-            conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True, timeout=5.0)
+            conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro&immutable=1", uri=True, timeout=5.0)
             conn.row_factory = sqlite3.Row
             try:
                 cur = conn.execute(
@@ -98,7 +93,7 @@ class TeamProber:
             return []
 
         try:
-            conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True, timeout=5.0)
+            conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro&immutable=1", uri=True, timeout=5.0)
             conn.row_factory = sqlite3.Row
             try:
                 cur = conn.execute(
@@ -522,13 +517,10 @@ class TeamProber:
                 exec_probe["error"] = str(e)
                 exec_probe["status"] = "ERROR"
         else:
-            path = shutil.which(exec_cli)
-            if path:
-                exec_probe["installed"] = True
-                exec_probe["status"] = "READY"
-                exec_probe["details"] = f"Found executable in PATH: {path}"
-            else:
-                exec_probe["details"] = f"Executable '{exec_cli}' not found in PATH"
+            exec_probe["installed"] = False
+            exec_probe["status"] = "MISSING"
+            exec_probe["error"] = f"Unrecognized CLI '{exec_cli}' (not in ADAPTER_MAP)"
+            exec_probe["details"] = f"Unrecognized CLI '{exec_cli}'"
 
         # Check executor coding / checkpoint progress
         dev_yml_path = self.project_root / ".macao" / ".dev.yml"
@@ -778,12 +770,10 @@ class TeamProber:
                     r_info["error"] = str(e)
                     r_info["status"] = "ERROR"
             else:
-                path = shutil.which(r_cli)
-                if path:
-                    r_info["installed"] = True
-                    r_info["status"] = "READY"
-                else:
-                    r_info["error"] = f"Executable '{r_cli}' not found in PATH"
+                r_info["installed"] = False
+                r_info["status"] = "MISSING"
+                r_info["error"] = f"Unrecognized CLI '{r_cli}' (not in ADAPTER_MAP)"
+                r_info["details"] = f"Unrecognized CLI '{r_cli}'"
 
             if r_info["installed"]:
                 ready_reviewers_count += 1

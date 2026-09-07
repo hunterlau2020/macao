@@ -396,7 +396,7 @@ opinion:
                 "version": "1.0", "status": "ready_for_review", "signal": "EXPLICIT",
                 "task_id": t_id, "checkpoint_ref": dev_commit,
                 "full_document": {"path": "docs/reviews/req.md", "evidence_commit": dev_commit, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
-                "review_round": 1, "executor": {"id": "dev", "cli": "opencode"},
+                "review_round": 1, "executor": {"id": cfg["team"]["executor"]["id"], "cli": cfg["team"]["executor"]["cli"]},
                 "development": {"git": {"latest_commit": dev_commit}, "quality_metrics": {"tests_passed": True}}
             }), encoding="utf-8")
 

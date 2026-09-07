@@ -30,13 +30,16 @@ class PiAdapter(AgentAdapter):
         )
 
     def _resolve_binary(self) -> Optional[str]:
-        """Resolves the pi executable path from PATH or known nvm installations."""
+        """Resolves the pi executable path dynamically from PATH or nvm node directories."""
         exe = shutil.which("pi")
         if exe:
             return exe
-        known = Path.home() / ".nvm" / "versions" / "node" / "v24.15.0" / "bin" / "pi"
-        if known.exists() and os.access(known, os.X_OK):
-            return str(known)
+        nvm_dir = Path.home() / ".nvm" / "versions" / "node"
+        if nvm_dir.exists() and nvm_dir.is_dir():
+            for node_dir in sorted(nvm_dir.glob("v*"), reverse=True):
+                cand = node_dir / "bin" / "pi"
+                if cand.exists() and os.access(cand, os.X_OK):
+                    return str(cand)
         return None
 
     def preflight(self) -> PreflightCheckResult:
@@ -47,11 +50,13 @@ class PiAdapter(AgentAdapter):
                 installed=False,
                 execution_mode=self.capabilities().execution_mode,
                 details="Pi CLI executable not found in PATH",
-                remediation="Install pi via npm or ensure /home/debian/.nvm/versions/node/v24.15.0/bin is in PATH."
+                remediation="Install pi via npm or ensure ~/.nvm/versions/node/<version>/bin or npm bin -g is in PATH."
             )
         try:
             res = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
-            version = res.stdout.strip() or "0.85.1"
+            version = res.stdout.strip()
+            if not version:
+                version = "detected"
             return PreflightCheckResult(
                 cli_name=self.cli_name,
                 installed=True,
@@ -106,7 +111,7 @@ class PiAdapter(AgentAdapter):
         # If acting as Executor
         if self.config.get("role") == "executor" or "task_description" in task_payload:
             desc = task_payload.get("task_description", "")
-            criteria = task_payload.get("success_criteria", {})
+            criteria = task_payload.get("acceptance_criteria") or task_payload.get("success_criteria") or []
             prompt = (
                 f"TASK: {desc}\n"
                 f"Acceptance Criteria: {criteria}\n"

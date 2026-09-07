@@ -72,12 +72,12 @@ class TestSessionLocator(unittest.TestCase):
         self.assertEqual(_sanitize_session_name(None, "abc12345"), "abc12345")
         self.assertEqual(_sanitize_session_name("", "xyz98765"), "xyz98765")
         self.assertEqual(_sanitize_session_name("  simple test  "), "simple test")
-        
-        # Test masking API keys
-        sensitive = "Bearer sk-1234567890abcdef1234567890"
-        masked = _sanitize_session_name(sensitive)
-        self.assertNotIn("sk-1234567890abcdef", masked)
-        self.assertIn("******", masked)
+
+        # Test masking API keys, GitHub PAT, Anthropic keys, Bearer, and URL passwords (P1-3, P2-4)
+        self.assertEqual(_sanitize_session_name("Bearer sk-1234567890abcdef1234567890"), "Bearer ******")
+        self.assertEqual(_sanitize_session_name("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ12"), "******")
+        self.assertEqual(_sanitize_session_name("sk-ant-api03-abcdefghijklmnopqrstuvwxyz"), "******")
+        self.assertEqual(_sanitize_session_name("postgres://user:Sup3rSecret@localhost:5432/db"), "postgres://user:******@localhost:5432/db")
 
     def test_pi_session_discovery_and_names(self):
         fake_pi_base = Path(self.temp_dir) / ".pi" / "agent" / "sessions"
@@ -90,6 +90,7 @@ class TestSessionLocator(unittest.TestCase):
         with open(s1_file, "w", encoding="utf-8") as f:
             f.write(json.dumps({"type": "session", "id": "sid1", "cwd": str(self.project_path)}) + "\n")
             f.write(json.dumps({"type": "session_info", "name": "qwen-review-eng"}) + "\n")
+        os.utime(s1_file, (1700000000, 1700000000))
 
         # Session 2: fallback to first user prompt
         s2_file = session_folder / "2026-09-07T09-00-00_sid2.jsonl"
@@ -99,6 +100,7 @@ class TestSessionLocator(unittest.TestCase):
                 "type": "message",
                 "message": {"role": "user", "content": [{"type": "text", "text": "Implement feature X"}]}
             }) + "\n")
+        os.utime(s2_file, (1600000000, 1600000000))
 
         # Mock Path.home() to point to our temp_dir
         with patch("pathlib.Path.home", return_value=Path(self.temp_dir)):
@@ -118,6 +120,47 @@ class TestSessionLocator(unittest.TestCase):
             self.assertIsNotNone(matched)
             self.assertEqual(matched["session_id"], "sid2")
             self.assertEqual(matched["session_name"], "Implement feature X")
+
+    def test_pi_session_tie_breaker_same_mtime(self):
+        """P1-1 / P1-NEW-1: Two sessions with identical mtimes must be deterministically sorted by filename."""
+        fake_pi_base = Path(self.temp_dir) / ".pi" / "agent" / "sessions"
+        sanitized_dir = "--" + str(self.project_path).strip("/").replace("/", "-") + "--"
+        session_folder = fake_pi_base / sanitized_dir
+        session_folder.mkdir(parents=True, exist_ok=True)
+
+        f_a = session_folder / "2026-09-07T10-00-00_aaa.jsonl"
+        f_b = session_folder / "2026-09-07T10-00-00_bbb.jsonl"
+        with open(f_a, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "session", "id": "aaa", "cwd": str(self.project_path)}) + "\n")
+        with open(f_b, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "session", "id": "bbb", "cwd": str(self.project_path)}) + "\n")
+
+        # Set exact same mtime
+        same_ts = 1725700000.0
+        os.utime(f_a, (same_ts, same_ts))
+        os.utime(f_b, (same_ts, same_ts))
+
+        with patch("pathlib.Path.home", return_value=Path(self.temp_dir)):
+            sessions = SessionLocator.list_sessions("pi", self.project_path)
+            self.assertEqual(len(sessions), 2)
+            # bbb is lexicographically greater than aaa, so descending order places bbb first
+            self.assertEqual(sessions[0]["session_id"], "bbb")
+            self.assertEqual(sessions[1]["session_id"], "aaa")
+
+    def test_claude_foreign_session_rejection(self):
+        """P1-4: Reject Claude session if cwd does not match project_path."""
+        claude_base = Path(self.temp_dir) / ".claude" / "projects"
+        sanitized_dir = "-" + str(self.project_path).lstrip("/").replace("/", "-")
+        target_dir = claude_base / sanitized_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        foreign_file = target_dir / "foreign-session.jsonl"
+        with open(foreign_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "user", "cwd": "/home/other/different-repo", "message": {"content": "other project"}}) + "\n")
+
+        with patch("pathlib.Path.home", return_value=Path(self.temp_dir)):
+            sessions = SessionLocator.list_sessions("claude", self.project_path)
+            self.assertEqual(sessions, [], "Foreign session with mismatched cwd must be rejected")
 
 
 if __name__ == "__main__":

@@ -58,7 +58,8 @@ class TestP0P1Rectification(unittest.TestCase):
             for i in range(100):
                 t = orch.start_task(
                     title=f"Task {i}",
-                    task_description=f"Description {i}"
+                    task_description=f"Description {i}",
+                    force=True
                 )
                 created_ids.append(t["task_id"])
 

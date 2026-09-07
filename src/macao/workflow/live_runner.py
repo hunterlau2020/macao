@@ -6,6 +6,7 @@ import time
 import shutil
 import tempfile
 import subprocess
+import hashlib
 import yaml
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -102,7 +103,12 @@ class LiveWorkflowRunner:
         dev_commit = self.git.get_head_commit()
         steps_log.append({"step": "2. Development Commit", "details": f"commit={dev_commit[:8]}, branch=feature/calc-live", "status": "OK"})
 
-        # Create valid .dev.yml
+        # Create valid physical review request document and valid .dev.yml (Codex P1-04)
+        req_doc = self.workspace / "docs" / "reviews" / "req.md"
+        req_doc.parent.mkdir(parents=True, exist_ok=True)
+        req_doc.write_text(f"# Review Request: Live Cycle {task_id}\n\nEvidence Commit: {dev_commit}\n", encoding="utf-8")
+        req_sha256 = hashlib.sha256(req_doc.read_bytes()).hexdigest()
+
         dev_manifest = {
             "version": "1.0",
             "task_id": task_id,
@@ -110,12 +116,12 @@ class LiveWorkflowRunner:
             "full_document": {
                 "path": "docs/reviews/req.md",
                 "evidence_commit": dev_commit,
-                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                "sha256": req_sha256
             },
             "status": "ready_for_review",
             "signal": "EXPLICIT",
             "review_round": 1,
-            "executor": {"id": "opencode-dev", "cli": "opencode"},
+            "executor": {"id": self.orchestrator.config.get("executor", {}).get("id", "dev-opencode"), "cli": "opencode"},
             "development": {
                 "quality_metrics": {"tests_passed": True},
                 "git": {"latest_commit": dev_commit}

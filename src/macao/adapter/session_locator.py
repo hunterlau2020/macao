@@ -13,6 +13,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from macao.utils.secrets import mask_secrets
 
 
 def _sanitize_session_name(raw_text: Optional[str], default_id: str = "") -> str:
@@ -21,8 +22,8 @@ def _sanitize_session_name(raw_text: Optional[str], default_id: str = "") -> str
         return default_id[:8] if default_id else "unknown"
     cleaned = raw_text.strip().replace("\r\n", " ").replace("\n", " ")
     cleaned = re.sub(r"^[\s#*\->]+", "", cleaned)
-    # Mask sensitive credentials / API keys / tokens (Reviewer B-2 fix)
-    cleaned = re.sub(r"\b(sk-[a-zA-Z0-9]{15,}|[0-9a-fA-F]{24,}\.[a-zA-Z0-9_-]{10,})\b", "******", cleaned)
+    # Mask sensitive credentials / API keys / tokens via single source of truth (P1-3)
+    cleaned = mask_secrets(cleaned)
     cleaned = cleaned.strip()
     if len(cleaned) > 50:
         cleaned = cleaned[:47] + "..."
@@ -152,15 +153,7 @@ class SessionLocator:
         target_dir = claude_dir / sanitized
 
         if not target_dir.exists() or not target_dir.is_dir():
-            exact_name_dir = claude_dir / f"-{resolved_proj.name}"
-            short_sanitized = "-" + re.sub(r"[^a-zA-Z0-9]", "-", resolved_proj.name)
-            candidate = claude_dir / short_sanitized
-            if exact_name_dir.exists() and exact_name_dir.is_dir():
-                target_dir = exact_name_dir
-            elif candidate.exists() and candidate.is_dir():
-                target_dir = candidate
-            else:
-                return []
+            return []
 
         jsonl_files = [
             f for f in target_dir.glob("*.jsonl")
@@ -169,8 +162,8 @@ class SessionLocator:
         if not jsonl_files:
             return []
 
-        # Sort by mtime descending
-        jsonl_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        # Sort deterministically: mtime descending, then filename descending
+        jsonl_files.sort(key=lambda f: (f.stat().st_mtime, f.name), reverse=True)
 
         results = []
         for jf in jsonl_files:
@@ -178,30 +171,40 @@ class SessionLocator:
             iso_time = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
             session_id = jf.stem
             sname = None
+            session_cwd = None
 
             try:
                 with open(jf, "r", encoding="utf-8", errors="replace") as f:
-                    for _ in range(30):
+                    for _ in range(50):
                         line = f.readline()
                         if not line:
                             break
                         try:
                             obj = json.loads(line)
-                            if obj.get("type") == "user":
-                                msg = obj.get("message", {})
-                                raw_text = msg.get("content") if isinstance(msg, dict) else obj.get("text")
-                                if raw_text:
-                                    sname = _sanitize_session_name(raw_text, session_id)
-                                    break
-                            elif isinstance(obj.get("message"), dict) and obj["message"].get("role") == "user":
-                                raw_text = obj["message"].get("content")
-                                if raw_text:
-                                    sname = _sanitize_session_name(str(raw_text), session_id)
-                                    break
+                            if not session_cwd and obj.get("cwd"):
+                                session_cwd = obj.get("cwd")
+                            if not sname:
+                                if obj.get("type") == "user":
+                                    msg = obj.get("message", {})
+                                    raw_text = msg.get("content") if isinstance(msg, dict) else obj.get("text")
+                                    if raw_text:
+                                        sname = _sanitize_session_name(raw_text, session_id)
+                                elif isinstance(obj.get("message"), dict) and obj["message"].get("role") == "user":
+                                    raw_text = obj["message"].get("content")
+                                    if raw_text:
+                                        sname = _sanitize_session_name(str(raw_text), session_id)
                         except Exception:
                             continue
             except Exception:
                 pass
+
+            # Fail-closed: verify physical cwd binding if cwd is present in record
+            if session_cwd:
+                try:
+                    if Path(session_cwd).resolve() != resolved_proj:
+                        continue
+                except Exception:
+                    continue
 
             sname = sname or _sanitize_session_name(None, session_id)
             results.append({
@@ -211,7 +214,7 @@ class SessionLocator:
                 "title": sname,
                 "last_active": iso_time,
                 "session_file": str(jf),
-                "workspace": str(resolved_proj),
+                "workspace": str(session_cwd or resolved_proj),
                 "details": f"Claude Code session: {sname} ({session_id[:10]}...)"
             })
         return results
@@ -226,7 +229,7 @@ class SessionLocator:
         resolved_proj = project_path.resolve()
         results = []
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=3.0)
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True, timeout=3.0)
             try:
                 cur = conn.execute(
                     "SELECT id, title, directory, time_updated FROM session "
@@ -280,7 +283,7 @@ class SessionLocator:
         seen_ids = set()
         for db_path in state_dbs:
             try:
-                conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=3.0)
+                conn = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True, timeout=3.0)
                 try:
                     cur = conn.execute(
                         "SELECT id, title, cwd, updated_at FROM threads "
@@ -407,7 +410,7 @@ class SessionLocator:
         if not jsonl_files:
             return []
 
-        jsonl_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        jsonl_files.sort(key=lambda f: (f.stat().st_mtime, f.name), reverse=True)
 
         results = []
         for jf in jsonl_files:
@@ -416,6 +419,7 @@ class SessionLocator:
             sid = jf.stem
             sname = None
             first_user_prompt = None
+            session_cwd = None
 
             try:
                 with open(jf, "r", encoding="utf-8", errors="replace") as f:
@@ -428,8 +432,11 @@ class SessionLocator:
                         except Exception:
                             continue
 
-                        if obj.get("type") == "session" and obj.get("id"):
-                            sid = obj.get("id")
+                        if obj.get("type") == "session":
+                            if obj.get("id"):
+                                sid = obj.get("id")
+                            if obj.get("cwd"):
+                                session_cwd = obj.get("cwd")
                         elif obj.get("type") == "session_info" and obj.get("name"):
                             sname = obj.get("name")
                             break
@@ -446,6 +453,14 @@ class SessionLocator:
             except Exception:
                 pass
 
+            # Fail-closed: verify physical cwd binding if cwd is present in record
+            if session_cwd:
+                try:
+                    if Path(session_cwd).resolve() != resolved_proj:
+                        continue
+                except Exception:
+                    continue
+
             final_name = sname or first_user_prompt or f"pi-{sid[:8]}"
             sname_clean = _sanitize_session_name(final_name, sid)
             results.append({
@@ -455,7 +470,7 @@ class SessionLocator:
                 "title": sname_clean,
                 "last_active": iso_time,
                 "session_file": str(jf),
-                "workspace": str(resolved_proj),
+                "workspace": str(session_cwd or resolved_proj),
                 "details": f"Pi session: {sname_clean} ({sid[:10]}...)"
             })
         return results

@@ -27,16 +27,17 @@ class StateStore:
         title: str,
         source_branch: str,
         target_branch: str = "main",
-        acceptance_criteria: Optional[Dict[str, Any]] = None
+        acceptance_criteria: Optional[Any] = None
     ) -> Dict[str, Any]:
         now = self._now()
+        criteria_str = json.dumps(acceptance_criteria or []) if not isinstance(acceptance_criteria, str) else acceptance_criteria
         with self.db.connection() as conn:
             conn.execute(
                 """
-                INSERT INTO tasks (task_id, title, source_branch, target_branch, state, checkpoint_ref, review_round, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?)
+                INSERT INTO tasks (task_id, title, source_branch, target_branch, state, checkpoint_ref, review_round, created_at, updated_at, acceptance_criteria)
+                VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, ?)
                 """,
-                (task_id, title, source_branch, target_branch, AgentState.IDLE.value, now, now)
+                (task_id, title, source_branch, target_branch, AgentState.IDLE.value, now, now, criteria_str)
             )
         return self.get_task(task_id)
 
@@ -52,6 +53,14 @@ class StateStore:
                 (AgentState.DONE.value, AgentState.CANCELLED.value)
             ).fetchone()
             return dict(row) if row else None
+
+    def get_active_tasks(self) -> List[Dict[str, Any]]:
+        with self.db.connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM tasks WHERE state NOT IN (?, ?) ORDER BY created_at DESC",
+                (AgentState.DONE.value, AgentState.CANCELLED.value)
+            ).fetchall()
+            return [dict(r) for r in rows]
 
     def update_task_state(self, task_id: str, state: AgentState, checkpoint_ref: Optional[str] = None, review_round: Optional[int] = None) -> None:
         now = self._now()

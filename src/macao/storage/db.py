@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     checkpoint_ref  TEXT,
     review_round    INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL,
-    updated_at      TEXT NOT NULL
+    updated_at      TEXT NOT NULL,
+    acceptance_criteria TEXT DEFAULT '[]'
 );
 
 -- Artifacts Table (PRD §11.4: AUTOINCREMENT artifact_id + 5-tuple UNIQUE + REFERENCES tasks)
@@ -132,12 +133,21 @@ class DatabaseManager:
     def _init_db(self) -> None:
         with self.connection() as conn:
             conn.executescript(SCHEMA_DDL)
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+            if "acceptance_criteria" not in cols:
+                conn.execute("ALTER TABLE tasks ADD COLUMN acceptance_criteria TEXT DEFAULT '[]'")
 
 
 _db_manager: Optional[DatabaseManager] = None
 
 def get_db(db_path: str = DEFAULT_DB_PATH) -> DatabaseManager:
     global _db_manager
-    if _db_manager is None or str(_db_manager.db_path) != str(Path(db_path)):
-        _db_manager = DatabaseManager(db_path)
+    resolved = Path(db_path).resolve()
+    if _db_manager is None or _db_manager.db_path.resolve() != resolved or not resolved.exists():
+        _db_manager = DatabaseManager(str(resolved))
     return _db_manager
+
+
+def reset_db_manager() -> None:
+    global _db_manager
+    _db_manager = None

@@ -39,7 +39,9 @@ class CursorAgentAdapter(AgentAdapter):
             )
         try:
             res = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
-            version = res.stdout.strip() or "2026.0.0"
+            version = res.stdout.strip()
+            if not version:
+                version = "detected"
             return PreflightCheckResult(
                 cli_name=self.cli_name,
                 installed=True,
@@ -86,7 +88,7 @@ class CursorAgentAdapter(AgentAdapter):
         # If acting as Executor
         if self.config.get("role") == "executor" or "task_description" in task_payload:
             desc = task_payload.get("task_description", "")
-            criteria = task_payload.get("success_criteria", {})
+            criteria = task_payload.get("acceptance_criteria") or task_payload.get("success_criteria") or []
             prompt = (
                 f"TASK: {desc}\n"
                 f"Acceptance Criteria: {criteria}\n"
@@ -118,3 +120,7 @@ class CursorAgentAdapter(AgentAdapter):
 
     def get_logs(self, tail_lines: int = 300) -> str:
         return "\n".join(self.session.get_clean_logs(tail_lines)) if self.session else ""
+
+
+# Alias for backwards compatibility
+CursorAdapter = CursorAgentAdapter

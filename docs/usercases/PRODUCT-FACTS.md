@@ -53,3 +53,7 @@
 23. **F-23.** 任务具有角色职责对称性：`CODING` 与 `REWORK` 状态下的实现任务唯一责任方为 Executor，而 `WAITING_REVIEW` 状态下的审查任务唯一责任方为各 Reviewer 席位，Executor 在评审期间处于只读挂起（`STANDBY`）。
 
 24. **F-24.** 编排器介入在途推进的项目（场景 C）时，必须按底层 Git 拓扑和物理评审产物（`*-review-request-*.md`）如实对账并允许从任意合法中间态（如 `WAITING_REVIEW`）直接接管，严禁将客观处于待评审或审查中的项目强制倒退为 `IDLE -> CODING` 或错误建议执行 `macao task create`。
+
+25. **F-25.** 探活与诊断只读零副作用：任何 `probe`、`doctor` 或 `preflight` 的调用必须对本地环境保证严格只读，不得在项目工作区或第三方 CLI 配置数据目录中产生文件、目录、SQLite sidecar（如 `-wal`/`-shm`）或写锁，确保零破坏性与可重复性。
+
+26. **F-26.** 会话真实可验证绑定：会话发现（`SessionLocator`）归属必须由记录内可验证的项目实际路径证明，无法确切验证绑定的会话一律 Fail-Closed 返回空列表，严禁按目录同名（basename）模糊推定或向会话篡改回填当前项目路径。

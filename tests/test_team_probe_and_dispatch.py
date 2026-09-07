@@ -214,10 +214,12 @@ class TestTeamProbeAndDispatch(unittest.TestCase):
                 self.assertEqual(found["cli"], "agy")
 
             # 3. Test claude mock session locator
-            claude_proj = mock_home / ".claude" / "projects" / f"-{tmp_path.name}"
+            import re
+            sanitized_claude = "-" + re.sub(r"[^a-zA-Z0-9]", "-", str(tmp_path.resolve()).lstrip("/"))
+            claude_proj = mock_home / ".claude" / "projects" / sanitized_claude
             claude_proj.mkdir(parents=True, exist_ok=True)
             sess_file = claude_proj / "session-uuid-999.jsonl"
-            sess_file.write_text('{"type": "message"}\n', encoding="utf-8")
+            sess_file.write_text(json.dumps({"type": "message", "cwd": str(tmp_path.resolve())}) + "\n", encoding="utf-8")
 
             with mock.patch("pathlib.Path.home", return_value=mock_home):
                 c_found = SessionLocator.find_session("claude", tmp_path)

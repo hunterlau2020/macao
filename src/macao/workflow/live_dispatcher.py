@@ -199,28 +199,37 @@ class LiveAgentDispatcher:
         agent_id = reviewer_cfg.get("id", "reviewer")
         model = reviewer_cfg.get("model")
 
+        adapter_config = dict(reviewer_cfg)
+        adapter_config["isolated_worktree_path"] = worktree_path
+        adapter_config["role"] = "reviewer"
+        if model:
+            adapter_config["model"] = model
+
         if cli_type == "mock-cli":
             from macao.adapter.mock import MockAgentAdapter
             return MockAgentAdapter(agent_id=agent_id, cli_name="mock-cli", role="reviewer", project_root=worktree_path)
 
         if cli_type in ("claude", "claude-code"):
             from macao.adapter.claude import ClaudeCodeAdapter
-            return ClaudeCodeAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+            return ClaudeCodeAdapter(agent_id=agent_id, config=adapter_config)
         elif cli_type == "codex":
             from macao.adapter.codex import CodexAdapter
-            return CodexAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+            return CodexAdapter(agent_id=agent_id, config=adapter_config)
         elif cli_type == "opencode":
             from macao.adapter.opencode import OpenCodeAdapter
-            return OpenCodeAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+            return OpenCodeAdapter(agent_id=agent_id, config=adapter_config)
         elif cli_type in ("agy", "antigravity"):
             from macao.adapter.antigravity import AntigravityAdapter
-            return AntigravityAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+            return AntigravityAdapter(agent_id=agent_id, config=adapter_config)
         elif cli_type in ("cursor", "agent"):
-            from macao.adapter.cursor import CursorAdapter
-            return CursorAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+            from macao.adapter.cursor import CursorAgentAdapter
+            return CursorAgentAdapter(agent_id=agent_id, config=adapter_config)
+        elif cli_type == "pi":
+            from macao.adapter.pi import PiAdapter
+            return PiAdapter(agent_id=agent_id, config=adapter_config)
         elif cli_type == "kimi":
             from macao.adapter.kimi import KimiAdapter
-            return KimiAdapter(agent_id=agent_id, project_root=worktree_path, model=model)
+            return KimiAdapter(agent_id=agent_id, config=adapter_config)
         else:
             raise ValueError(f"Unknown or unsupported CLI reviewer type: '{cli_type}' (Fail-closed)")
 
