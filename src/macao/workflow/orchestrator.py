@@ -191,7 +191,21 @@ class Orchestrator:
             })
 
         # Broadcast DEVELOPMENT_STARTED AEP
-        crit_list = acceptance_criteria if isinstance(acceptance_criteria, list) and len(acceptance_criteria) > 0 else ["All unit tests pass", "Zero regression"]
+        if isinstance(acceptance_criteria, list) and acceptance_criteria:
+            crit_list = acceptance_criteria
+        elif isinstance(acceptance_criteria, str) and acceptance_criteria.strip():
+            crit_list = [c.strip() for c in acceptance_criteria.split("\n") if c.strip()]
+        elif isinstance(acceptance_criteria, dict):
+            raw = acceptance_criteria.get("raw")
+            if isinstance(raw, list) and raw:
+                crit_list = raw
+            elif isinstance(raw, str) and raw.strip():
+                crit_list = [c.strip() for c in raw.split("\n") if c.strip()]
+            else:
+                crit_list = ["All unit tests pass", "Zero regression"]
+        else:
+            crit_list = ["All unit tests pass", "Zero regression"]
+
         self.msg_bus.publish(
             msg_type=AEPType.DEVELOPMENT_STARTED,
             from_agent="macao",
@@ -209,6 +223,13 @@ class Orchestrator:
 
         self.logger.info(f"Task started: task_id={t_id}, title='{title}', branch={src_branch} -> {target_branch}")
         return self.store.get_task(t_id)
+
+    def cancel_task(self, task_id: str, reason: str = "User requested task cancellation") -> StateChange:
+        """E10: Cancels and archives an active task."""
+        change = self.fsm.transition(task_id, AgentState.CANCELLED, "E10", {"reason": reason})
+        self.store.log_audit_event(task_id, "TASK_CANCELLED", {"reason": reason})
+        self.logger.info(f"Task {task_id} cancelled: {reason}")
+        return change
 
     def check_development_checkpoint(self, task_id: str) -> Optional[StateChange]:
         """

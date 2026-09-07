@@ -244,8 +244,15 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
     cli_base = f"{exec_info.get('cli', 'N/A')}" + (f" ({exec_info.get('model')})" if exec_info.get("model") else "")
     exec_sess = exec_info.get("session")
     if exec_sess and exec_sess.get("session_id"):
-        sid_short = exec_sess.get("session_id")[:14]
-        cli_model = f"{cli_base}\n[dim cyan]sess: {sid_short}...[/dim cyan]\n[dim]({exec_sess.get('last_active', 'active')})[/dim]"
+        sid_short = exec_sess.get("session_id")[:12]
+        s_name = exec_sess.get("session_name") or exec_sess.get("title")
+        tot = exec_sess.get("total_sessions", 1)
+        tot_suffix = f" [1 of {tot}]" if tot > 1 else ""
+        if s_name and s_name != sid_short:
+            sess_line = f"sess: {s_name} ({sid_short}...){tot_suffix}"
+        else:
+            sess_line = f"sess: {sid_short}...{tot_suffix}"
+        cli_model = f"{cli_base}\n[dim cyan]{sess_line}[/dim cyan]\n[dim]({exec_sess.get('last_active', 'active')})[/dim]"
     else:
         cli_model = cli_base
 
@@ -317,7 +324,15 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         cli_disp = f"{r.get('cli', 'N/A')} (w:{r.get('weight', 1.0):.1f})"
         r_sess = r.get("session")
         if r_sess and r_sess.get("session_id"):
-            cli_disp += f"\n[dim]sess: {r_sess.get('session_id')[:10]}...[/dim]"
+            sid_short = r_sess.get("session_id")[:10]
+            s_name = r_sess.get("session_name") or r_sess.get("title")
+            tot = r_sess.get("total_sessions", 1)
+            tot_suffix = f" [1 of {tot}]" if tot > 1 else ""
+            if s_name and s_name != sid_short:
+                sess_line = f"sess: {s_name} ({sid_short}...){tot_suffix}"
+            else:
+                sess_line = f"sess: {sid_short}...{tot_suffix}"
+            cli_disp += f"\n[dim]{sess_line}[/dim]"
 
         rev_table.add_row(
             str(r.get("id", "N/A")),
@@ -370,7 +385,7 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
             summary_table.add_row(
                 "Active Task",
                 f"Review Request Pending ({phys_reviews.get('latest_request_baseline')[:8]})",
-                "[bold cyan]SCENARIO_C (Adopt via 'macao task create --review')[/bold cyan]"
+                "[bold cyan]SCENARIO_C (Adopt via 'macao task adopt' / UC-11)[/bold cyan]"
             )
         else:
             summary_table.add_row("Active Task", "None (Idle)", "[bold green]READY FOR NEW TASK[/bold green]")

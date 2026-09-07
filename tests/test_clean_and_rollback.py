@@ -33,24 +33,29 @@ class TestCleanAndRollback(unittest.TestCase):
             self.assertEqual(res2.exit_code, 0)
             self.assertIn("already exists", res2.output)
 
-    def test_clean_removes_macao_runtime_dir(self):
-        """Verify 'macao clean' removes .macao directory."""
+    def test_clean_safe_default_preserves_state_db_and_removes_worktrees(self):
+        """Verify 'macao clean' (default) preserves .macao/state.db and only removes worktrees."""
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=self.tmpdir):
             os.makedirs(".macao/logs", exist_ok=True)
+            os.makedirs(".macao/worktrees/rev-claude-wt", exist_ok=True)
             Path(".macao/state.db").touch()
             Path("macao.yaml").write_text("dummy", encoding="utf-8")
 
             res = runner.invoke(cli, ["clean"])
             self.assertEqual(res.exit_code, 0)
-            self.assertFalse(Path(".macao").exists())
-            self.assertTrue(Path("macao.yaml").exists())  # Kept without --all
+            self.assertTrue(Path(".macao").exists())
+            self.assertTrue(Path(".macao/state.db").exists())  # Preserved
+            self.assertTrue(Path(".macao/logs").exists())      # Preserved
+            self.assertFalse(Path(".macao/worktrees/rev-claude-wt").exists())  # Cleaned
+            self.assertTrue(Path("macao.yaml").exists())      # Kept without --all
 
-    def test_clean_all_removes_config_and_restores_gitignore(self):
-        """Verify 'macao clean --all' removes configuration and cleans .gitignore."""
+    def test_clean_all_snapshots_and_removes_runtime_and_config(self):
+        """Verify 'macao clean --all' creates snapshot backup before removing configuration and cleaning .gitignore."""
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=self.tmpdir):
-            os.makedirs(".macao", exist_ok=True)
+            os.makedirs(".macao/logs", exist_ok=True)
+            Path(".macao/state.db").write_text("test_data", encoding="utf-8")
             Path("macao.yaml").write_text("config: 1", encoding="utf-8")
             gi = Path(".gitignore")
             gi.write_text("dist/\n", encoding="utf-8")
@@ -65,15 +70,24 @@ class TestCleanAndRollback(unittest.TestCase):
             self.assertNotIn(".macao/worktrees/", gi_content)
             self.assertIn("dist/", gi_content)
 
+            # Assert snapshot directory was created
+            backups = list(Path(".").glob(".macao.bak.*"))
+            self.assertTrue(len(backups) >= 1)
+            self.assertTrue((backups[0] / "state.db").exists())
+
     def test_clean_restore_backup(self):
-        """Verify 'macao clean --restore' restores recent macao.yaml.bak file."""
+        """Verify 'macao clean --restore' restores both .macao.bak.* and macao.yaml.bak.* backups."""
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=self.tmpdir):
-            Path("macao.yaml.bak.123456").write_text("version: backup", encoding="utf-8")
-            Path("macao.yaml").write_text("version: broken", encoding="utf-8")
+            # Create backups
+            os.makedirs(".macao.bak.20260907_120000/logs", exist_ok=True)
+            Path(".macao.bak.20260907_120000/state.db").write_text("saved_state", encoding="utf-8")
+            Path("macao.yaml.bak.20260907_120000").write_text("version: backup", encoding="utf-8")
 
             res = runner.invoke(cli, ["clean", "--restore"])
             self.assertEqual(res.exit_code, 0)
+            self.assertTrue(Path(".macao").exists())
+            self.assertEqual(Path(".macao/state.db").read_text(encoding="utf-8"), "saved_state")
             self.assertEqual(Path("macao.yaml").read_text(encoding="utf-8"), "version: backup")
 
     def test_interactive_init_chinese_comments_and_canonical_naming(self):

@@ -20,6 +20,7 @@ from macao.adapter.codex import CodexAdapter
 from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.cursor import CursorAgentAdapter
+from macao.adapter.pi import PiAdapter
 from macao.utils.ansi import ANSI_ESCAPE_RE, strip_ansi
 
 
@@ -34,6 +35,7 @@ CLI_ADAPTER_MAP = {
     "antigravity": AntigravityAdapter,
     "cursor": CursorAgentAdapter,
     "agent": CursorAgentAdapter,
+    "pi": PiAdapter,
 }
 
 

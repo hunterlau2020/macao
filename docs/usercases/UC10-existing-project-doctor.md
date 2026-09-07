@@ -41,6 +41,7 @@ a1 `macao init`（UC-1 全流程：CLI 探测 → 团队绑定 → `macao.yaml` 
 ### d. 对账提示
 
 发现"DB 有活跃任务但产物/席位不一致" → 提示 `macao reconcile`（D-9 确定性恢复执行器）或 `macao daemon --once` 触发一次扫描对账（产物型触发是正规路径），**doctor 不自行转移状态**。
+发现场景 C 物理目录中存在未决的评审申请单（待审/部分落票）或未纳管在途开发 → 报告对应物理态并引导执行 `macao task adopt` 转入 [UC-11](UC11-scenarioc-inflight-adoption.md) 进行中途生命周期精准纳管，**严禁机械引导 `task create` 导致状态倒退**。
 
 ### e. 修复动作（全部显式）
 

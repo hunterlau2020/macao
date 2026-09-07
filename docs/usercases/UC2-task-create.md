@@ -17,6 +17,7 @@
 | P3 | 当前无活动任务（MVP 串行编排，PRD §14.2 并发声明） | E3 |
 | P4 | 调用者身份为管理员或 executor 席位（`agent_registry` 有记录） | E4 |
 | P5 | Git 工作区干净（无未提交变更） | E5 |
+| P6 | 物理工作区未处于待评审状态（即不存在未决的 `*-review-request-*.md`） | E7（转入 UC-11 在途评审接管，严禁倒退为 CODING） |
 
 ## 2. 主成功场景
 
@@ -73,6 +74,7 @@ AEP 消息（Type A）只含：`task_id`、`title`、`success_criteria`、`sourc
 | E4 | 调用者非管理员/executor 席位 | 拒绝（评审者不得开任务，防利益冲突）；审计 `TASK_CREATE_DENIED` |
 | E5 | Git 工作区脏 | 拒绝：checkpoint 硬绑定要求评审对象可追溯；提示先 commit/stash |
 | E6 | 表单缺必填或 Git 拓扑校验失败 | 原子拒绝：不建 tasks 行、不发 AEP、不转移；错误逐字段指出 |
+| E7 | 场景 C 存在未决物理评审申请（处于待审或部分落票） | 拒绝创建编码任务：物理指针已在 WAITING_REVIEW，责任方为 Reviewers 而非 Executor；输出指引转向 `macao task adopt`（UC-11） |
 
 ## 5. 后置条件
 

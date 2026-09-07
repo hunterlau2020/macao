@@ -3,37 +3,42 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-07（提交 `d042395` 轮合并复审申请；总计结论类 **142 份**（138 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **42 份**，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-07（完成 `d042395` 轮复审 4 份专家结论归档与处置闭环，总计结论类 **146 份**（142 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **42 份**、处置单 **1 份**，双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **综合编排与探活轨（`d042395` 轮合并复审申请中，覆盖 f9ff6bf~d042395 全量 20 Commits，128 项测试全绿）**：
+  - **综合编排与探活轨（`d042395` 轮复审落票：多数否决待返工；P1 核心阻断项已全量闭环，145 项测试全绿）**：
     1. [`2026-09-07-review-request-d042395.md`](2026-09-07-review-request-d042395.md) → 总入口合并申请（目标 **L3 SCENARIO-VERIFIED / PG-2 全量认证并提请 L4 / PG-3 准入**；被审提交 **`d042395`**）
+    2. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 评审处置与闭环报告（8 项 P1 全部闭环，测试套件扩增至 145 项）
   - **文档轨（前序申请）**：[`2026-09-04-review-request-95b7b35.md`](2026-09-04-review-request-95b7b35.md)（目标 L1 / PG-0，被审提交 `95b7b35`）
   - **历史代码轨（已被本轮合并涵盖）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md)（目标 L4 / PG-3，被审提交 `42b5c07`）
 - **当前定级状态**：
-  - **综合编排与代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；当前提审 `d042395` 正式申请 L3 全量认证并提请 L4 / PG-3 准入。
+  - **综合编排与代码轨**：**维持 L3 SCENARIO-VERIFIED / PG-2**；`d042395` 经四方会审收敛 8 项 P1 阻断，处置已全量闭环，待推进下一版本提审。
   - **文档体系定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
 
-### 综合编排轨：CLI 生产就绪、动态运行态探活与全周期合并轨（`f9ff6bf` → `d042395`，当前提审轮）
+### 综合编排轨：CLI 生产就绪、动态运行态探活与全周期合并轨（`f9ff6bf` → `d042395`）
 
-- **被审提交**：`d042395`；工作区 HEAD 同步
+- **被审提交**：`d042395`
 - **合并提交审计范围**：涵盖自 `95b7b35` 以来在主干累积的全部 20 个提交（`f9ff6bf` 至 `d042395`），共 46 个文件变更，+5108 / -193 lines
 - **申请入口**：[`2026-09-07-review-request-d042395.md`](2026-09-07-review-request-d042395.md)
-- **目标定级**：**L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审**
-- **机验与质量门禁状态**：
-  - 自动化单元与集成测试：`128/128 PASS`（`Ran 128 tests in 66s, OK`）；
+- **四方独立评审结论（4 份报告 / 4 位专家）**：**多数否决待返工（REWORK / 1 票有保留通过，3 票否决）**
+  - **Muse**：[`2026-09-07-review-result-d042395-muse.md`](2026-09-07-review-result-d042395-muse.md) → **有保留授予 L3 / PG-2，暂缓 L4 / PG-3**（提出 B-1 dry-run 写盘、B-2 密钥掩码）。
+  - **Codex**：[`2026-09-07-review-result-d042395-codex.md`](2026-09-07-review-result-d042395-codex.md) → **REJECT**（5 项 P1：checkpoint 伪造 tests_passed、--force 孤立任务/丢失 acceptance、派发忽略双 quorum、Codex 会话错配回填、dry-run 写盘与无脱敏）。
+  - **Grok**：[`2026-09-07-review-result-d042395-grok.md`](2026-09-07-review-result-d042395-grok.md) → **REJECT**（2 项 P1：dry-run 写盘违背只读、跨项目会话伪报；2 项 P2：单票过早终止 pending、测试命令缺失）。
+  - **Claude**：[`2026-09-07-review-result-d042395-claude.md`](2026-09-07-review-result-d042395-claude.md) → **NO_APPROVE**（8 项 P1：P1-1 至 P1-8；L4 独立否决）。
+- **处置闭环状态（详见 [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md)）**：
+  - **P1-1 (dry-run 零写盘)**：`prober.py` 入口与调用点严格门控 `if not self.dry_run`，100% 零修改零写盘；
+  - **P1-2 (会话定位零伪造)**：Codex 改读 `state_*.sqlite` 精确匹配 `cwd`，Cursor 精确校验规范化路径，Kimi 严格 fail-closed 返回 `[]`，杜绝跨项目伪报；
+  - **P1-3 (进度三元组与 pending 修复)**：客观提审单优先于脏树，计算 `missing_reviewers` 集合差，Next 明确列出未出票评审员；
+  - **P1-4 (三道法定人数门槛完整合取)**：`ready >= min_winning` AND `ready >= seat_quorum` AND `weight >= weight_quorum`；
+  - **P1-5 (全链路敏感词脱敏掩码)**：建立 `secrets.py` 覆盖各类 Token/密码/私钥，接入 `logger.py`、PTY 输出与终端 `macao logs`；
+  - **P1-6 (clean 安全清理与目录快照备份)**：默认清理仅删除 `.macao/worktrees/` 临时沙箱保留 `state.db`，`--all` 生成 `.macao.bak.<ts>` 目录快照，`--restore` 支持无损还原；
+  - **P1-7 (checkpoint 禁止捏造 tests_passed)**：`--auto` 默认 `tests_passed: false` 门控状态机阻断，强制要求 `--test-cmd` 实际通过或 `--tests-exempt`；
+  - **P1-8 (活动任务不变量与验收标准透传)**：`--force` 强制合法调用 E10 取消旧任务避免孤立僵尸，`--acceptance` 解析为非空 list 原样注入 Type A AEP 信封；
+  - **Pi Coding Agent 适配支持**：引入 `src/macao/adapter/pi.py` 并全量接入探活、预检与会话发现；
+  - **场景 C 规范补全**：交付 `docs/usercases/UC11-scenarioc-inflight-adoption.md`、完善产品事实与用例索引。
+- **机验与质量门禁最新状态**：
+  - 自动化单元与集成测试：`145/145 PASS`（`Ran 145 tests in 64.471s, OK`）；
   - Python 编译：`python3 -m compileall -q src tests` $\rightarrow$ `0 Errors`；
-  - Markdown 控制字符：全库 228 份文档 `0 控制字符 (100% CLEAN)`；
-  - Schema 契约库一致性：`docs/schemas/` ↔ `src/macao/schemas/` 8 份契约文件逐字节一致；
-  - 真实宿主环境验证：在 `/home/debian/english_learning_system` 运行 `macao probe --dry-run` 与 `macao logs --probe` 实测全部通过。
-- **本轮核心核验资产**：
-  1. **CLI 交互与全生命周期控制**：`macao init` 智能向导与 4 人团推荐、`macao clean` 隔离区清理与 `--all`/`--restore` 回退、`checkpoint`/`cancel`/`merge`；
-  2. **动态探活引擎 (`macao probe`)**：`SessionLocator` 跨 CLI 原生会话物理定位（零 LLM 开销）、物理事实对账进度三元组（Last/Now/Next）、`git worktree list` 真实探测（拒绝伪造占位符）、`--dry-run` 严格只读零 DDL；
-  3. **全链路日志与审计**：`probe_*.log` 探活审计日志与 `macao logs --probe` 终端查阅、`PTYSession` 伪终端截获与 ANSI 清洗、`macao audit` 不可变账本；
-  4. **标准模板库 (`templates/`)**：12 份标准工作流指南与产物 Manifest 模板；
-  5. **技术专文与实操手册**：`docs/PROBE_TECHNICAL_DESIGN.md`、`docs/CLI_OPERATIONAL_GUIDE.md`、`docs/TECH_INTRODUCE.md`、`docs/PLAN.md`。
-
-- **研发方法论演进说明（实战出真知，杜绝纯纸上谈兵）**：
-  前序 commit `f96675f` / `95b7b35` 中的评审申请未在此前直接推进专家落票，**绝非遗漏未审，而是团队主动采取的关键研发策略调整**——光在纸面上进行纯理论推导和推演往往无法真正想透多 Agent 在复杂宿主环境下的真实物理问题（如 CLI 会话的底层文件存储结构、单仓场景下的工作区物理形态、未纳管开发态的 Git 脏改动与提审单对账等）。团队选择**先在真实工程环境（如 `english_learning_system`）中进行端到端实操演练与摸底测试**，暴露出‘探活空报 IDLE’、‘硬编码虚假 Worktree’、‘无审计留痕’等真实深水区痛点后，返回代码库深度打磨自愈，沉淀出高置信度方案后再行合并提审。
+  - Schema 契约库一致性：`docs/schemas/` ↔ `src/macao/schemas/` 8 份契约文件逐字节一致。
 
 ---
 

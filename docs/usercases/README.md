@@ -49,6 +49,7 @@ UC-1 init ──► UC-2 task create (E1) ──► UC-3 开发/检查点
 | **UC-8** | 合并与签字 | 编排器 + 管理员 | `MERGING` → `DONE`（E4a）；六道关卡（含 Pre-merge Evidence 校验）；`macao merge approve`；Git 引用与归档 | [UC8-merge-signoff.md](UC8-merge-signoff.md) | 设计稿 (v2.5) |
 | **UC-9** | 超时与守护 | OrchestratorDaemon | per_reviewer 超时 → `ABSTAIN` 计入 `accounted` 触发 E3；隔离迟到票；Layer 3 报告给管理员 | [UC9-timeout-daemon.md](UC9-timeout-daemon.md) | 设计稿 (v2.5) |
 | **UC-10** | 既有项目接入、诊断与恢复 | 管理员 | `macao doctor` / `preflight` / `reconcile` (D-9) / gitignore 隔离 / 纯整数共识体检 | [UC10-existing-project-doctor.md](UC10-existing-project-doctor.md) | 设计稿 (v2.5) |
+| **UC-11** | 场景 C 在途项目与在途评审接管 | 管理员或编排器 | 场景 C / 待审态 / 在途 FSM 接管；`macao task adopt`；精准计算缺票差集并仅派发 Reviewers | [UC11-scenarioc-inflight-adoption.md](UC11-scenarioc-inflight-adoption.md) | 设计稿 (v2.5) |
 
 ---
 
@@ -83,6 +84,9 @@ UC-1 init ──► UC-2 task create (E1) ──► UC-3 开发/检查点
 
 ### UC-10 既有项目接入与诊断
 零侵入：`init`/`setup`、gitignore 9 规则隔离、`doctor`/`preflight`。只读检查配置、环境、隔离、席位、适配器与产物，发现冲突提示 `daemon --once` 对账，doctor 不自动转移状态。
+
+### UC-11 场景 C 在途项目与在途评审接管
+场景 C（半途在途项目）物理事实对账与现场纳管。精准识别 5 类在途物理态（编码中、待发起评审、在途部分落票、评审驳回待返工、评审通过待合入）。**禁止将处于待审态（`WAITING_REVIEW`）的项目机械重置为 `CODING`**。待审接管时活动对象 100% 为 Reviewers 团队（Executor 保持 STANDBY），并精准计算缺票差集定向补齐。
 
 ---
 

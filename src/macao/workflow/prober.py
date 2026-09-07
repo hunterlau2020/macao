@@ -23,6 +23,7 @@ from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.cursor import CursorAgentAdapter
 from macao.adapter.kimi import KimiAdapter
+from macao.adapter.pi import PiAdapter
 from macao.adapter.mock import MockAgentAdapter
 from macao.adapter.session_locator import SessionLocator
 
@@ -36,6 +37,7 @@ ADAPTER_MAP = {
     "agent": CursorAgentAdapter,
     "cursor": CursorAgentAdapter,
     "kimi": KimiAdapter,
+    "pi": PiAdapter,
     "mock-cli": MockAgentAdapter,
     "mock-agent": MockAgentAdapter,
 }
@@ -164,7 +166,7 @@ class TeamProber:
 
         return worktrees
 
-    def _inspect_physical_reviews(self) -> Dict[str, Any]:
+    def _inspect_physical_reviews(self, configured_reviewers: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Inspects physical review documents in docs/reviews/ to discover
         latest review request, baseline commits, submitted reviewer results, and pending status.
@@ -200,8 +202,8 @@ class TeamProber:
 
         # 2. Inspect review request documents
         if reviews_dir.exists():
-            req_files = sorted(reviews_dir.glob("*-review-request-*.md"))
-            res_files = sorted(reviews_dir.glob("*-review-result-*.md"))
+            req_files = sorted(reviews_dir.glob("*-review-request-*.md"), key=lambda f: f.stat().st_mtime)
+            res_files = sorted(reviews_dir.glob("*-review-result-*.md"), key=lambda f: f.stat().st_mtime)
 
             if req_files:
                 latest_req = req_files[-1]
@@ -228,21 +230,44 @@ class TeamProber:
 
                 if baseline:
                     matching = []
+                    submitted_reviewers = set()
                     for rf in res_files:
                         if baseline in rf.name:
                             try:
                                 matching.append(str(rf.relative_to(self.project_root)))
                             except Exception:
                                 matching.append(str(rf))
+                            stem_lower = rf.stem.lower()
+                            if configured_reviewers:
+                                for r in configured_reviewers:
+                                    r_id = (r.get("id") or "").lower()
+                                    r_cli = (r.get("cli") or "").lower()
+                                    if r_id and (r_id in stem_lower or stem_lower.endswith(f"-{r_id}")):
+                                        submitted_reviewers.add(r.get("id"))
+                                    elif r_cli and (r_cli in stem_lower or stem_lower.endswith(f"-{r_cli}")):
+                                        submitted_reviewers.add(r.get("id"))
+
                     info["matching_results"] = matching
-                    info["has_pending_request"] = (len(matching) == 0)
+                    info["submitted_reviewers"] = list(submitted_reviewers)
+
+                    if configured_reviewers:
+                        all_ids = [r.get("id") for r in configured_reviewers if r.get("id")]
+                        missing = [rid for rid in all_ids if rid not in submitted_reviewers]
+                        info["missing_reviewers"] = missing
+                        info["has_pending_request"] = (len(missing) > 0)
+                    else:
+                        info["missing_reviewers"] = []
+                        info["has_pending_request"] = (len(matching) == 0)
                 else:
                     info["has_pending_request"] = True
+                    info["missing_reviewers"] = [r.get("id") for r in (configured_reviewers or []) if r.get("id")]
 
         return info
 
     def _write_probe_log(self, probe_result: Dict[str, Any]) -> Optional[str]:
         """Writes comprehensive probe audit log to .macao/logs/probe/probe_<timestamp>.log."""
+        if self.dry_run:
+            return None
         try:
             log_dir = self.project_root / ".macao" / "logs" / "probe"
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -444,7 +469,8 @@ class TeamProber:
 
         # 3. Discover Registered Git Worktrees and Physical Review Facts
         registered_worktrees = self._inspect_git_worktrees()
-        review_facts = self._inspect_physical_reviews()
+        reviewers_cfg_list = team.get("reviewers", [])
+        review_facts = self._inspect_physical_reviews(configured_reviewers=reviewers_cfg_list)
 
         # 4. Probe Executor
         raw_exec = team.get("executor", {})
@@ -544,7 +570,11 @@ class TeamProber:
                 exec_probe["progress"] = "WAITING_REVIEW_VERDICT"
                 ref_disp = (active_task.get("checkpoint_ref") or dev_manifest_ref or "HEAD")[:8]
                 current_task = f"Code submitted at {ref_disp}. Paused waiting for reviewer consensus."
-                next_planned = "Await reviewer verdicts to merge or rework"
+                missing = review_facts.get("missing_reviewers", [])
+                if missing:
+                    next_planned = f"Await pending reviews from: {', '.join(missing)}"
+                else:
+                    next_planned = "Await reviewer verdicts to merge or rework"
             elif task_state == "CONSENSUS_REACHED":
                 exec_probe["progress"] = "REVIEW_CONCLUDED"
                 current_task = f"Review cycle completed for '{task_title}'. Awaiting merge approval."
@@ -562,17 +592,24 @@ class TeamProber:
                 current_task = f"Task currently in state {task_state}."
                 next_planned = "Advance task state"
         else:
-            if not git_info["is_clean"]:
+            if review_facts.get("has_pending_request"):
+                req_title = review_facts.get("latest_request_title") or "Review Request"
+                req_base = review_facts.get("latest_request_baseline") or "HEAD"
+                missing = review_facts.get("missing_reviewers", [])
+                exec_probe["progress"] = "REVIEW_PENDING"
+                if not git_info["is_clean"]:
+                    current_task = f"Review requested for commit {req_base[:8]}: {req_title} (working tree has uncommitted edits)"
+                else:
+                    current_task = f"Review requested for commit {req_base[:8]}: {req_title}"
+                if missing:
+                    next_planned = f"Await pending reviews from: {', '.join(missing)}"
+                else:
+                    next_planned = "Await reviewer evaluations and verdicts before next commit"
+            elif not git_info["is_clean"]:
                 mod_count = git_info.get("modified_files_count", 0)
                 exec_probe["progress"] = "ACTIVE_DEV (UNTRACKED)"
                 current_task = f"Working tree has {mod_count} uncommitted file(s) in active development"
                 next_planned = "Run tests, commit changes, or run 'macao task create' to adopt into MACAO"
-            elif review_facts.get("has_pending_request"):
-                req_title = review_facts.get("latest_request_title") or "Review Request"
-                req_base = review_facts.get("latest_request_baseline") or "HEAD"
-                exec_probe["progress"] = "REVIEW_PENDING"
-                current_task = f"Review requested for commit {req_base[:8]}: {req_title}"
-                next_planned = "Await reviewer evaluations and verdicts before next commit"
             else:
                 exec_probe["progress"] = "IDLE"
                 current_task = "No active task assigned; workspace clean"
@@ -757,8 +794,12 @@ class TeamProber:
         # 6. Quorum Analysis
         min_winning = policy.get("minimum_winning_seats", 2)
         seat_quorum = policy.get("seat_quorum_required", 2)
-        weight_quorum = policy.get("weight_quorum_required", 2.0)
-        quorum_achievable = ready_reviewers_count >= min_winning
+        weight_quorum = float(policy.get("weight_quorum_required", 2.0))
+        quorum_achievable = (
+            ready_reviewers_count >= min_winning
+            and ready_reviewers_count >= seat_quorum
+            and total_effective_weight >= weight_quorum
+        )
 
         quorum_info = {
             "total_configured": len(reviewers_cfg),
@@ -775,8 +816,15 @@ class TeamProber:
         if not exec_probe["installed"]:
             blocking_reasons.append(f"Executor '{exec_id}' ({exec_cli}) is not installed or unreachable.")
         if not quorum_achievable:
+            q_reasons = []
+            if ready_reviewers_count < min_winning:
+                q_reasons.append(f"ready seats {ready_reviewers_count} < minimum winning {min_winning}")
+            if ready_reviewers_count < seat_quorum:
+                q_reasons.append(f"ready seats {ready_reviewers_count} < seat quorum {seat_quorum}")
+            if total_effective_weight < weight_quorum:
+                q_reasons.append(f"effective weight {total_effective_weight:.1f} < weight quorum {weight_quorum:.1f}")
             blocking_reasons.append(
-                f"Quorum cannot be reached: only {ready_reviewers_count} reviewer(s) ready, but {min_winning} required."
+                f"Quorum cannot be reached with available reviewers ({', '.join(q_reasons)})."
             )
         if active_task is not None:
             blocking_reasons.append(
@@ -808,8 +856,9 @@ class TeamProber:
             "log_file": None
         }
 
-        # Write probe audit log
-        log_file = self._write_probe_log(probe_result)
-        probe_result["log_file"] = log_file
+        # Write probe audit log (only when not dry-run)
+        if not self.dry_run:
+            log_file = self._write_probe_log(probe_result)
+            probe_result["log_file"] = log_file
 
         return probe_result

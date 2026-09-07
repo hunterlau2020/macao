@@ -7,8 +7,11 @@ import sqlite3
 import hashlib
 import yaml
 import click
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+from macao.utils.secrets import mask_secrets
 
 from macao.core.config import ConfigManager
 from macao.core.types import AgentState, OverrideChoice, PreflightCheckResult, ExecutionMode
@@ -22,6 +25,8 @@ from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.cursor import CursorAgentAdapter
 from macao.adapter.kimi import KimiAdapter
+from macao.adapter.pi import PiAdapter
+from macao.adapter.mock import MockAgentAdapter
 from macao.cli.ui import console, print_banner, render_preflight_report, render_task_status, render_audit_table, render_team_probe_report
 from macao.workflow.prober import TeamProber
 
@@ -155,6 +160,7 @@ security:
     - "agent"
     - "cursor"
     - "kimi"
+    - "pi"
     - "mock-cli"
   # 是否将开发者的终端执行交互日志发送给审查员（通常设为 false 避免提示词偏见）
   send_terminal_logs_to_reviewers: false
@@ -252,6 +258,7 @@ def preflight():
         AntigravityAdapter(),
         CursorAgentAdapter(),
         KimiAdapter(),
+        PiAdapter(),
         MockAgentAdapter("mock-agent", "mock-cli")
     ]
 
@@ -357,7 +364,7 @@ def task_probe(dry_run: bool, as_json: bool):
 @task.command("create")
 @click.option("--title", default=None, help="Task title (e.g. 'Add vocabulary quiz feature')")
 @click.option("--description", default="", help="Task detailed description")
-@click.option("--acceptance", default="", help="Acceptance criteria")
+@click.option("-a", "--acceptance", default="", help="Acceptance criteria")
 @click.option("--branch", default="feature/task-01", help="Source branch")
 @click.option("--target", default="main", help="Target branch")
 @click.option("--probe/--no-probe", default=True, help="Dynamically probe team and environment readiness before creating task")
@@ -378,13 +385,19 @@ def task_create(title: Optional[str], description: str, acceptance: str, branch:
 
     if probe and probe_result.get("valid_config"):
         active = probe_result.get("active_task")
-        if active and not force:
-            render_team_probe_report(probe_result)
-            console.print(
-                f"[bold red]Cannot create new task:[/bold red] Active task '{active['task_id']}' is already running in state '{active['state']}'.\n"
-                f"[dim]Run 'macao status' to inspect, 'macao task cancel' to abort it, or pass '--force' to proceed anyway.[/dim]"
-            )
-            sys.exit(1)
+        if active:
+            if not force:
+                render_team_probe_report(probe_result)
+                console.print(
+                    f"[bold red]Cannot create new task:[/bold red] Active task '{active['task_id']}' is already running in state '{active['state']}'.\n"
+                    f"[dim]Run 'macao status' to inspect, 'macao task cancel' to abort it, or pass '--force' to cancel the active task and proceed.[/dim]"
+                )
+                sys.exit(1)
+            else:
+                old_task_id = active["task_id"]
+                orch = get_orchestrator(".")
+                orch.cancel_task(old_task_id, reason="Superseded by forced new task creation")
+                console.print(f"[bold yellow]⚠ Superseded active task '{old_task_id}' (cancelled via E10).[/bold yellow]")
 
         exec_info = probe_result.get("executor", {})
         if not exec_info.get("installed") and not force:
@@ -412,10 +425,14 @@ def task_create(title: Optional[str], description: str, acceptance: str, branch:
 
     orchestrator = get_orchestrator(".")
 
+    crit_list = [c.strip() for c in acceptance.split("\n") if c.strip()]
+    if not crit_list:
+        crit_list = [acceptance.strip()]
+
     task_data = orchestrator.start_task(
         title=title,
         task_description=description or title,
-        acceptance_criteria={"raw": acceptance, "tests_passed": True},
+        acceptance_criteria=crit_list,
         source_branch=branch,
         target_branch=target
     )
@@ -450,7 +467,9 @@ def task_recover():
 @click.option("--auto", is_flag=True, help="Auto-generate .macao/.dev.yml from current HEAD commit if missing")
 @click.option("--review/--no-review", default=True, help="Automatically dispatch live reviewer agents in worktrees")
 @click.option("--timeout", default=120.0, help="Per-reviewer timeout in seconds")
-def task_checkpoint(auto: bool, review: bool, timeout: float):
+@click.option("--test-cmd", default=None, help="Command to run to verify tests pass before setting tests_passed: true")
+@click.option("--tests-exempt", is_flag=True, help="Explicitly mark tests as exempt (tests_exempt: true)")
+def task_checkpoint(auto: bool, review: bool, timeout: float, test_cmd: Optional[str] = None, tests_exempt: bool = False):
     """Submit development checkpoint, dispatch isolated worktree reviews, and tally consensus."""
     orchestrator = get_orchestrator(".")
     store = StateStore()
@@ -474,6 +493,32 @@ def task_checkpoint(auto: bool, review: bool, timeout: float):
         exec_id = exec_cfg.get("id", "dev-claude")
         exec_cli = exec_cfg.get("cli", "claude-code")
 
+        tests_passed_val = False
+        tests_exempt_val = False
+
+        if test_cmd:
+            console.print(f"[cyan]Running test command to verify checkpoint quality: {test_cmd}[/cyan]")
+            import subprocess
+            proc = subprocess.run(test_cmd, shell=True, cwd=".")
+            if proc.returncode == 0:
+                tests_passed_val = True
+                console.print("[bold green]✓ Test command passed successfully.[/bold green]")
+            else:
+                console.print(f"[bold red]✗ Test command failed with exit code {proc.returncode}. Aborting checkpoint generation.[/bold red]")
+                return
+        elif tests_exempt:
+            tests_exempt_val = True
+            console.print("[bold yellow]ℹ Tests explicitly marked as exempt.[/bold yellow]")
+        else:
+            tests_passed_val = False
+            console.print("[yellow]⚠ Auto-generating manifest without test verification: 'tests_passed' set to False. (Use '--test-cmd' or '--tests-exempt' to certify).[/yellow]")
+
+        quality_metrics = {
+            "tests_passed": tests_passed_val
+        }
+        if tests_exempt_val:
+            quality_metrics["tests_exempt"] = True
+
         manifest_data = {
             "version": "1.0",
             "task_id": task_id,
@@ -488,7 +533,7 @@ def task_checkpoint(auto: bool, review: bool, timeout: float):
             "review_round": active.get("review_round", 1),
             "executor": {"id": exec_id, "cli": exec_cli},
             "development": {
-                "quality_metrics": {"tests_passed": True},
+                "quality_metrics": quality_metrics,
                 "git": {"latest_commit": head_commit}
             }
         }
@@ -505,11 +550,15 @@ def task_checkpoint(auto: bool, review: bool, timeout: float):
     try:
         change1 = orchestrator.check_development_checkpoint(task_id)
         if not change1:
-            console.print("[yellow]Checkpoint validation deferred or rejected.[/yellow]")
+            console.print("[yellow]Checkpoint validation deferred or rejected: tests have not passed or quality metrics not satisfied.[/yellow]")
             return
         console.print(f"[bold green]✓ Checkpoint validated: {change1.from_state.value} -> {change1.to_state.value} (ref: {head_commit[:8]})[/bold green]")
     except Exception as e:
         console.print(f"[red]✗ Checkpoint validation error: {e}[/red]")
+        return
+
+    if not review:
+        console.print("[bold cyan]ℹ Checkpoint validated successfully (--no-review specified; skipping review dispatch).[/bold cyan]")
         return
 
     # 2. Dispatch review requests
@@ -577,8 +626,7 @@ def task_cancel(reason: str):
         return
     task_id = active["task_id"]
     orchestrator = get_orchestrator(".")
-    orchestrator.fsm.transition(task_id, AgentState.CANCELLED, "E8", {"reason": reason})
-    store.log_audit_event(task_id, "TASK_CANCELLED", {"reason": reason})
+    orchestrator.cancel_task(task_id, reason=reason)
     console.print(f"[bold yellow]✓ Task '{task_id}' has been cancelled.[/bold yellow]")
 
 
@@ -615,7 +663,7 @@ def logs_cmd(lines: int, reviewer: Optional[str], executor_flag: Optional[str], 
         target = matches[-1]
         console.print(f"[bold cyan]Probe Audit Log: {target}[/bold cyan]\n")
         content = target.read_text(encoding="utf-8", errors="replace")
-        all_lines = content.splitlines()
+        all_lines = mask_secrets(content).splitlines()
         for line in all_lines[-lines:]:
             console.print(line)
         return
@@ -639,7 +687,7 @@ def logs_cmd(lines: int, reviewer: Optional[str], executor_flag: Optional[str], 
         target = matches[-1]
         console.print(f"[bold cyan]Reviewer Log: {target}[/bold cyan]\n")
         content = target.read_text(encoding="utf-8", errors="replace")
-        all_lines = content.splitlines()
+        all_lines = mask_secrets(content).splitlines()
         for line in all_lines[-lines:]:
             console.print(line)
         return
@@ -663,7 +711,7 @@ def logs_cmd(lines: int, reviewer: Optional[str], executor_flag: Optional[str], 
         target = matches[-1]
         console.print(f"[bold cyan]Executor Log: {target}[/bold cyan]\n")
         content = target.read_text(encoding="utf-8", errors="replace")
-        all_lines = content.splitlines()
+        all_lines = mask_secrets(content).splitlines()
         for line in all_lines[-lines:]:
             console.print(line)
         return
@@ -681,14 +729,14 @@ def logs_cmd(lines: int, reviewer: Optional[str], executor_flag: Optional[str], 
                 while True:
                     line = f.readline()
                     if line:
-                        console.print(line.rstrip())
+                        console.print(mask_secrets(line.rstrip()))
                     else:
                         time.sleep(0.5)
             except KeyboardInterrupt:
                 return
     else:
         content = log_file.read_text(encoding="utf-8", errors="replace")
-        all_lines = content.splitlines()
+        all_lines = mask_secrets(content).splitlines()
         for line in all_lines[-lines:]:
             console.print(line)
 
@@ -878,53 +926,109 @@ def live_run(auto_signoff: bool):
 
 
 @cli.command("clean")
-@click.option("--all", "clean_all", is_flag=True, help="Remove macao.yaml and restore .gitignore in addition to runtime files")
-@click.option("--restore", is_flag=True, help="Restore the latest macao.yaml.bak.* backup if available")
+@click.option("--all", "clean_all", is_flag=True, help="Snapshot backup (.macao.bak.<timestamp>) and remove macao.yaml and runtime")
+@click.option("--restore", is_flag=True, help="Restore the latest .macao.bak.* and macao.yaml.bak.* backups")
 def clean_cmd(clean_all: bool, restore: bool):
     """Clean up MACAO runtime files and rollback configuration or .gitignore."""
     from macao.cli.wizard import remove_gitignore_isolation
     project_root = Path(".").resolve()
     macao_dir = project_root / ".macao"
     cfg_file = project_root / "macao.yaml"
+    ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     cleaned_items = []
 
-    # 1. Clean .macao runtime directory
-    if macao_dir.exists():
-        shutil.rmtree(macao_dir, ignore_errors=True)
-        cleaned_items.append(".macao/ (runtime directory)")
-
-    # 2. If --restore requested: find latest macao.yaml.bak.*
+    # Branch 1: --restore (safely restore from backups without preliminary destructive deletion)
     if restore:
-        backups = sorted(project_root.glob("macao.yaml.bak.*"), key=lambda p: p.stat().st_mtime)
-        if backups:
-            latest_backup = backups[-1]
-            shutil.copy(latest_backup, cfg_file)
-            cleaned_items.append(f"Restored macao.yaml from {latest_backup.name}")
+        # 1. Restore .macao directory from latest .macao.bak.*
+        macao_backups = sorted(
+            [d for d in project_root.glob(".macao.bak.*") if d.is_dir()],
+            key=lambda p: p.stat().st_mtime
+        )
+        if macao_backups:
+            latest_macao_bak = macao_backups[-1]
+            if macao_dir.exists():
+                shutil.rmtree(macao_dir, ignore_errors=True)
+            shutil.copytree(latest_macao_bak, macao_dir)
+            cleaned_items.append(f"Restored .macao/ runtime from {latest_macao_bak.name}")
         else:
-            console.print("[yellow]No backup files matching 'macao.yaml.bak.*' found.[/yellow]")
+            console.print("[yellow]No runtime backup directories matching '.macao.bak.*' found.[/yellow]")
 
-    # 3. If --all requested
+        # 2. Restore macao.yaml from latest macao.yaml.bak.*
+        yaml_backups = sorted(
+            [f for f in project_root.glob("macao.yaml.bak.*") if f.is_file()],
+            key=lambda p: p.stat().st_mtime
+        )
+        if yaml_backups:
+            latest_yaml_bak = yaml_backups[-1]
+            shutil.copy(latest_yaml_bak, cfg_file)
+            cleaned_items.append(f"Restored macao.yaml from {latest_yaml_bak.name}")
+        else:
+            console.print("[yellow]No configuration backups matching 'macao.yaml.bak.*' found.[/yellow]")
+
+        if cleaned_items:
+            console.print("[bold green]✓ MACAO restore completed successfully:[/bold green]")
+            for item in cleaned_items:
+                console.print(f"  • {item}")
+        return
+
+    # Branch 2: --all (Snapshot backup first, then reset runtime and config)
     if clean_all:
-        if cfg_file.exists() and not restore:
-            cfg_file.unlink()
-            cleaned_items.append("macao.yaml (configuration file)")
+        # Snapshot .macao directory before removal
+        if macao_dir.exists():
+            backup_dir = project_root / f".macao.bak.{ts_str}"
+            try:
+                shutil.copytree(macao_dir, backup_dir)
+                cleaned_items.append(f"Created snapshot backup: {backup_dir.name}/")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not snapshot .macao: {e}[/yellow]")
+            shutil.rmtree(macao_dir, ignore_errors=True)
+            cleaned_items.append(".macao/ (runtime directory reset)")
 
-        # Clean backup files
-        for bak in project_root.glob("macao.yaml.bak.*"):
-            bak.unlink()
-            cleaned_items.append(f"{bak.name} (backup file)")
+        # Snapshot macao.yaml before removal
+        if cfg_file.exists():
+            cfg_backup = project_root / f"macao.yaml.bak.{ts_str}"
+            try:
+                shutil.copy(cfg_file, cfg_backup)
+                cleaned_items.append(f"Created config backup: {cfg_backup.name}")
+            except Exception:
+                pass
+            cfg_file.unlink()
+            cleaned_items.append("macao.yaml (configuration file removed)")
 
         # Clean .gitignore rules
         if remove_gitignore_isolation(project_root):
             cleaned_items.append(".gitignore (removed MACAO rules)")
 
-    if cleaned_items:
-        console.print("[bold green]✓ MACAO rollback/clean completed successfully:[/bold green]")
-        for item in cleaned_items:
-            console.print(f"  • {item}")
+        if cleaned_items:
+            console.print("[bold green]✓ MACAO reset completed with snapshot backup:[/bold green]")
+            for item in cleaned_items:
+                console.print(f"  • {item}")
+        else:
+            console.print("[yellow]Nothing to clean. Workspace is already clean.[/yellow]")
+        return
+
+    # Branch 3: Default clean (safe cleanup of completed worktrees only, preserving state.db and logs)
+    worktrees_dir = macao_dir / "worktrees"
+    cleaned_wt_count = 0
+    if worktrees_dir.exists() and worktrees_dir.is_dir():
+        for wt in worktrees_dir.iterdir():
+            if wt.is_dir():
+                try:
+                    shutil.rmtree(wt, ignore_errors=True)
+                    cleaned_wt_count += 1
+                except Exception:
+                    pass
+        if cleaned_wt_count > 0:
+            cleaned_items.append(f"Removed {cleaned_wt_count} temporary review worktree(s) in .macao/worktrees/")
+        else:
+            cleaned_items.append("Temporary worktrees directory .macao/worktrees/ is empty")
     else:
-        console.print("[yellow]Nothing to clean. Workspace is already clean.[/yellow]")
+        cleaned_items.append("No temporary worktrees found in .macao/worktrees/")
+
+    console.print("[bold green]✓ MACAO safe clean completed (state.db and logs preserved):[/bold green]")
+    for item in cleaned_items:
+        console.print(f"  • {item}")
 
 
 if __name__ == "__main__":

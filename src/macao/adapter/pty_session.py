@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from macao.utils.ansi import strip_ansi
+from macao.utils.secrets import mask_secrets
 
 try:
     import pty
@@ -90,7 +91,7 @@ class PTYSession:
                         raw_line = line.strip("\r")
                         if raw_line:
                             self.raw_logs.append(raw_line)
-                        clean_line = strip_ansi(raw_line)
+                        clean_line = mask_secrets(strip_ansi(raw_line))
                         if clean_line:
                             self.logs.append(clean_line)
             except (OSError, ValueError):
@@ -100,7 +101,7 @@ class PTYSession:
             raw_line = buffer.strip("\r")
             if raw_line:
                 self.raw_logs.append(raw_line)
-            clean_line = strip_ansi(raw_line)
+            clean_line = mask_secrets(strip_ansi(raw_line))
             if clean_line:
                 self.logs.append(clean_line)
 

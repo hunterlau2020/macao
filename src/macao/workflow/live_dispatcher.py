@@ -18,9 +18,11 @@ from macao.adapter.opencode import OpenCodeAdapter
 from macao.adapter.antigravity import AntigravityAdapter
 from macao.adapter.cursor import CursorAgentAdapter
 from macao.adapter.kimi import KimiAdapter
+from macao.adapter.pi import PiAdapter
 from macao.adapter.mock import MockAgentAdapter
 from macao.utils.git_utils import GitManager
 from macao.utils.ansi import strip_ansi
+from macao.utils.secrets import mask_secrets
 from macao.utils.logger import get_logger
 
 
@@ -34,6 +36,7 @@ CLI_ADAPTER_REGISTRY = {
     "agent": CursorAgentAdapter,
     "cursor": CursorAgentAdapter,
     "kimi": KimiAdapter,
+    "pi": PiAdapter,
     "mock-cli": MockAgentAdapter,
 }
 
@@ -347,8 +350,9 @@ class LiveAgentDispatcher:
                     rev_log_dir = self.project_root / ".macao" / "logs" / "reviewers"
                     rev_log_dir.mkdir(parents=True, exist_ok=True)
                     log_file = rev_log_dir / f"{agent_id}_r{review_round}.log"
-                    log_file.write_text(raw_session, encoding="utf-8")
-                    self.logger.info(f"Saved reviewer '{agent_id}' raw session log to {log_file.relative_to(self.project_root)} ({len(raw_session)} chars)")
+                    masked_session = mask_secrets(raw_session)
+                    log_file.write_text(masked_session, encoding="utf-8")
+                    self.logger.info(f"Saved reviewer '{agent_id}' redacted session log to {log_file.relative_to(self.project_root)} ({len(masked_session)} chars)")
             except Exception as ex:
                 self.logger.warning(f"Failed to persist reviewer session log for {agent_id}: {ex}")
             adapter.stop("dispatch_finished")

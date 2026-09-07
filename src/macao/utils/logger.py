@@ -11,7 +11,17 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional, Dict
 
+from macao.utils.secrets import mask_secrets
+
 _LOGGERS: Dict[str, logging.Logger] = {}
+
+
+class SecretMaskingFormatter(logging.Formatter):
+    """Formats log messages and automatically masks credentials, API keys, and sensitive tokens."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        orig = super().format(record)
+        return mask_secrets(orig)
 
 
 def setup_logger(name: str = "macao", project_root: str = ".", level: Optional[str] = None) -> logging.Logger:
@@ -29,7 +39,7 @@ def setup_logger(name: str = "macao", project_root: str = ".", level: Optional[s
 
     # Avoid duplicate handlers if already configured
     if not logger.handlers:
-        fmt = logging.Formatter(
+        fmt = SecretMaskingFormatter(
             "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
@@ -65,3 +75,4 @@ def setup_logger(name: str = "macao", project_root: str = ".", level: Optional[s
 def get_logger(name: str = "macao", project_root: str = ".") -> logging.Logger:
     """Returns a logger instance for the specified component and project root."""
     return setup_logger(name, project_root=project_root)
+

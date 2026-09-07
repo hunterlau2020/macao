@@ -49,3 +49,7 @@
 21. **F-21.** `docs/reviews/` 的语义留痕、SQLite 的运行时审计和 `.macao/archive/` 的机器产物归档必须同时存在并通过任务、checkpoint、round、路径和哈希相互关联。
 
 22. **F-22.** Reviewer 权重不能取消多席位法定人数要求，也不能使单个 Reviewer 在其他有效席位反对时独自形成自动决定。
+
+23. **F-23.** 任务具有角色职责对称性：`CODING` 与 `REWORK` 状态下的实现任务唯一责任方为 Executor，而 `WAITING_REVIEW` 状态下的审查任务唯一责任方为各 Reviewer 席位，Executor 在评审期间处于只读挂起（`STANDBY`）。
+
+24. **F-24.** 编排器介入在途推进的项目（场景 C）时，必须按底层 Git 拓扑和物理评审产物（`*-review-request-*.md`）如实对账并允许从任意合法中间态（如 `WAITING_REVIEW`）直接接管，严禁将客观处于待评审或审查中的项目强制倒退为 `IDLE -> CODING` 或错误建议执行 `macao task create`。

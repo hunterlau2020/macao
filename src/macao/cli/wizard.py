@@ -28,6 +28,7 @@ def probe_available_clis() -> List[Dict[str, Any]]:
         ("claude-code", "claude", "2.1.251"),
         ("codex", "codex", "2.1.0"),
         ("kimi", "kimi", "1.0.0"),
+        ("pi", "pi", "0.85.1"),
     ]
 
     for key, binary, default_ver in candidates:
@@ -429,6 +430,7 @@ security:
     - "agent"
     - "cursor"
     - "kimi"
+    - "pi"
     - "mock-cli"
   # 是否将开发者的终端执行交互日志发送给审查员（通常设为 false 避免提示词偏见）
   send_terminal_logs_to_reviewers: false
@@ -544,7 +546,7 @@ def generate_smart_config(
             "consensus_check": "1m"
         },
         "security": {
-            "allowed_clis": ["claude-code", "claude", "codex", "opencode", "agy", "antigravity", "agent", "cursor", "kimi", "mock-cli"],
+            "allowed_clis": ["claude-code", "claude", "codex", "opencode", "agy", "antigravity", "agent", "cursor", "kimi", "pi", "mock-cli"],
             "send_terminal_logs_to_reviewers": False,
             "secrets_masking": True
         }
