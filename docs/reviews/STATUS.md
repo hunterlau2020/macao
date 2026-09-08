@@ -71,7 +71,7 @@
 - **四方独立评审结论（4 份报告 / 4 位专家）**：**全票否决待返工（REWORK / 4 票否决）**
   - **Codex**：[`2026-09-07-review-result-961bcfe-codex.md`](2026-09-07-review-result-961bcfe-codex.md) → **REJECT**（4 项 P1：Pi 适配器派发集成与验收标准丢失、Cursor 导入不存在类、UC-11 task adopt 缺失、检查点 SHA-256 与 executor 归属未校验；1 项 P2：git diff 格式空白）。
   - **Grok**：[`2026-09-07-review-result-961bcfe-grok.md`](2026-09-07-review-result-961bcfe-grok.md) → **NO_APPROVE**（4 项 P1：WAL 产生 sidecar、会话跨项目未隔离、多活动任务孤立、退出码非零缺失；3 项 P2：三元组脏树与 pending 顺序、clean 残留 worktree、敏感词脱敏未接入）。
-  - **Kimi**：[`2026-09-07-review-result-961bcfe-kimi.md`](2026-09-07-review-result-961bcfe-kimi.md) → **REWORK**（2 项 P0：未知 CLI 模糊匹配伪造 READY、--dry-run 产生 WAL sidecars；5 项 P1：Claude 会话推定、clean 产生幽灵 worktree、密钥脱敏不全、非法配置退出码为 0、单一任务不变量未生效）。
+  - **Kimi**：[`2026-09-07-review-result-961bcfe-kimi.md`](2026-09-07-review-result-961bcfe-kimi.md) → **REWORK**（0 项 P0；1 项 P1：Pi 会话发现排序缺少决胜键导致最近会话非确定且测试 flaky；以及 2 项 P2/P3）。其他 P0/P1 项由 Pi-Qwen 与 Grok 独立提出。
   - **Pi-Qwen**：[`2026-09-07-review-result-961bcfe-pi-qwen.md`](2026-09-07-review-result-961bcfe-pi-qwen.md) → **NO_APPROVE / REWORK**（1 项 P0：子串匹配破坏 fail-closed；4 项 P1：测试非确定性 flake、WAL 侧车破坏只读、进程边界退出码失效、事实 F-23/24 错位未固化）。
 - **处置闭环状态（详见 [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md)）**：
   - **P0-1 (未知 CLI 借壳)**：移除子串匹配，未知 CLI 严格返回 `MISSING` 并阻断派发；

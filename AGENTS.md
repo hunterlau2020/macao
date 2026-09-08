@@ -11,14 +11,14 @@ MACAO (Multi-Agent CLI Agent Orchestrator) lives in `src/macao/`. Its key archit
 - `src/macao/merge/`: Merge pipeline controller (`MergeController`).
 - `src/macao/utils/`: Infrastructure utilities including Git manager (`GitManager`), ANSI stripper (`strip_ansi`), review context builder (`ReviewContextBuilder`), and logger.
 - `src/macao/cli/`: Click commands (`main.py`), Rich UI renderer (`ui.py`), and interactive init wizard (`wizard.py`).
-- `tests/`: Comprehensive unit and integration tests (164 tests passing).
+- `tests/`: Comprehensive unit and integration tests (165 tests passing).
 
 ## Build, Test, and Development Commands
 
 Run commands from project root `/home/debian/macao`:
 
 ```bash
-# 1. Run all unit and integration tests (164 tests)
+# 1. Run all unit and integration tests (165 tests)
 python3 -m unittest discover tests
 
 # 2. Run specific test file
@@ -76,7 +76,7 @@ python3 -m macao.cli.main logs --probe
    - 审查阶段由 `PTYSession` 实时截获终端输出、剥离 ANSI 码并落盘至 `.macao/logs/reviewers/<reviewer_id>_r<round>.log`，支持 `macao logs -r <id>` 随时审计。
 
 5. **当前测试与交付状态**：
-   - 164 项测试全部通过（`Ran 164 tests in 94s, OK`）；
+   - 165 项测试全部通过（`Ran 165 tests in 75s, OK`）；
    - 主干分支保持清洁并与 `origin/main` 实时同步。
 
 6. **研发方法论：实战实操先于纸面定论（拒绝纯纸上谈兵）**：

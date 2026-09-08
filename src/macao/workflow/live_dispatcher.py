@@ -204,6 +204,9 @@ class LiveAgentDispatcher:
         adapter_config["role"] = "reviewer"
         if model:
             adapter_config["model"] = model
+        provider = reviewer_cfg.get("provider")
+        if provider:
+            adapter_config["provider"] = provider
 
         if cli_type == "mock-cli":
             from macao.adapter.mock import MockAgentAdapter

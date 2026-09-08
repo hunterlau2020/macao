@@ -61,10 +61,14 @@ class OpenCodeAdapter(AgentAdapter):
     def start(self) -> bool:
         cmd = ["opencode", "--quiet"]
 
-        # Support model parameter specified by orchestrator
+        # Support model and provider parameters specified by orchestrator
         model = self.config.get("model")
+        provider = self.config.get("provider")
         if model:
-            cmd.extend(["-m", str(model)])
+            if provider and "/" not in str(model):
+                cmd.extend(["-m", f"{provider}/{model}"])
+            else:
+                cmd.extend(["-m", str(model)])
 
         cwd = self.config.get("isolated_worktree_path", self.config.get("workspace_path", "."))
         self.session = PTYSession(cmd, cwd=cwd)

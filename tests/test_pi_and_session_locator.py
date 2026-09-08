@@ -58,6 +58,27 @@ class TestPiAdapter(unittest.TestCase):
         self.assertIn("review round: 2", prompt)
         self.assertIn(".review.yml", prompt)
 
+    def test_start_with_model_and_provider(self):
+        adapter = PiAdapter("pi-rev", {
+            "mode": "sandbox",
+            "workspace_path": "/tmp",
+            "model": "qwen3.8-max",
+            "provider": "qwen-token-plan"
+        })
+        with patch.object(adapter, "_resolve_binary", return_value="/bin/pi"), \
+             patch("macao.adapter.pi.PTYSession") as mock_pty_cls:
+            mock_session = MagicMock()
+            mock_session.start.return_value = True
+            mock_pty_cls.return_value = mock_session
+
+            res = adapter.start()
+            self.assertTrue(res)
+            call_cmd = mock_pty_cls.call_args[0][0]
+            self.assertIn("--model", call_cmd)
+            self.assertIn("qwen3.8-max", call_cmd)
+            self.assertIn("--provider", call_cmd)
+            self.assertIn("qwen-token-plan", call_cmd)
+
 
 class TestSessionLocator(unittest.TestCase):
     def setUp(self):

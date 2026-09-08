@@ -472,6 +472,7 @@ class TeamProber:
         exec_id = raw_exec.get("id", "dev-executor")
         exec_cli = raw_exec.get("cli", "")
         exec_model = raw_exec.get("model")
+        exec_provider = raw_exec.get("provider")
 
         # Session discovery for executor
         exec_session = SessionLocator.find_session(exec_cli, self.project_root)
@@ -480,6 +481,7 @@ class TeamProber:
             "id": exec_id,
             "cli": exec_cli,
             "model": exec_model,
+            "provider": exec_provider,
             "installed": False,
             "version": "unknown",
             "status": "MISSING",
@@ -625,6 +627,7 @@ class TeamProber:
             r_cli = r.get("cli", "")
             r_weight = float(r.get("vote_weight", r.get("weight", 1.0)))
             r_model = r.get("model")
+            r_provider = r.get("provider")
 
             # Session discovery for reviewer
             r_session = SessionLocator.find_session(r_cli, self.project_root)
@@ -733,6 +736,7 @@ class TeamProber:
                 "cli": r_cli,
                 "weight": r_weight,
                 "model": r_model,
+                "provider": r_provider,
                 "installed": False,
                 "version": "unknown",
                 "status": "MISSING",

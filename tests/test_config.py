@@ -4,6 +4,7 @@ import os
 import unittest
 import tempfile
 import yaml
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 from macao.core.config import ConfigManager, DEFAULT_CONFIG_FILENAME
@@ -210,6 +211,17 @@ policy:
         cursor_adp = CursorAgentAdapter("cursor-rev", config={"role": "reviewer", "model": "claude-3-5-sonnet"})
         self.assertTrue(cursor_adp.capabilities().can_execute)
         self.assertTrue(cursor_adp.capabilities().can_review)
+
+        # 5. OpenCode with provider and model
+        with patch("macao.adapter.opencode.PTYSession") as mock_pty_cls:
+            mock_session = MagicMock()
+            mock_session.start.return_value = True
+            mock_pty_cls.return_value = mock_session
+            op_adp = OpenCodeAdapter("opencode-prov", config={"provider": "deepseek", "model": "deepseek-chat"})
+            op_adp.start()
+            cmd = mock_pty_cls.call_args[0][0]
+            self.assertIn("-m", cmd)
+            self.assertIn("deepseek/deepseek-chat", cmd)
 
     def test_root_macao_yaml_passes_semantic_validation(self):
         """Verify that the repository's root macao.yaml passes validate_config and ConfigManager.load."""

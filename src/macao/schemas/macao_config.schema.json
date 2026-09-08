@@ -35,6 +35,7 @@
             "cli": { "type": "string" },
             "adapter": { "type": "string" },
             "model": { "type": "string" },
+            "provider": { "type": "string" },
             "host": { "type": "string" },
             "agmsg_member_id": { "type": "string" }
           }
@@ -50,6 +51,7 @@
               "cli": { "type": "string" },
               "adapter": { "type": "string" },
               "model": { "type": "string" },
+              "provider": { "type": "string" },
               "host": { "type": "string" },
               "vote_weight": { "type": "integer", "minimum": 1 },
               "agmsg_member_id": { "type": "string" }

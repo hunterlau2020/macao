@@ -241,7 +241,17 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         p_desc = exec_info.get("progress_desc", "")
         prog_cell = f"{prog_styled}\n[dim]{p_desc}[/dim]" if p_desc else prog_styled
 
-    cli_base = f"{exec_info.get('cli', 'N/A')}" + (f" ({exec_info.get('model')})" if exec_info.get("model") else "")
+    exec_m = exec_info.get("model")
+    exec_p = exec_info.get("provider")
+    if exec_p and exec_m:
+        model_spec = f" ({exec_p}/{exec_m})"
+    elif exec_m:
+        model_spec = f" ({exec_m})"
+    elif exec_p:
+        model_spec = f" (provider: {exec_p})"
+    else:
+        model_spec = ""
+    cli_base = f"{exec_info.get('cli', 'N/A')}{model_spec}"
     exec_sess = exec_info.get("session")
     if exec_sess and exec_sess.get("session_id"):
         sid_short = exec_sess.get("session_id")[:12]
@@ -322,7 +332,16 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
             r_prog_disp = "[dim]IDLE (Standby)[/dim]"
 
         r_model = r.get("model")
-        r_cli_display = f"{r.get('cli')}" + (f" ({r_model})" if r_model else "") + f" (w:{r.get('weight', 1.0)})"
+        r_provider = r.get("provider")
+        if r_provider and r_model:
+            model_spec = f" ({r_provider}/{r_model})"
+        elif r_model:
+            model_spec = f" ({r_model})"
+        elif r_provider:
+            model_spec = f" (provider: {r_provider})"
+        else:
+            model_spec = ""
+        r_cli_display = f"{r.get('cli')}{model_spec} (w:{r.get('weight', 1.0)})"
 
         rev_table.add_row(
             str(r.get("id")),

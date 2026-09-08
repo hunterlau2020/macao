@@ -6,7 +6,7 @@
 - **对应评审报告**:
   1. [`docs/reviews/2026-09-07-review-result-961bcfe-codex.md`](2026-09-07-review-result-961bcfe-codex.md)（Codex：REJECT / 4 项 P1 阻断）
   2. [`docs/reviews/2026-09-07-review-result-961bcfe-grok.md`](2026-09-07-review-result-961bcfe-grok.md)（Grok：NO_APPROVE / 4 项 P1 阻断，3 项 P2）
-  3. [`docs/reviews/2026-09-07-review-result-961bcfe-kimi.md`](2026-09-07-review-result-961bcfe-kimi.md)（Kimi：REWORK / 2 项 P0，5 项 P1）
+  3. [`docs/reviews/2026-09-07-review-result-961bcfe-kimi.md`](2026-09-07-review-result-961bcfe-kimi.md)（Kimi：REWORK / 0 项 P0，1 项 P1-NEW-1，2 项 P2/P3）
   4. [`docs/reviews/2026-09-07-review-result-961bcfe-pi-qwen.md`](2026-09-07-review-result-961bcfe-pi-qwen.md)（Pi-Qwen：NO_APPROVE / 1 项 P0，4 项 P1）
 - **共识仲裁结论**: **全票否决待返工 (REWORK / 4 票否决或待返工)**
 - **处置状态**: **全部 P0/P1/P2 阻塞项彻底闭环（ALL CLOSED），162 项测试全绿 (100% PASS, 0 FAILED, 0 ERROR)**
