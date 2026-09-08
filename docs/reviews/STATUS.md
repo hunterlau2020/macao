@@ -3,24 +3,25 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-08（登记 `7bc8d70` 轮复审 5 位专家结论与处置单 `2026-09-08-disposition-7bc8d70.md`，总计结论类 **155 份**（151 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **44 份**、处置单 **3 份**，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-09（发起 Commit `e06d44c` 第 4 轮复审申请 `2026-09-09-review-request-e06d44c.md`；登记 `7bc8d70` 轮处置单 `2026-09-08-disposition-7bc8d70.md`，总计结论类 **155 份**（151 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **45 份**、处置单 **3 份**，总计 204 份，双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **综合编排与探活轨（`7bc8d70` 轮共识仲裁：全票否决待返工 REWORK；完成 P1/P2 彻底闭环处置并提交处置单 `2026-09-08-disposition-7bc8d70.md`，163 项测试全绿）**：
-    1. [`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md) → 本轮处置与闭环报告（受审提交 **`7bc8d70`**，检查点防伪 8 重 Fail-Closed、UC-11 E1 守卫、状态机白名单 adopt、PTY 验收标准透传全部闭环，测试扩增至 163 项全绿）
-    2. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 本轮复审申请（受审提交 **`7bc8d70`**，审计范围 `961bcfe..7bc8d70`）
-    3. 五方独立评审结论：
-       - [`2026-09-08-review-result-7bc8d70-codex.md`](2026-09-08-review-result-7bc8d70-codex.md) → **REJECT**（P1-01 adopt 幽灵基线，P1-02 检查点防伪 fail-open）
-       - [`2026-09-08-review-result-7bc8d70-grok.md`](2026-09-08-review-result-7bc8d70-grok.md) → **NO_APPROVE**（检查点防伪全零/缺失绕过）
-       - [`2026-09-08-review-result-7bc8d70-claude.md`](2026-09-08-review-result-7bc8d70-claude.md) → **NO_APPROVE**（检查点防伪 4 项穿透，adopt 幽灵基线）
-       - [`2026-09-08-review-result-7bc8d70-qwen.md`](2026-09-08-review-result-7bc8d70-qwen.md) → **不予认证**（QW-7BC-P1-1 检查点防伪 fail-open）
-       - [`2026-09-08-review-result-7bc8d70-pi-qwen.md`](2026-09-08-review-result-7bc8d70-pi-qwen.md) → **NO_APPROVE / REWORK**（P1-A 检查点防伪，P1-B adopt 幽灵基线，P1-C 信封自证矛盾）
-    4. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 前序处置报告（`961bcfe`，14 项 P0/P1 全部闭环）
-    5. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 前序复审申请（受审提交 **`961bcfe`**）
-    6. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`，8 项 P1 闭环）
+  - **综合编排与探活轨（`e06d44c` 轮提审：Round 4 复审中，目标定级 L3 SCENARIO-VERIFIED / PG-2 全量认证；165 项测试全绿）**：
+    1. [`2026-09-09-review-request-e06d44c.md`](2026-09-09-review-request-e06d44c.md) → 当前复审申请（受审提交 **`e06d44c`**，审计范围 `7bc8d70..e06d44c`，彻底闭环 5 位专家所有 P1/P2 缺陷，新增多 provider CLI 支持，测试增至 165 项全绿）
+    2. [`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md) → 前序处置与闭环报告（受审提交 **`7bc8d70`**，检查点防伪 8 重 Fail-Closed、UC-11 E1 守卫、状态机白名单 adopt、PTY 验收标准透传全部闭环）
+    3. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 前序复审申请（受审提交 **`7bc8d70`**）
+    4. 前序五方独立评审结论（共识仲裁：全票否决待返工 REWORK）：
+       - [`2026-09-08-review-result-7bc8d70-codex.md`](2026-09-08-review-result-7bc8d70-codex.md) → **REJECT**（P1-01 adopt 幽灵基线，P1-02 检查点防伪 fail-open；全部在 `e06d44c` 闭环）
+       - [`2026-09-08-review-result-7bc8d70-grok.md`](2026-09-08-review-result-7bc8d70-grok.md) → **NO_APPROVE**（检查点防伪全零/缺失绕过；全部在 `e06d44c` 闭环）
+       - [`2026-09-08-review-result-7bc8d70-claude.md`](2026-09-08-review-result-7bc8d70-claude.md) → **NO_APPROVE**（检查点防伪 4 项穿透，adopt 幽灵基线；全部在 `e06d44c` 闭环）
+       - [`2026-09-08-review-result-7bc8d70-qwen.md`](2026-09-08-review-result-7bc8d70-qwen.md) → **不予认证**（QW-7BC-P1-1 检查点防伪 fail-open；全部在 `e06d44c` 闭环）
+       - [`2026-09-08-review-result-7bc8d70-pi-qwen.md`](2026-09-08-review-result-7bc8d70-pi-qwen.md) → **NO_APPROVE / REWORK**（P1-A 检查点防伪，P1-B adopt 幽灵基线，P1-C 信封自证矛盾；全部在 `e06d44c` 闭环）
+    5. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 历史处置报告（`961bcfe`，14 项 P0/P1 全部闭环）
+    6. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 历史复审申请（受审提交 **`961bcfe`**）
+    7. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`，8 项 P1 闭环）
   - **文档轨（前序申请）**：[`2026-09-04-review-request-95b7b35.md`](2026-09-04-review-request-95b7b35.md)（目标 L1 / PG-0，被审提交 `95b7b35`）
   - **历史代码轨（已被本轮合并涵盖）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md)（目标 L4 / PG-3，被审提交 `42b5c07`）
 - **当前定级状态**：
-  - **综合编排与代码轨**：维持既有编排引擎 **L3 SCENARIO-VERIFIED / PG-2**（`4e38ed6` 轮）；`7bc8d70` 轮共识仲裁为 **REWORK**，经本轮处置彻底闭环所有阻断项，待下轮复审认证。
+  - **综合编排与代码轨**：维持既有编排引擎 **L3 SCENARIO-VERIFIED / PG-2**（`4e38ed6` 轮）；`7bc8d70` 轮共识仲裁为 **REWORK**，经 `e06d44c` 彻底闭环所有阻断项并扩展 provider 参数支持，提请 Round 4 认证。
   - **文档体系定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
 
 ---
@@ -33,6 +34,28 @@
 |---|---|---|---|---|---|
 | In-repo (Shared Workspace) | 单仓项目直接使用 In-repo 共享工作区进行直接审查，不强制为每个 Reviewer 派发独立隔离 worktree | 本地单机或串行审查场景下，避免多 worktree 的磁盘重复克隆与外部依赖同步开销，契合轻量敏捷研发流 | Round 1 (`d042395`) | 强隔离沙箱生命周期管理、并发 worktree 自动清理与冲突检测引擎 | `v3.0` |
 | `ci_gate_command: null` | `macao.yaml` 策略配置中 CI 门禁命令允许配置为 `null`（不强制配置外部 CI） | 当前本地离线单机运行环境无常驻外部 CI Runner，测试依赖本地单元测试探针与验证命令 | Round 2 (`961bcfe`) | 本地内置轻量门禁探针或标准容器化测试执行器兜底 | `v2.6.0-rc1` |
+
+---
+
+### 综合编排轨：检查点防伪闭环、UC-11 E1 守卫与 Provider 参数扩展（`e06d44c` 轮，Round 4 复审中）
+
+- **受审提交**：`e06d44c`（涵盖提交 `972e0d0`、`080720c`、`e06d44c`，基线 `7bc8d70`）
+- **申请入口**：[`2026-09-09-review-request-e06d44c.md`](2026-09-09-review-request-e06d44c.md)
+- **前序处置报告**：[`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md)
+- **目标定级**：L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审
+- **本轮整改与特性清单（详见申请单与处置单）**：
+  1. **检查点 8 步硬核 Fail-Closed 防伪门禁**：彻底封堵全零哈希、空哈希、缺失文件、冒名 CLI 等 4 类漏洞，真实校验 64 位正则与逐字节 SHA-256 对账（闭环 Codex P1-02/04、Grok P1-1、Claude P1-1、Qwen QW-7BC-P1-1、Pi-Qwen P1-A）；
+  2. **`task adopt` UC-11 E1 异常流物理守卫与 FSM 下沉**：入口校验 baseline commit 物理存在性，白名单注册 `E1_ADOPT` 与 `E2_ADOPT` 边，下沉至 `Orchestrator.adopt_task()`，接管后自动串联共识收敛（闭环 Codex P1-01、Claude P1-2、Pi-Qwen P1-B）；
+  3. **审查员 PTY 载荷透传验收标准**：`LiveAgentDispatcher` 注入 `acceptance_criteria` 至审查上下文（闭环 Grok P2-2、Claude P2-1）；
+  4. **Claude 会话 `cwd` 强制校验**：严格过滤无合法工作目录的外部孤立会话，防范跨仓伪造（闭环 Claude P2-2、Grok P1-2）；
+  5. **多 Provider 支持（`macao.yaml` 架构扩展）**：在 `macao_config.schema.json` 增加 `provider` 属性，`PiAdapter` 自动拼接 `--provider <provider>`，`OpenCodeAdapter` 组合 `-m {provider}/{model}`，终端 UI 展示 `cli (provider/model)`；
+  6. **历史档案精细化对账与勘误**：纠正 Kimi 上轮结论转述错误（闭环 Pi-Qwen P2-C），固化 §5.2 已知简化表（闭环 Grok P2-3、Pi-Qwen P2-D），消灭信封占位符（闭环 Pi-Qwen P1-C）。
+- **机验与质量门禁最新状态**：
+  - 自动化单元与集成测试：**165/165 PASS**（`Ran 165 tests in 75s, OK`）；
+  - Python 编译：`python3 -m compileall -q src tests` $\rightarrow$ `0 Errors`；
+  - 代码格式检查：`git diff --check` $\rightarrow$ `0 Errors`；
+  - 契约对称性：`docs/schemas/` 与 `src/macao/schemas/` 8 份 JSON Schema 100% 逐字节一致；
+  - 专家归档证据复现脚本：全部 100% 验证通过（Grok、Claude、Qwen、Codex 均验证漏洞已修复且不再可重现）。
 
 ---
 
