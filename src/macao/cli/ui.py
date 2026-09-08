@@ -276,7 +276,7 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         border_style="blue"
     )
     rev_table.add_column("Agent ID", style="bold cyan")
-    rev_table.add_column("CLI (Weight & Sess)", style="yellow")
+    rev_table.add_column("CLI & Model (Weight & Sess)", style="yellow")
     rev_table.add_column("Status", style="bold")
     rev_table.add_column("Worktree (Sandbox / Repo)", style="white")
     rev_table.add_column("Review Progress & Verdict", style="bold")
@@ -321,9 +321,12 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         else:
             r_prog_disp = "[dim]IDLE (Standby)[/dim]"
 
+        r_model = r.get("model")
+        r_cli_display = f"{r.get('cli')}" + (f" ({r_model})" if r_model else "") + f" (w:{r.get('weight', 1.0)})"
+
         rev_table.add_row(
             str(r.get("id")),
-            f"{r.get('cli')} (w:{r.get('weight', 1.0)})\n[dim]{(r.get('session') or {}).get('session_name') or 'no session'}[/dim]",
+            f"{r_cli_display}\n[dim]{(r.get('session') or {}).get('session_name') or 'no session'}[/dim]",
             rst_text,
             wt_cell,
             r_prog_disp
