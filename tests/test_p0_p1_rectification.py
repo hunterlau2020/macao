@@ -24,6 +24,14 @@ from macao.core.schema import validate_aep_envelope
 from macao.consensus.vote import VoteAggregator
 
 
+def _setup_review_doc(tmpdir: str) -> str:
+    req_file = Path(tmpdir) / "docs" / "reviews" / "req.md"
+    req_file.parent.mkdir(parents=True, exist_ok=True)
+    if not req_file.exists():
+        req_file.write_text("# Review Request\n", encoding="utf-8")
+    return hashlib.sha256(req_file.read_bytes()).hexdigest()
+
+
 class TestP0P1Rectification(unittest.TestCase):
 
     def test_message_id_entropy_zero_collisions_in_5000(self):
@@ -88,6 +96,7 @@ class TestP0P1Rectification(unittest.TestCase):
             t_id = task["task_id"]
 
             # Simulate dev manifest & dispatch
+            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -95,7 +104,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -185,6 +194,7 @@ development:
             task = orch.start_task("Timeout 3Rev Task", "Test 3Rev Timeout Handling")
             t_id = task["task_id"]
 
+            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -192,7 +202,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -282,6 +292,7 @@ development:
             task = orch.start_task("Poll Overflow Task", "Test Robust Query")
             t_id = task["task_id"]
 
+            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -289,7 +300,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1025,6 +1036,7 @@ merge:
             t_id = task["task_id"]
 
             # Dispatch generation 1
+            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1032,7 +1044,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1134,6 +1146,7 @@ development:
             task = orch.start_task("E9 Repeated Timeout Task", "Testing repeated timeout detection")
             t_id = task["task_id"]
 
+            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1141,7 +1154,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1198,6 +1211,7 @@ development:
             task = orch.start_task("Multi-Gen Archive Task", "Testing non-destructive archiving")
             t_id = task["task_id"]
 
+            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1205,7 +1219,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1308,6 +1322,7 @@ development:
             task = orch.start_task("Clean Vote File Task", "Testing active vote_result cleanup")
             t_id = task["task_id"]
 
+            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1315,7 +1330,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1360,6 +1375,7 @@ development:
             task = orch.start_task("Idempotency Task", "Testing LATE_REVIEW_ISOLATED idempotency")
             t_id = task["task_id"]
 
+            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1367,7 +1383,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1529,13 +1545,14 @@ development:
             self.assertIsNone(orch.check_development_checkpoint(t_id))
 
             # Case 8: Valid manifest with tests_exempt: true -> MUST PASS
+            doc_sha = _setup_review_doc(tmpdir)
             dev_path.write_text(f"""version: "1.0"
 task_id: "{t_id}"
 checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1563,7 +1580,7 @@ checkpoint_ref: "{head}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1608,13 +1625,14 @@ development:
             dev_path = Path(tmpdir) / ".macao" / ".dev.yml"
 
             # Round 1: produce dev.yml and dispatch reviews
+            doc_sha = _setup_review_doc(tmpdir)
             dev_path.write_text(f"""version: "1.0"
 task_id: "{t_id}"
 checkpoint_ref: "{head_r1}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head_r1}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1
@@ -1750,7 +1768,7 @@ checkpoint_ref: "{head_r2}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head_r2}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 2
@@ -1806,6 +1824,7 @@ development:
             task = orch.start_task("Issue Triage Task", "Testing E4 disposition guard")
             t_id = task["task_id"]
 
+            doc_sha = _setup_review_doc(tmpdir)
             dev_dir = Path(tmpdir) / ".macao"
             dev_dir.mkdir(parents=True, exist_ok=True)
             (dev_dir / ".dev.yml").write_text(f"""version: "1.0"
@@ -1814,7 +1833,7 @@ checkpoint_ref: "{head_sha}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{head_sha}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1

@@ -146,6 +146,8 @@ class TestCleanAndRollback(unittest.TestCase):
             self.assertIsNone(ctx["remote"])
 
             # Test verbose and log-level flags
+            from macao.cli.main import DEFAULT_CONFIG_TEMPLATE
+            Path("macao.yaml").write_text(DEFAULT_CONFIG_TEMPLATE, encoding="utf-8")
             res = runner.invoke(cli, ["--log-level", "DEBUG", "doctor"])
             self.assertEqual(res.exit_code, 0)
             self.assertEqual(os.environ.get("MACAO_LOG_LEVEL"), "DEBUG")

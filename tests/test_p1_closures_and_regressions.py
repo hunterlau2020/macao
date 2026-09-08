@@ -11,6 +11,8 @@ Covers:
 - P1-8: task create --force single active task invariant and acceptance criteria envelope
 """
 
+import copy
+import hashlib
 import json
 import logging
 import os
@@ -625,6 +627,115 @@ class TestP1ClosuresAndRegressions(unittest.TestCase):
         change = orch.check_development_checkpoint(t_id)
         self.assertIsNotNone(change)
         self.assertEqual(change.to_state, AgentState.READY_FOR_REVIEW)
+
+    def test_codex_p1_04_checkpoint_anti_forgery_fail_closed_battery(self):
+        """Verify check_development_checkpoint strictly rejects all-zero hash, missing doc, wrong CLI, and unbound IDs (Codex P1-04 / Grok P1-1 / Claude P1-1 / Qwen P1-1 / Pi-Qwen P1-A)."""
+        import yaml
+        from macao.utils.git_utils import GitManager
+
+        self._init_git_repo()
+
+        cfg = {
+            "version": "2.5",
+            "team": {
+                "executor": {"id": "dev-mock", "cli": "mock-cli"},
+                "reviewers": [{"id": "rev-mock", "cli": "mock-cli"}]
+            }
+        }
+        Path("macao.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+        orch = Orchestrator(".", config=cfg)
+        task = orch.start_task("Anti-Forgery Test", "Check strict fail-closed gates")
+        t_id = task["task_id"]
+
+        req_file = Path("docs/reviews/real_doc.md")
+        req_file.parent.mkdir(parents=True, exist_ok=True)
+        req_file.write_text("# Anti-Forgery Document\nContent verified.\n", encoding="utf-8")
+        true_sha = hashlib.sha256(req_file.read_bytes()).hexdigest()
+
+        git = GitManager(".")
+        head = git.get_head_commit()
+
+        dev_yml = Path(".macao/.dev.yml")
+        dev_yml.parent.mkdir(parents=True, exist_ok=True)
+
+        base_valid = {
+            "version": "1.0",
+            "task_id": t_id,
+            "checkpoint_ref": head,
+            "full_document": {
+                "path": "docs/reviews/real_doc.md",
+                "evidence_commit": head,
+                "sha256": true_sha
+            },
+            "status": "ready_for_review",
+            "signal": "EXPLICIT",
+            "review_round": 1,
+            "executor": {"id": "dev-mock", "cli": "mock-cli"},
+            "development": {
+                "quality_metrics": {"tests_passed": True},
+                "git": {"latest_commit": head}
+            }
+        }
+
+        # 1. All-zero sha256 -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["full_document"]["sha256"] = "0" * 64
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 2. Missing document file -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["full_document"]["path"] = "docs/reviews/nonexistent_doc.md"
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 3. Empty sha256 -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["full_document"]["sha256"] = ""
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 4. Wrong executor.cli -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["executor"]["cli"] = "attacker-cli"
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 5. Wrong executor.id -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["executor"]["id"] = "attacker-id"
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 6. Unbound task_id -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["task_id"] = "different-task-id"
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 7. Unbound checkpoint_ref -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["checkpoint_ref"] = "0" * 40
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 8. Unbound evidence_commit -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["full_document"]["evidence_commit"] = "0" * 40
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 9. Path traversal outside root -> REJECTED
+        m = copy.deepcopy(base_valid)
+        m["full_document"]["path"] = "../../etc/passwd"
+        dev_yml.write_text(yaml.safe_dump(m), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # 10. Valid matching manifest -> ADVANCES
+        dev_yml.write_text(yaml.safe_dump(base_valid), encoding="utf-8")
+        res = orch.check_development_checkpoint(t_id)
+        self.assertIsNotNone(res)
+        self.assertEqual(res.to_state, AgentState.READY_FOR_REVIEW)
 
 
 if __name__ == "__main__":

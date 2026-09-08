@@ -302,7 +302,8 @@ def doctor():
             cfg = ConfigManager.load_config("macao.yaml")
             console.print(f"[green]✓ macao.yaml configuration valid (Project: {cfg.get('project', {}).get('name')})[/green]")
         else:
-            console.print("[yellow]! macao.yaml not found (run 'macao init' to create)[/yellow]")
+            console.print("[red]✗ macao.yaml not found (run 'macao init' to create)[/red]")
+            has_error = True
     except Exception as e:
         console.print(f"[red]✗ macao.yaml configuration error: {e}[/red]")
         has_error = True
@@ -527,6 +528,25 @@ def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout
             sys.exit(1)
         latest_req_file = str(req_path)
         has_pending = True
+        try:
+            content = req_path.read_text(encoding="utf-8", errors="replace")
+            lines = content.splitlines()
+            latest_title = lines[0].lstrip("#").strip() if lines else req_path.name
+        except Exception:
+            latest_title = req_path.name
+
+        import re
+        match = re.search(r"([0-9a-fA-F]{7,40})", req_path.stem)
+        baseline = match.group(1) if match else None
+        if not baseline:
+            m = re.search(r"(?:Commit|Baseline|Checkpoint):\s*([0-9a-fA-F]{7,40})", content)
+            if m:
+                baseline = m.group(1)
+        if not baseline:
+            tokens = req_path.stem.split("-")
+            if tokens and len(tokens[-1]) >= 4:
+                baseline = tokens[-1]
+        latest_baseline = baseline
 
     # Scenario C physical state determination
     if has_pending:
@@ -560,6 +580,16 @@ def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout
         )
         return
 
+    # UC-11 E1: Verify declared review baseline exists in git repository (Fail-closed)
+    git = GitManager(".")
+    if target_st == AgentState.WAITING_REVIEW:
+        if git.is_git_repository() and not git.commit_exists(checkpoint_ref):
+            console.print(
+                f"[bold red]UC-11 E1 Error: Declared review baseline commit '{checkpoint_ref}' does not exist in git repository. Refusing to adopt in-flight state.[/bold red]\n"
+                f"[dim]Please correct the review request document or supply a valid commit ref.[/dim]"
+            )
+            sys.exit(1)
+
     adopt_plan = {
         "scenario": "Scenario C (In-Flight Brownfield Adoption / UC-11)",
         "physical_state": phys_st_name,
@@ -581,38 +611,29 @@ def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout
         console.print("[dim]Run 'macao task adopt' without '--dry-run' to execute this adoption plan and ingest task into FSM.[/dim]\n")
         return
 
-    # Execute adoption
+    # Execute adoption through formal Orchestrator / FSM transition (UC-11 / Codex P1-7bc8d70-01)
     orch = get_orchestrator(".")
     if active and force:
-        orch.cancel_task(active["task_id"], reason="Superseded by task adopt")
         console.print(f"[bold yellow]⚠ Superseded active task '{active['task_id']}' (cancelled via E10).[/bold yellow]")
-
-    store = StateStore()
-    store.create_task(
-        task_id=task_id,
-        title=title,
-        source_branch=branch,
-        target_branch="main"
-    )
-    store.update_task_state(
-        task_id=task_id,
-        state=target_st,
-        checkpoint_ref=checkpoint_ref,
-        review_round=1
-    )
-    store.log_audit_event(
-        task_id,
-        "TASK_ADOPTED",
-        {
-            "scenario": "SCENARIO_C",
-            "physical_state": phys_st_name,
-            "target_state": target_st.value,
-            "checkpoint_ref": checkpoint_ref,
-            "assigned_role": assigned_role,
-            "assigned_agents": assigned_agents,
-            "missing_reviewers": missing_reviewers if has_pending else []
-        }
-    )
+    try:
+        adopted_task = orch.adopt_task(
+            task_id=task_id,
+            title=title,
+            target_state=target_st,
+            checkpoint_ref=checkpoint_ref,
+            source_branch=branch,
+            target_branch="main",
+            audit_detail={
+                "physical_state": phys_st_name,
+                "assigned_role": assigned_role,
+                "assigned_agents": assigned_agents,
+                "missing_reviewers": missing_reviewers if has_pending else []
+            },
+            force=force
+        )
+    except Exception as ex:
+        console.print(f"[bold red]Failed to adopt task:[/bold red] {ex}")
+        sys.exit(1)
 
     render_task_adopt_plan(adopt_plan, dry_run=False)
     console.print(f"\n[bold green]✓ Successfully adopted task '{task_id}' into state '{target_st.value}'![/bold green]")
@@ -636,7 +657,8 @@ def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout
                             checkpoint_ref=checkpoint_ref,
                             review_round=1,
                             diff_context=diff_txt,
-                            timeout_sec=timeout
+                            timeout_sec=timeout,
+                            acceptance_criteria=adopted_task.get("acceptance_criteria") or []
                         )
                         st = res.get("status")
                         vote = res.get("vote", "N/A")
@@ -646,6 +668,17 @@ def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout
                             console.print(f"    [yellow]! {r_id} {st}: {res.get('error')}[/yellow]")
                     except Exception as ex:
                         console.print(f"    [red]✗ {r_id} dispatch error: {ex}[/red]")
+
+            # Collect and evaluate consensus following review dispatch (Codex P1-7bc8d70-01)
+            console.print(f"\n[bold cyan]Evaluating consensus on adopted review...[/bold cyan]")
+            try:
+                change_cons, cons_eval = orch.collect_and_evaluate_consensus(task_id)
+                if change_cons:
+                    console.print(f"[bold green]✓ Consensus evaluated: {change_cons.from_state.value} -> {change_cons.to_state.value}[/bold green]")
+                elif cons_eval:
+                    console.print(f"[bold yellow]ℹ Consensus outcome: {cons_eval.get('outcome', 'PENDING')}[/bold yellow]")
+            except Exception as ce:
+                console.print(f"[dim]Consensus evaluation notice: {ce}[/dim]")
         else:
             console.print("[bold cyan]ℹ Review dispatch deferred. Task is registered in WAITING_REVIEW state.[/bold cyan]")
             console.print("[dim]Run 'macao task checkpoint --review' to launch reviewer processes when ready.[/dim]\n")
@@ -692,9 +725,9 @@ def task_checkpoint(auto: bool, review: bool, timeout: float, test_cmd: Optional
         if not req_doc.exists():
             req_doc.write_text(f"# Review Request: {active.get('title', task_id)}\n\nCommit: {head_commit}\n", encoding="utf-8")
 
-        exec_cfg = orchestrator.config.get("executor", {})
-        exec_id = exec_cfg.get("id", "dev-claude")
-        exec_cli = exec_cfg.get("cli", "claude-code")
+        raw_exec_cfg = orchestrator.raw_config.get("team", {}).get("executor", {}) if isinstance(orchestrator.raw_config.get("team"), dict) else {}
+        exec_id = raw_exec_cfg.get("id") or orchestrator.config.get("executor_id", "dev-claude")
+        exec_cli = raw_exec_cfg.get("cli") or (orchestrator.config.get("executor", {}).get("cli") if isinstance(orchestrator.config.get("executor"), dict) else "claude-code")
 
         tests_passed_val = False
         tests_exempt_val = False
@@ -744,33 +777,38 @@ def task_checkpoint(auto: bool, review: bool, timeout: float, test_cmd: Optional
         dev_path.write_text(yaml.safe_dump(manifest_data), encoding="utf-8")
         console.print(f"[green]✓ Auto-generated .macao/.dev.yml for commit {head_commit[:8]}[/green]")
 
-    if not dev_path.exists():
-        console.print("[red]Missing .macao/.dev.yml. Please create it or pass '--auto' flag to auto-generate.[/red]")
-        return
-
-    # 1. Check development checkpoint
-    console.print(f"[bold cyan]Validating development checkpoint for task '{task_id}'...[/bold cyan]")
-    try:
-        change1 = orchestrator.check_development_checkpoint(task_id)
-        if not change1:
-            console.print("[yellow]Checkpoint validation deferred or rejected: tests have not passed or quality metrics not satisfied.[/yellow]")
+    current_state = AgentState(active["state"])
+    if current_state == AgentState.WAITING_REVIEW:
+        console.print(f"[bold cyan]Task '{task_id}' is already in WAITING_REVIEW state (checkpoint ref: {active.get('checkpoint_ref', head_commit)[:8]}). Proceeding directly to review dispatch...[/bold cyan]")
+        head_commit = active.get("checkpoint_ref") or head_commit
+    else:
+        if not dev_path.exists():
+            console.print("[red]Missing .macao/.dev.yml. Please create it or pass '--auto' flag to auto-generate.[/red]")
             return
-        console.print(f"[bold green]✓ Checkpoint validated: {change1.from_state.value} -> {change1.to_state.value} (ref: {head_commit[:8]})[/bold green]")
-    except Exception as e:
-        console.print(f"[red]✗ Checkpoint validation error: {e}[/red]")
-        return
 
-    if not review:
-        console.print("[bold cyan]ℹ Checkpoint validated successfully (--no-review specified; skipping review dispatch).[/bold cyan]")
-        return
+        # 1. Check development checkpoint
+        console.print(f"[bold cyan]Validating development checkpoint for task '{task_id}'...[/bold cyan]")
+        try:
+            change1 = orchestrator.check_development_checkpoint(task_id)
+            if not change1:
+                console.print("[yellow]Checkpoint validation deferred or rejected: tests have not passed or quality metrics not satisfied.[/yellow]")
+                return
+            console.print(f"[bold green]✓ Checkpoint validated: {change1.from_state.value} -> {change1.to_state.value} (ref: {head_commit[:8]})[/bold green]")
+        except Exception as e:
+            console.print(f"[red]✗ Checkpoint validation error: {e}[/red]")
+            return
 
-    # 2. Dispatch review requests
-    try:
-        change2 = orchestrator.dispatch_review_requests(task_id)
-        console.print(f"[bold green]✓ Review dispatched: {change2.from_state.value} -> {change2.to_state.value}[/bold green]")
-    except Exception as e:
-        console.print(f"[red]✗ Review dispatch error: {e}[/red]")
-        return
+        if not review:
+            console.print("[bold cyan]ℹ Checkpoint validated successfully (--no-review specified; skipping review dispatch).[/bold cyan]")
+            return
+
+        # 2. Dispatch review requests
+        try:
+            change2 = orchestrator.dispatch_review_requests(task_id)
+            console.print(f"[bold green]✓ Review dispatched: {change2.from_state.value} -> {change2.to_state.value}[/bold green]")
+        except Exception as e:
+            console.print(f"[red]✗ Review dispatch error: {e}[/red]")
+            return
 
     # 3. If --review: Run live reviewers
     if review:
@@ -790,7 +828,8 @@ def task_checkpoint(auto: bool, review: bool, timeout: float, test_cmd: Optional
                     checkpoint_ref=head_commit,
                     review_round=active.get("review_round", 1),
                     diff_context=diff_txt,
-                    timeout_sec=timeout
+                    timeout_sec=timeout,
+                    acceptance_criteria=active.get("acceptance_criteria") or []
                 )
                 st = res.get("status")
                 vote = res.get("vote", "N/A")

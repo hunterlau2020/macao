@@ -6,6 +6,7 @@ import subprocess
 import unittest
 import tempfile
 import yaml
+import hashlib
 from pathlib import Path
 
 
@@ -191,11 +192,15 @@ timeouts:
             subprocess.run(["git", "commit", "-m", "add code"], cwd=str(proj), check=True, capture_output=True)
             head = daemon.orchestrator.git.get_head_commit()
 
+            (proj / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
+            doc_file = proj / "docs" / "reviews" / "req.md"
+            doc_file.write_text("# Review Request\n", encoding="utf-8")
+            doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
             (proj / ".macao").mkdir(parents=True, exist_ok=True)
             (proj / ".macao" / ".dev.yml").write_text(yaml.safe_dump({
                 "version": "1.0", "status": "ready_for_review", "signal": "EXPLICIT",
                 "task_id": t_id, "checkpoint_ref": head,
-                "full_document": {"path": "docs/reviews/req.md", "evidence_commit": head, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+                "full_document": {"path": "docs/reviews/req.md", "evidence_commit": head, "sha256": doc_sha},
                 "review_round": 1, "executor": {"id": "dev", "cli": "opencode"},
                 "development": {"git": {"latest_commit": head}, "quality_metrics": {"tests_passed": True}}
             }), encoding="utf-8")
@@ -391,11 +396,15 @@ opinion:
             subprocess.run(["git", "commit", "-m", "feat: file"], cwd=str(proj), check=True, capture_output=True)
             dev_commit = orch.git.get_head_commit()
 
+            (proj / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
+            doc_file = proj / "docs" / "reviews" / "req.md"
+            doc_file.write_text("# Review Request\n", encoding="utf-8")
+            doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
             (proj / ".macao").mkdir(parents=True, exist_ok=True)
             (proj / ".macao" / ".dev.yml").write_text(yaml.safe_dump({
                 "version": "1.0", "status": "ready_for_review", "signal": "EXPLICIT",
                 "task_id": t_id, "checkpoint_ref": dev_commit,
-                "full_document": {"path": "docs/reviews/req.md", "evidence_commit": dev_commit, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+                "full_document": {"path": "docs/reviews/req.md", "evidence_commit": dev_commit, "sha256": doc_sha},
                 "review_round": 1, "executor": {"id": cfg["team"]["executor"]["id"], "cli": cfg["team"]["executor"]["cli"]},
                 "development": {"git": {"latest_commit": dev_commit}, "quality_metrics": {"tests_passed": True}}
             }), encoding="utf-8")
@@ -602,6 +611,10 @@ security:
             subprocess.run(["git", "commit", "-m", "feat: ops commit"], cwd=tmpdir, check=True)
             dev_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
 
+            (Path(tmpdir) / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
+            doc_file = Path(tmpdir) / "docs" / "reviews" / "req.md"
+            doc_file.write_text("# Review Request\n", encoding="utf-8")
+            doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -609,7 +622,7 @@ checkpoint_ref: "{dev_commit}"
 full_document:
   path: "docs/reviews/req.md"
   evidence_commit: "{dev_commit}"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "{doc_sha}"
 status: ready_for_review
 signal: EXPLICIT
 review_round: 1

@@ -198,13 +198,14 @@ class SessionLocator:
             except Exception:
                 pass
 
-            # Fail-closed: verify physical cwd binding if cwd is present in record
-            if session_cwd:
-                try:
-                    if Path(session_cwd).resolve() != resolved_proj:
-                        continue
-                except Exception:
+            # Fail-closed: verify physical cwd binding in record (F-26)
+            if not session_cwd:
+                continue
+            try:
+                if Path(session_cwd).resolve() != resolved_proj:
                     continue
+            except Exception:
+                continue
 
             sname = sname or _sanitize_session_name(None, session_id)
             results.append({

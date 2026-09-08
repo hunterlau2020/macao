@@ -3,31 +3,64 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-08（登记 `7bc8d70` 轮复审申请单 `2026-09-08-review-request-7bc8d70.md`，总计结论类 **150 份**（146 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **44 份**（新增 `2026-09-08-review-request-7bc8d70.md`）、处置单 **2 份**，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-08（登记 `7bc8d70` 轮复审 5 位专家结论与处置单 `2026-09-08-disposition-7bc8d70.md`，总计结论类 **155 份**（151 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **44 份**、处置单 **3 份**，双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **综合编排与探活轨（`7bc8d70` 轮已提交复审申请，目标 L3/PG-2 全量认证并提请 L4/PG-3 准入；涵盖 `48eea58` 全量 P0/P1 闭环与 `7bc8d70` 方法论 v1.1 升级，162 项测试全绿）**：
-    1. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 本轮复审申请（受审提交 **`7bc8d70`**，审计范围 `961bcfe..7bc8d70`）
-    2. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 前序处置与闭环报告（`961bcfe`，P0-1、P1-1～P1-10、Codex P1-03/04 全部闭环，测试扩增至 162 项全绿）
-    3. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 前序复审申请（受审提交 **`961bcfe`**）
-    4. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`，8 项 P1 闭环）
+  - **综合编排与探活轨（`7bc8d70` 轮共识仲裁：全票否决待返工 REWORK；完成 P1/P2 彻底闭环处置并提交处置单 `2026-09-08-disposition-7bc8d70.md`，163 项测试全绿）**：
+    1. [`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md) → 本轮处置与闭环报告（受审提交 **`7bc8d70`**，检查点防伪 8 重 Fail-Closed、UC-11 E1 守卫、状态机白名单 adopt、PTY 验收标准透传全部闭环，测试扩增至 163 项全绿）
+    2. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 本轮复审申请（受审提交 **`7bc8d70`**，审计范围 `961bcfe..7bc8d70`）
+    3. 五方独立评审结论：
+       - [`2026-09-08-review-result-7bc8d70-codex.md`](2026-09-08-review-result-7bc8d70-codex.md) → **REJECT**（P1-01 adopt 幽灵基线，P1-02 检查点防伪 fail-open）
+       - [`2026-09-08-review-result-7bc8d70-grok.md`](2026-09-08-review-result-7bc8d70-grok.md) → **NO_APPROVE**（检查点防伪全零/缺失绕过）
+       - [`2026-09-08-review-result-7bc8d70-claude.md`](2026-09-08-review-result-7bc8d70-claude.md) → **NO_APPROVE**（检查点防伪 4 项穿透，adopt 幽灵基线）
+       - [`2026-09-08-review-result-7bc8d70-qwen.md`](2026-09-08-review-result-7bc8d70-qwen.md) → **不予认证**（QW-7BC-P1-1 检查点防伪 fail-open）
+       - [`2026-09-08-review-result-7bc8d70-pi-qwen.md`](2026-09-08-review-result-7bc8d70-pi-qwen.md) → **NO_APPROVE / REWORK**（P1-A 检查点防伪，P1-B adopt 幽灵基线，P1-C 信封自证矛盾）
+    4. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 前序处置报告（`961bcfe`，14 项 P0/P1 全部闭环）
+    5. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 前序复审申请（受审提交 **`961bcfe`**）
+    6. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`，8 项 P1 闭环）
   - **文档轨（前序申请）**：[`2026-09-04-review-request-95b7b35.md`](2026-09-04-review-request-95b7b35.md)（目标 L1 / PG-0，被审提交 `95b7b35`）
   - **历史代码轨（已被本轮合并涵盖）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md)（目标 L4 / PG-3，被审提交 `42b5c07`）
 - **当前定级状态**：
-  - **综合编排与代码轨**：**提请 L3 SCENARIO-VERIFIED / PG-2 全量认证与 L4/PG-3 准入评审**；受审提交 `7bc8d70` 涵盖 `48eea58` 全量 P0/P1 闭环与 `7bc8d70` 方法论 v1.1 升级，162 项测试全绿，0 WAL 侧车，0 尾随空白。
+  - **综合编排与代码轨**：维持既有编排引擎 **L3 SCENARIO-VERIFIED / PG-2**（`4e38ed6` 轮）；`7bc8d70` 轮共识仲裁为 **REWORK**，经本轮处置彻底闭环所有阻断项，待下轮复审认证。
   - **文档体系定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
 
-### 综合编排轨：P0/P1 缺陷闭环与评审方法论 v1.1 升级（`7bc8d70` 轮，待评审）
+---
+
+### 依据 Guidelines v1.1 §5.2 常设「已知简化」表（Known Simplifications Table）
+
+> 依据 `docs/MACAO_REVIEW_GUIDELINES.md` v1.1 §5.2 维护：已知简化在到期前不记为代码缺陷（不占 P0–P3 编号），用于隔离既定阶段性设计边界与真实代码缺陷。
+
+| 项 (Item) | 现状 (Status Quo) | 接受理由 (Rationale) | 接受轮次 (Accepted Round) | 生产化前需补什么 (Production Prerequisite) | 到期条件 (expiry) |
+|---|---|---|---|---|---|
+| In-repo (Shared Workspace) | 单仓项目直接使用 In-repo 共享工作区进行直接审查，不强制为每个 Reviewer 派发独立隔离 worktree | 本地单机或串行审查场景下，避免多 worktree 的磁盘重复克隆与外部依赖同步开销，契合轻量敏捷研发流 | Round 1 (`d042395`) | 强隔离沙箱生命周期管理、并发 worktree 自动清理与冲突检测引擎 | `v3.0` |
+| `ci_gate_command: null` | `macao.yaml` 策略配置中 CI 门禁命令允许配置为 `null`（不强制配置外部 CI） | 当前本地离线单机运行环境无常驻外部 CI Runner，测试依赖本地单元测试探针与验证命令 | Round 2 (`961bcfe`) | 本地内置轻量门禁探针或标准容器化测试执行器兜底 | `v2.6.0-rc1` |
+
+---
+
+### 综合编排轨：P0/P1 缺陷闭环与评审方法论 v1.1 升级（`7bc8d70` 轮，共识仲裁：REWORK，已完成闭环处置）
 
 - **受审提交**：`7bc8d70`（涵盖提交 `48eea58` 与 `7bc8d70`，基线 `961bcfe`）
 - **申请入口**：[`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md)
-- **目标定级**：**L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审**
-- **当前状态**：待评审专家独立机验与裁决
-- **核心交付内容**：
-  1. 彻底闭环 `961bcfe` 轮四方专家指出的全部 14 项 P0/P1 缺陷（P0-1、P1-1～P1-10、Codex P1-01～04）；
-  2. 实现存量项目接管命令 `macao task adopt` 及其 `--dry-run` 模式（UC-11 场景 C 落地）；
-  3. 严格落实 Fail-Closed：未知 CLI 拒绝派发并标记 MISSING，只读连接注入 `&immutable=1` 彻底消除 WAL 侧车，单一活动任务内核下沉；
-  4. 评审方法论 [`docs/MACAO_REVIEW_GUIDELINES.md`](../MACAO_REVIEW_GUIDELINES.md) 正式升级至 **v1.1**，吸收固化验证命令作用域、复现证据归档、已知简化表、L4 OPS 10 项必测矩阵、严重级域定义与可达性联合定级、以及反例击穿纪律；
-  5. 全量自动化测试扩增至 **162 项全绿（162/162 PASS）**，`git show --check 7bc8d70` 0 错误。
+- **处置报告**：[`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md)
+- **目标定级**：L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审
+- **五方独立评审结论（5 份报告 / 5 位专家）**：**全票否决待返工（REWORK / 5 票否决）**
+  - **Codex**：[`2026-09-08-review-result-7bc8d70-codex.md`](2026-09-08-review-result-7bc8d70-codex.md) → **REJECT**（2 项 P1：P1-7bc8d70-01 UC-11 task adopt 幽灵基线 commit 接受与状态机绕过，P1-7bc8d70-02 检查点防伪缺失全文/全零 hash/错误 CLI 借壳放行；3 项 P2：auto checkpoint 违背作者原则、dev_manifest.schema.json 缺正则、L4 runner mock）。
+  - **Grok**：[`2026-09-08-review-result-7bc8d70-grok.md`](2026-09-08-review-result-7bc8d70-grok.md) → **NO_APPROVE**（1 项 P1：Codex P1-04 检查点防伪假绿击穿；3 项 P2：PTY 缺少验收标准、L4 runner mock、缺少 §5.2 已知简化表）。
+  - **Claude**：[`2026-09-08-review-result-7bc8d70-claude.md`](2026-09-08-review-result-7bc8d70-claude.md) → **NO_APPROVE**（2 项 P1：检查点防伪 4 种输入穿透，task adopt 幽灵基线违反 UC-11 E1；4 项 P2：PTY 缺少验收标准、L4 mock、F-26 会话隔离、§5.2 表缺失）。
+  - **Qwen**：[`2026-09-08-review-result-7bc8d70-qwen.md`](2026-09-08-review-result-7bc8d70-qwen.md) → **不予认证**（1 项 P1：QW-7BC-P1-1 检查点防伪全零/缺失/executor.cli fail-open；2 项 P2：未知 CLI 诊断信息缺失、L4 runner mock）。
+  - **Pi-Qwen**：[`2026-09-08-review-result-7bc8d70-pi-qwen.md`](2026-09-08-review-result-7bc8d70-pi-qwen.md) → **NO_APPROVE / REWORK**（3 项 P1：P1-A 检查点防伪全零散列放行，P1-B task adopt 幽灵基线与状态机绕过，P1-C 申请信封第 192 行载有 64 个 0 自证矛盾；4 项 P2：P2-A immutable=1 读陈旧、P2-B 变更行数失配、P2-C doctor 缺失配置退出码为 0、P2-D L4 runner mock）。
+- **处置闭环状态（详见 [`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md)）**：
+  1. **检查点防伪 8 重严格 Fail-Closed**：彻底重构 `Orchestrator.check_development_checkpoint`，实施任务绑定、提交绑定、正文结构、证据提交、64位非零正则、物理常规文件存在、字节级哈希一致性、执行者身份归属严格 8 重门禁；
+  2. **`task adopt` UC-11 E1 守卫与状态机接管**：物理校验声明基线在本地 Git 中存在性，不存在立即退出码 1 阻断；下沉至 `Orchestrator.adopt_task()`，增设 `E1_ADOPT` / `E2_ADOPT` 标准白名单边与审计日志，派发后自动评估共识；
+  3. **消除信封自证矛盾**：更新 `2026-09-08-review-request-7bc8d70.md` 64 个零占位符，固化真实 SHA-256；
+  4. **PTY 载荷验收标准透传**：`LiveAgentDispatcher` 将 `acceptance_criteria` 注入审查交互载荷；
+  5. **会话跨项目隔离固化**：`SessionLocator._find_claude_sessions` 严格断言拒绝无 cwd 会话；
+  6. **固化常设「已知简化」表**：落实 Guidelines v1.1 §5.2，登记 In-repo 模式与 CI null 策略并标注清晰 expiry；
+  7. **`doctor` 退出码合规**：缺失 `macao.yaml` 严格退出码 2。
+- **机验与质量门禁最新状态**：
+  - 自动化单元与集成测试：**163/163 PASS**（`Ran 163 tests, 0 failures, 0 errors`）；
+  - Python 编译：`python3 -m compileall src tests` $\rightarrow$ `0 Errors`；
+  - 代码格式检查：`git diff --check` $\rightarrow$ `0 Errors`；
+  - 专家归档证据复现脚本：全部通过（100% PASS）。
 
 ---
 

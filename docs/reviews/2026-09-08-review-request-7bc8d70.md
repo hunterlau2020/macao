@@ -189,7 +189,7 @@ executor:
 full_document:
   path: "docs/reviews/2026-09-08-review-request-7bc8d70.md"
   evidence_commit: "7bc8d70"
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256: "914ecd52415aaa083dd8e6215fa5fd3739c9157640ef3ffcfac31b70700399e1"
 development:
   phase: "Phase 3 Orchestrator & Multi-Agent Dispatch"
   description: "Remediate all P0/P1 review findings from 961bcfe, implement task adopt with --dry-run, enforce fail-closed invariants and zero sidecars, and adopt Review Guidelines v1.1"

@@ -72,17 +72,20 @@ policy:
 
     def test_adopt_dry_run_zero_side_effects(self):
         """Verify task adopt --dry-run previews plan with 100% zero mutations."""
-        # Create a pending review request in docs/reviews
+        from macao.utils.git_utils import GitManager
+        head_commit = GitManager(".").get_head_commit()
+
+        # Create a pending review request in docs/reviews matching current HEAD
         rev_dir = self.tmp_dir / "docs" / "reviews"
         rev_dir.mkdir(parents=True, exist_ok=True)
-        req_file = rev_dir / "2026-09-07-review-request-testbase.md"
-        req_file.write_text("# Review Request for testbase\n\nBaseline: testbase\n", encoding="utf-8")
+        req_file = rev_dir / f"2026-09-07-review-request-{head_commit[:8]}.md"
+        req_file.write_text(f"# Review Request for {head_commit[:8]}\n\nBaseline: {head_commit}\n", encoding="utf-8")
 
         result = self.runner.invoke(cli, ["task", "adopt", "--dry-run"])
         self.assertEqual(result.exit_code, 0, f"Command failed: {result.output}")
         self.assertIn("MACAO Scenario C In-Flight Task Adoption Plan [DRY-RUN (Preview Only)]", result.output)
         self.assertIn("WAITING_REVIEW", result.output)
-        self.assertIn("task-adopt-testbase", result.output)
+        self.assertIn(f"task-adopt-{head_commit[:8]}", result.output)
         self.assertIn("DRY-RUN", result.output)
 
         # Verify zero side-effects: state.db not created or has no active tasks
@@ -92,22 +95,54 @@ policy:
             self.assertIsNone(store.get_active_task(), "Active task must not be created in dry-run mode")
 
     def test_adopt_executes_waiting_review(self):
-        """Verify task adopt ingests pending review request into WAITING_REVIEW."""
+        """Verify task adopt ingests pending review request into WAITING_REVIEW with formal FSM transition."""
+        feat_file = self.tmp_dir / "feat.py"
+        feat_file.write_text("print('feat')\n", encoding="utf-8")
+        import subprocess
+        subprocess.run(["git", "add", "feat.py"], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "feat: feature X"], check=True, capture_output=True)
+        from macao.utils.git_utils import GitManager
+        feat_commit = GitManager(".").get_head_commit()
+
         rev_dir = self.tmp_dir / "docs" / "reviews"
         rev_dir.mkdir(parents=True, exist_ok=True)
-        req_file = rev_dir / "2026-09-07-review-request-9999aaaa.md"
-        req_file.write_text("# Feature X Review Request\n\nBaseline: 9999aaaa\n", encoding="utf-8")
+        req_file = rev_dir / f"2026-09-07-review-request-{feat_commit[:8]}.md"
+        req_file.write_text(f"# Feature X Review Request\n\nBaseline: {feat_commit}\n", encoding="utf-8")
 
         result = self.runner.invoke(cli, ["task", "adopt", "--no-review"])
         self.assertEqual(result.exit_code, 0, f"Command failed: {result.output}")
-        self.assertIn("Successfully adopted task 'task-adopt-9999aaaa' into state 'WAITING_REVIEW'", result.output)
+        self.assertIn(f"Successfully adopted task 'task-adopt-{feat_commit[:8]}' into state 'WAITING_REVIEW'", result.output)
 
         store = StateStore(".macao/state.db")
         active = store.get_active_task()
         self.assertIsNotNone(active)
-        self.assertEqual(active["task_id"], "task-adopt-9999aaaa")
+        self.assertEqual(active["task_id"], f"task-adopt-{feat_commit[:8]}")
         self.assertEqual(active["state"], "WAITING_REVIEW")
-        self.assertEqual(active["checkpoint_ref"], "9999aaaa")
+        self.assertEqual(active["checkpoint_ref"], feat_commit[:8])
+
+        # Verify formal FSM transition audit event is recorded (Codex P1-7bc8d70-01)
+        audit_events = store.list_audit_events(task_id=active["task_id"])
+        event_types = [e.get("type") for e in audit_events]
+        self.assertIn("STATE_TRANSITION_E2_ADOPT", event_types)
+        self.assertIn("TASK_ADOPTED", event_types)
+
+    def test_adopt_rejects_nonexistent_baseline_commit(self):
+        """UC-11 E1: Verify task adopt fails closed if declared baseline commit does not exist in git."""
+        rev_dir = self.tmp_dir / "docs" / "reviews"
+        rev_dir.mkdir(parents=True, exist_ok=True)
+        req_file = rev_dir / "2026-09-08-review-request-deadbeef.md"
+        req_file.write_text("# Review Request\n\nBaseline: deadbeef\n", encoding="utf-8")
+
+        result = self.runner.invoke(cli, ["task", "adopt", "--no-review"])
+        self.assertEqual(result.exit_code, 1, f"Expected non-zero exit for nonexistent commit, got: {result.exit_code}")
+        self.assertIn("UC-11 E1 Error", result.output)
+        self.assertIn("deadbeef", result.output)
+
+        # Verify zero state mutation: no state.db created or no active task
+        state_db = self.tmp_dir / ".macao" / "state.db"
+        if state_db.exists():
+            store = StateStore(str(state_db))
+            self.assertIsNone(store.get_active_task())
 
     def test_adopt_in_flight_coding(self):
         """Verify task adopt ingests uncommitted code changes into CODING state."""

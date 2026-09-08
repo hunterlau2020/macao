@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import uuid
 import yaml
@@ -121,6 +122,16 @@ class Orchestrator:
 
         reviewer_ids = raw_config.get("reviewer_ids", active_rev_ids)
 
+        cfg_exec_id = raw_config.get("executor_id") or team.get("executor", {}).get("id")
+        if not cfg_exec_id and executor_adapter:
+            cfg_exec_id = getattr(executor_adapter, "agent_id", None)
+        if not cfg_exec_id:
+            cfg_exec_id = "dev-claude"
+
+        cfg_exec_cli = team.get("executor", {}).get("cli")
+        if not cfg_exec_cli and executor_adapter:
+            cfg_exec_cli = getattr(executor_adapter, "cli_name", None)
+
         self.raw_config = raw_config
         self.config: Dict[str, Any] = {
             "max_rework_rounds": raw_config.get("max_rework_rounds", policy.get("max_rework_rounds", 3)),
@@ -131,7 +142,8 @@ class Orchestrator:
             "rebase_before_merge": raw_config.get("rebase_before_merge", merge_policy.get("rebase_before_merge", False)),
             "remote_name": raw_config.get("remote_name", repo.get("remote_name", "origin")),
             "target_branch": raw_config.get("target_branch", repo.get("default_branch", "main")),
-            "executor_id": raw_config.get("executor_id", team.get("executor", {}).get("id", "claude-code")),
+            "executor_id": cfg_exec_id,
+            "executor_cli": cfg_exec_cli,
             "executor": team.get("executor", {}),
             "reviewers": reviewers_list,
             "reviewer_ids": reviewer_ids,
@@ -243,6 +255,74 @@ class Orchestrator:
         self.logger.info(f"Task {task_id} cancelled: {reason}")
         return change
 
+    def adopt_task(
+        self,
+        task_id: str,
+        title: str,
+        target_state: AgentState,
+        checkpoint_ref: str,
+        source_branch: str = "main",
+        target_branch: str = "main",
+        acceptance_criteria: Optional[List[str]] = None,
+        audit_detail: Optional[Dict[str, Any]] = None,
+        force: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Adopts an in-flight task (Scenario C / UC-11) into MACAO FSM.
+        Enforces UC-11 E1 (baseline commit existence in Git).
+        Executes formal transition via E2_ADOPT or E1_ADOPT and records standard audit events.
+        """
+        active_tasks = self.store.get_active_tasks()
+        if active_tasks:
+            if not force:
+                raise RuntimeError(
+                    f"Cannot adopt task: another active task '{active_tasks[0]['task_id']}' is running in state '{active_tasks[0]['state']}'. "
+                    f"Cancel it before adopting or pass force=True."
+                )
+            for at in active_tasks:
+                self.cancel_task(at["task_id"], reason="Superseded by forced task adoption")
+
+        # UC-11 E1: Git commit existence check for declared review baseline
+        if self.git and self.git.is_git_repository():
+            if not self.git.commit_exists(checkpoint_ref):
+                raise ValueError(
+                    f"UC-11 E1 Error: Declared review baseline commit '{checkpoint_ref}' does not exist in git repository. Refusing to adopt."
+                )
+
+        # Create task record in store (starts in IDLE)
+        self.store.create_task(
+            task_id=task_id,
+            title=title,
+            source_branch=source_branch,
+            target_branch=target_branch,
+            acceptance_criteria=acceptance_criteria or []
+        )
+
+        # Transition FSM to target state
+        if target_state == AgentState.WAITING_REVIEW:
+            trigger = "E2_ADOPT"
+        elif target_state == AgentState.CODING:
+            trigger = "E1_ADOPT"
+        else:
+            raise ValueError(f"Unsupported adoption target state: {target_state}")
+
+        detail = {
+            "checkpoint_ref": checkpoint_ref,
+            "scenario": "SCENARIO_C",
+            **(audit_detail or {})
+        }
+
+        self.fsm.transition(task_id, target_state, trigger_id=trigger, detail=detail)
+
+        # Log domain TASK_ADOPTED audit event
+        self.store.log_audit_event(
+            task_id,
+            "TASK_ADOPTED",
+            detail
+        )
+
+        return self.store.get_task(task_id)
+
     def check_development_checkpoint(self, task_id: str) -> Optional[StateChange]:
         """
         Layer 1a: Scans .macao/.dev.yml for explicit checkpoint signal.
@@ -276,86 +356,132 @@ class Orchestrator:
             return None
 
         # 2. Strict invariant validation (no permissive fallbacks)
+        if data.get("task_id") != task_id:
+            return None
+
         dev_rnd = data.get("review_round")
+        if dev_rnd != rnd:
+            return None
+
         status = data.get("status")
+        if status != "ready_for_review":
+            return None
+
         signal = data.get("signal")
+        if signal != "EXPLICIT":
+            return None
+
         git_info = data.get("development", {}).get("git", {})
         latest_commit = git_info.get("latest_commit")
+        if not latest_commit:
+            return None
+
+        chk_ref = data.get("checkpoint_ref")
+        if not chk_ref or chk_ref != latest_commit:
+            return None
+
         quality = data.get("development", {}).get("quality_metrics", {})
         tests_passed = quality.get("tests_passed") is True or quality.get("tests_exempt") is True
+        if not tests_passed:
+            return None
 
-        if dev_rnd == rnd and status == "ready_for_review" and signal == "EXPLICIT" and latest_commit and tests_passed:
-            # Validate full_document integrity if provided (Codex P1-04)
-            full_doc = data.get("full_document")
-            if isinstance(full_doc, dict):
-                doc_path_str = full_doc.get("path")
-                doc_sha = full_doc.get("sha256")
-                if doc_path_str:
-                    doc_path = (self.root / doc_path_str).resolve()
-                    if not str(doc_path).startswith(str(self.root.resolve())):
-                        return None
-                    if doc_path.exists() and doc_path.is_file() and doc_sha and doc_sha != "0" * 64:
-                        calc_sha = hashlib.sha256(doc_path.read_bytes()).hexdigest()
-                        if calc_sha.lower() != doc_sha.lower():
-                            return None
+        # 3. Validate full_document integrity (Codex P1-04 / Grok P1-1 / Claude P1-1 / Qwen P1-1)
+        full_doc = data.get("full_document")
+        if not isinstance(full_doc, dict):
+            return None
+        doc_path_str = full_doc.get("path")
+        doc_sha = full_doc.get("sha256")
+        evidence_commit = full_doc.get("evidence_commit")
 
-            # Validate executor attribution if specified in configuration (Codex P1-04)
-            exec_info = data.get("executor")
-            if isinstance(exec_info, dict) and exec_info.get("id"):
-                raw_exec_cfg = self.raw_config.get("team", {}).get("executor", {}) if isinstance(self.raw_config.get("team"), dict) else {}
-                cfg_exec_id = self.raw_config.get("executor_id") or raw_exec_cfg.get("id")
-                if cfg_exec_id and exec_info["id"] != cfg_exec_id:
-                    return None
+        if not doc_path_str or not doc_sha:
+            return None
 
-            # 3. Check commit physically exists in git repository if git repo is present (PRD §2.1)
-            if self.git and self.git.is_git_repository():
-                if not self.git.commit_exists(latest_commit):
-                    return None
+        if evidence_commit and evidence_commit != latest_commit:
+            return None
 
-            # 4. Rework gate & Checkpoint freshness & topology (PRD §2.1:216 / §3.3 E6:839 / Grok P1-1 / Codex P1-1)
-            if current_st == AgentState.REWORK:
-                prev_ref = task.get("checkpoint_ref")
-                if prev_ref:
-                    if latest_commit == prev_ref:
-                        return None  # Rework requires a fresh commit different from previous review round
-                    if self.git and self.git.is_git_repository():
-                        # Previous review checkpoint must be an ancestor of the new rework commit (strict topological progress)
-                        if not self.git.is_ancestor(prev_ref, latest_commit):
-                            return None
+        if not re.match(r"^[0-9a-fA-F]{64}$", str(doc_sha)) or str(doc_sha).lower() == "0" * 64:
+            return None
 
-            # Check commit has not already been consumed as a dev_manifest for this task (PRD §2.1:216)
-            consumed_devs = [
-                a for a in self.store.list_artifacts(task_id)
-                if a.get("kind") == "dev_manifest" and a.get("checkpoint_ref") == latest_commit and a.get("consumed")
-            ]
-            if consumed_devs:
+        doc_path = (self.root / doc_path_str).resolve()
+        if not str(doc_path).startswith(str(self.root.resolve())):
+            return None
+        if not doc_path.exists() or not doc_path.is_file():
+            return None
+
+        calc_sha = hashlib.sha256(doc_path.read_bytes()).hexdigest()
+        if calc_sha.lower() != str(doc_sha).lower():
+            return None
+
+        # 4. Validate executor attribution (Codex P1-04 / Claude P1-1 / Qwen P1-1)
+        exec_info = data.get("executor")
+        if not isinstance(exec_info, dict):
+            return None
+        exec_id = exec_info.get("id")
+        exec_cli = exec_info.get("cli")
+        if not exec_id or not exec_cli:
+            return None
+
+        raw_exec_cfg = self.raw_config.get("team", {}).get("executor", {}) if isinstance(self.raw_config.get("team"), dict) else {}
+        expected_exec_id = self.raw_config.get("executor_id") or raw_exec_cfg.get("id")
+        if not expected_exec_id and self.executor:
+            expected_exec_id = getattr(self.executor, "agent_id", None)
+
+        expected_exec_cli = raw_exec_cfg.get("cli")
+        if not expected_exec_cli and self.executor:
+            expected_exec_cli = getattr(self.executor, "cli_name", None)
+
+        if expected_exec_id and exec_id != expected_exec_id:
+            return None
+        if expected_exec_cli and exec_cli != expected_exec_cli:
+            return None
+
+        # 5. Check commit physically exists in git repository if git repo is present (PRD §2.1)
+        if self.git and self.git.is_git_repository():
+            if not self.git.commit_exists(latest_commit):
                 return None
 
-            # 5. Register artifact in StateStore (PRD §11.4 / P1-2)
-            try:
-                rel_path = str(dev_file.relative_to(self.root))
-            except Exception:
-                rel_path = ".macao/.dev.yml"
+        # 6. Rework gate & Checkpoint freshness & topology (PRD §2.1:216 / §3.3 E6:839 / Grok P1-1 / Codex P1-1)
+        if current_st == AgentState.REWORK:
+            prev_ref = task.get("checkpoint_ref")
+            if prev_ref:
+                if latest_commit == prev_ref:
+                    return None  # Rework requires a fresh commit different from previous review round
+                if self.git and self.git.is_git_repository():
+                    # Previous review checkpoint must be an ancestor of the new rework commit (strict topological progress)
+                    if not self.git.is_ancestor(prev_ref, latest_commit):
+                        return None
 
-            self.store.register_artifact(
-                task_id=task_id,
-                kind="dev_manifest",
-                checkpoint_ref=latest_commit,
-                review_round=rnd,
-                path=rel_path
-            )
+        # Check commit has not already been consumed as a dev_manifest for this task (PRD §2.1:216)
+        consumed_devs = [
+            a for a in self.store.list_artifacts(task_id)
+            if a.get("kind") == "dev_manifest" and a.get("checkpoint_ref") == latest_commit and a.get("consumed")
+        ]
+        if consumed_devs:
+            return None
 
-            # 6. Transition to READY_FOR_REVIEW (产物型转移)
-            trigger = "E6" if current_st == AgentState.REWORK else "E1_PRODUCED"
-            change = self.fsm.transition(
-                task_id,
-                AgentState.READY_FOR_REVIEW,
-                trigger,
-                detail={"latest_commit": latest_commit, "dev_manifest": data}
-            )
-            return change
+        # 7. Register artifact in StateStore (PRD §11.4 / P1-2)
+        try:
+            rel_path = str(dev_file.relative_to(self.root))
+        except Exception:
+            rel_path = ".macao/.dev.yml"
 
-        return None
+        self.store.register_artifact(
+            task_id=task_id,
+            kind="dev_manifest",
+            checkpoint_ref=latest_commit,
+            review_round=rnd,
+            path=rel_path
+        )
+
+        # 8. Transition to READY_FOR_REVIEW (产物型转移)
+        trigger = "E6" if current_st == AgentState.REWORK else "E1_PRODUCED"
+        change = self.fsm.transition(
+            task_id,
+            AgentState.READY_FOR_REVIEW,
+            trigger,
+            detail={"latest_commit": latest_commit, "dev_manifest": data}
+        )
+        return change
 
     def dispatch_review_requests(self, task_id: str) -> StateChange:
         """

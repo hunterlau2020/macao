@@ -27,8 +27,10 @@ class TransitionTable:
 
         valid_transitions = {
             "E1": (AgentState.IDLE, AgentState.CODING),
+            "E1_ADOPT": (AgentState.IDLE, AgentState.CODING),
             "E1_PRODUCED": (AgentState.CODING, AgentState.READY_FOR_REVIEW),
             "E2": (AgentState.READY_FOR_REVIEW, AgentState.WAITING_REVIEW),
+            "E2_ADOPT": (AgentState.IDLE, AgentState.WAITING_REVIEW),
             "E3": (AgentState.WAITING_REVIEW, AgentState.CONSENSUS_CHECK),
             "E4": (AgentState.CONSENSUS_CHECK, AgentState.MERGING),
             "E4a": (AgentState.MERGING, AgentState.DONE),

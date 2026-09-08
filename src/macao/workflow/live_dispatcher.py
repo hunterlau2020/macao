@@ -240,7 +240,8 @@ class LiveAgentDispatcher:
         checkpoint_ref: str,
         review_round: int,
         diff_context: str = "",
-        timeout_sec: float = 300.0
+        timeout_sec: float = 300.0,
+        acceptance_criteria: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         1. Reuses or creates isolated Git Worktree at .macao/worktrees/<agent_id>/<task_id>/r<round>
@@ -271,14 +272,17 @@ class LiveAgentDispatcher:
 
 
             # 2. Prepare review prompt and payload
+            crit_list = acceptance_criteria or []
             payload = {
                 "checkpoint_ref": checkpoint_ref,
                 "review_round": review_round,
                 "diff": diff_context,
+                "acceptance_criteria": crit_list,
                 "review_context": {
                     "task_id": task_id,
                     "checkpoint_ref": checkpoint_ref,
-                    "target_output": f".macao/.reviews/{agent_id}.review.yml"
+                    "target_output": f".macao/.reviews/{agent_id}.review.yml",
+                    "acceptance_criteria": crit_list
                 }
             }
 

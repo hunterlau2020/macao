@@ -2,6 +2,7 @@
 
 import os
 import yaml
+import hashlib
 import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable
@@ -125,7 +126,8 @@ class MockAgentAdapter(AgentAdapter):
         review_round: int = 1,
         tests_passed: bool = True,
         tests_exempt: bool = False,
-        signal: str = "EXPLICIT"
+        signal: str = "EXPLICIT",
+        task_id: Optional[str] = None
     ) -> Path:
         """Simulates Executor generating .macao/.dev.yml."""
         out_dir = Path(project_root) / ".macao"
@@ -133,10 +135,38 @@ class MockAgentAdapter(AgentAdapter):
         dev_file = out_dir / ".dev.yml"
         checkpoint_ref = commit_sha or "0000000000000000000000000000000000000000"
 
+        # Resolve task_id from state.db if not explicitly provided
+        effective_task_id = task_id
+        if effective_task_id is None:
+            try:
+                from macao.storage.store import StateStore
+                db_file = out_dir / "state.db"
+                if db_file.exists():
+                    st = StateStore(str(db_file), project_root=project_root)
+                    act = st.get_active_task()
+                    if act:
+                        effective_task_id = act["task_id"]
+            except Exception:
+                pass
+        if not effective_task_id:
+            effective_task_id = "task-mock"
+
+        # Create real mock review document so full_document exists and SHA matches
+        doc_dir = Path(project_root) / "docs" / "reviews"
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        doc_file = doc_dir / f"review-request-{checkpoint_ref[:8]}.md"
+        if not doc_file.exists():
+            doc_file.write_text(f"# Mock Review Request: {checkpoint_ref}\n\nCommit: {checkpoint_ref}\n", encoding="utf-8")
+        doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
+        try:
+            rel_doc_path = str(doc_file.relative_to(Path(project_root).resolve()))
+        except Exception:
+            rel_doc_path = f"docs/reviews/{doc_file.name}"
+
         data: Dict[str, Any] = {
             "version": "1.0",
             "timestamp": "2026-09-01T00:00:00Z",
-            "task_id": "task-mock",
+            "task_id": effective_task_id,
             "checkpoint_ref": checkpoint_ref,
             "review_round": review_round,
             "executor": {
@@ -145,9 +175,9 @@ class MockAgentAdapter(AgentAdapter):
                 "cli": self.cli_name
             },
             "full_document": {
-                "path": ".macao/.dev.yml",
+                "path": rel_doc_path,
                 "evidence_commit": checkpoint_ref,
-                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                "sha256": doc_sha
             },
             "development": {
                 "phase": "feature_complete",
