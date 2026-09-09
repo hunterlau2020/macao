@@ -737,6 +737,205 @@ class TestP1ClosuresAndRegressions(unittest.TestCase):
         self.assertIsNotNone(res)
         self.assertEqual(res.to_state, AgentState.READY_FOR_REVIEW)
 
+    # --- Round 4 / e06d44c Remediations ---
+
+    def test_checkpoint_sibling_directory_escape_rejected(self):
+        """Verify check_development_checkpoint rejects doc paths that share a prefix but reside in sibling directory (Codex P1-01 / Claude P1-1)."""
+        import yaml
+        self._init_git_repo()
+        self._write_config()
+        orch = Orchestrator(".", config={"version": "2.5", "team": {"executor": {"id": "dev-mock", "cli": "mock-cli"}, "reviewers": [{"id": "rev-mock", "cli": "mock-cli"}]}})
+        task = orch.start_task("Sibling Escape Test", "Verify sibling dirs blocked")
+        t_id = task["task_id"]
+
+        from macao.utils.git_utils import GitManager
+        git = GitManager(".")
+        head = git.get_head_commit()
+
+        # Create a sibling directory
+        sibling_dir = Path(self.tmpdir).parent / (Path(self.tmpdir).name + "_sibling")
+        sibling_dir.mkdir(parents=True, exist_ok=True)
+        sibling_file = sibling_dir / "evil.md"
+        sibling_file.write_text("evil content", encoding="utf-8")
+        evil_sha = hashlib.sha256(b"evil content").hexdigest()
+
+        try:
+            rel_path_to_sibling = os.path.relpath(sibling_file, self.tmpdir)
+            manifest = {
+                "version": "1.0",
+                "task_id": t_id,
+                "checkpoint_ref": head,
+                "full_document": {
+                    "path": rel_path_to_sibling,
+                    "evidence_commit": head,
+                    "sha256": evil_sha,
+                },
+                "status": "ready_for_review",
+                "signal": "EXPLICIT",
+                "review_round": 1,
+                "executor": {"id": "dev-mock", "cli": "mock-cli"},
+                "development": {
+                    "quality_metrics": {"tests_passed": True},
+                    "git": {"latest_commit": head}
+                }
+            }
+            dev_yml = Path(".macao/.dev.yml")
+            dev_yml.parent.mkdir(parents=True, exist_ok=True)
+            dev_yml.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+            res = orch.check_development_checkpoint(t_id)
+            self.assertIsNone(res, "Sibling directory escape must return None (fail closed)")
+        finally:
+            shutil.rmtree(sibling_dir, ignore_errors=True)
+
+    def test_checkpoint_empty_evidence_commit_rejected(self):
+        """Verify check_development_checkpoint rejects empty evidence_commit (Grok P2 / Codex P1-01)."""
+        import yaml
+        self._init_git_repo()
+        self._write_config()
+        orch = Orchestrator(".", config={"version": "2.5", "team": {"executor": {"id": "dev-mock", "cli": "mock-cli"}, "reviewers": [{"id": "rev-mock", "cli": "mock-cli"}]}})
+        task = orch.start_task("Empty Commit Test", "Verify empty evidence_commit rejected")
+        t_id = task["task_id"]
+
+        req_file = Path("docs/reviews/real_doc.md")
+        req_file.parent.mkdir(parents=True, exist_ok=True)
+        req_file.write_text("# Anti-Forgery Document\nContent verified.\n", encoding="utf-8")
+        true_sha = hashlib.sha256(req_file.read_bytes()).hexdigest()
+
+        from macao.utils.git_utils import GitManager
+        git = GitManager(".")
+        head = git.get_head_commit()
+
+        manifest = {
+            "version": "1.0",
+            "task_id": t_id,
+            "checkpoint_ref": head,
+            "full_document": {
+                "path": "docs/reviews/real_doc.md",
+                "evidence_commit": "",  # Empty evidence_commit
+                "sha256": true_sha,
+            },
+            "status": "ready_for_review",
+            "signal": "EXPLICIT",
+            "review_round": 1,
+            "executor": {"id": "dev-mock", "cli": "mock-cli"},
+            "development": {
+                "quality_metrics": {"tests_passed": True},
+                "git": {"latest_commit": head}
+            }
+        }
+        dev_yml = Path(".macao/.dev.yml")
+        dev_yml.parent.mkdir(parents=True, exist_ok=True)
+        dev_yml.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+    def test_checkpoint_git_blob_verification(self):
+        """Verify check_development_checkpoint validates git blob sha256 matches disk/manifest sha256 (Codex P1-01)."""
+        import yaml
+        self._init_git_repo()
+        self._write_config()
+        orch = Orchestrator(".", config={"version": "2.5", "team": {"executor": {"id": "dev-mock", "cli": "mock-cli"}, "reviewers": [{"id": "rev-mock", "cli": "mock-cli"}]}})
+        task = orch.start_task("Git Blob Test", "Verify git blob sha checked")
+        t_id = task["task_id"]
+
+        import subprocess
+        req_file = Path("docs/reviews/req_committed.md")
+        req_file.parent.mkdir(parents=True, exist_ok=True)
+        req_file.write_text("Committed content v1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "docs/reviews/req_committed.md"], check=True)
+        subprocess.run(["git", "commit", "-m", "docs: add req"], check=True)
+
+        from macao.utils.git_utils import GitManager
+        git = GitManager(".")
+        head = git.get_head_commit()
+
+        # Modify on disk after committing so disk != committed blob
+        req_file.write_text("Uncommitted mutation v2\n", encoding="utf-8")
+        disk_sha = hashlib.sha256(req_file.read_bytes()).hexdigest()
+
+        manifest = {
+            "version": "1.0",
+            "task_id": t_id,
+            "checkpoint_ref": head,
+            "full_document": {
+                "path": "docs/reviews/req_committed.md",
+                "evidence_commit": head,
+                "sha256": disk_sha,
+            },
+            "status": "ready_for_review",
+            "signal": "EXPLICIT",
+            "review_round": 1,
+            "executor": {"id": "dev-mock", "cli": "mock-cli"},
+            "development": {
+                "quality_metrics": {"tests_passed": True},
+                "git": {"latest_commit": head}
+            }
+        }
+        dev_yml = Path(".macao/.dev.yml")
+        dev_yml.parent.mkdir(parents=True, exist_ok=True)
+        dev_yml.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+        # Because disk modified after commit, committed git blob sha != disk_sha -> rejected!
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+
+        # Revert disk to match git blob
+        req_file.write_text("Committed content v1\n", encoding="utf-8")
+        blob_sha = hashlib.sha256(b"Committed content v1\n").hexdigest()
+        manifest["full_document"]["sha256"] = blob_sha
+        dev_yml.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+        res = orch.check_development_checkpoint(t_id)
+        self.assertIsNotNone(res)
+        self.assertEqual(res.to_state, AgentState.READY_FOR_REVIEW)
+
+    def test_cli_composition_root_wires_executor_adapter(self):
+        """Verify main.py get_orchestrator and Orchestrator.__init__ wire executor_adapter (Codex P1-02 / Claude P1-2)."""
+        self._init_git_repo()
+        self._write_config()
+
+        from macao.cli.main import get_orchestrator
+        orch = get_orchestrator(self.tmpdir)
+        self.assertIsNotNone(orch.executor, "Executor adapter must be instantiated and wired")
+        self.assertEqual(orch.executor.agent_id, "dev-mock")
+
+    def test_all_adapters_support_acceptance_criteria(self):
+        """Verify all AI CLI adapters render acceptance_criteria in execution prompts (Codex P1-02 / Claude P1-2 / Pi-Qwen P1-2)."""
+        from macao.adapter.claude import ClaudeCodeAdapter
+        from macao.adapter.codex import CodexAdapter
+        from macao.adapter.opencode import OpenCodeAdapter
+        from macao.adapter.antigravity import AntigravityAdapter
+        from macao.adapter.kimi import KimiAdapter
+        from macao.adapter.cursor import CursorAgentAdapter
+        from macao.adapter.pi import PiAdapter
+
+        adapters = [
+            ClaudeCodeAdapter(agent_id="claude-dev"),
+            CodexAdapter(agent_id="codex-dev"),
+            OpenCodeAdapter(agent_id="opencode-dev"),
+            AntigravityAdapter(agent_id="agy-dev"),
+            KimiAdapter(agent_id="kimi-dev"),
+            CursorAgentAdapter(agent_id="cursor-dev"),
+            PiAdapter(agent_id="pi-dev"),
+        ]
+
+        task_payload = {
+            "task_description": "Critical feature work",
+            "acceptance_criteria": ["MUST_PASS_CRITERION_ALPHA", "MUST_PASS_CRITERION_BETA"]
+        }
+
+        for adapter in adapters:
+            with self.subTest(adapter=adapter.__class__.__name__):
+                mock_session = MagicMock()
+                adapter.session = mock_session
+                adapter.is_running = True
+                ok = adapter.inject_task(task_payload)
+                self.assertTrue(ok)
+                mock_session.write_input.assert_called_once()
+                sent_prompt = mock_session.write_input.call_args[0][0]
+                self.assertIn("MUST_PASS_CRITERION_ALPHA", sent_prompt, f"{adapter.__class__.__name__} failed to include acceptance_criteria")
+                self.assertIn("MUST_PASS_CRITERION_BETA", sent_prompt, f"{adapter.__class__.__name__} failed to include acceptance_criteria")
+
 
 if __name__ == "__main__":
     unittest.main()

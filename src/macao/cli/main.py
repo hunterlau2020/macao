@@ -183,9 +183,17 @@ def get_orchestrator(project_root: str = ".") -> Orchestrator:
     if cfg_file.exists():
         config_dict = ConfigManager.load_config(str(cfg_file))
 
+    executor_adapter = None
+    if config_dict and isinstance(config_dict.get("team"), dict):
+        exec_cfg = config_dict["team"].get("executor")
+        if exec_cfg and isinstance(exec_cfg, dict):
+            from macao.workflow.live_dispatcher import LiveAgentDispatcher
+            executor_adapter = LiveAgentDispatcher.get_adapter_for_executor(exec_cfg, project_root)
+
     return Orchestrator(
         project_root=project_root,
-        config=config_dict
+        config=config_dict,
+        executor_adapter=executor_adapter
     )
 
 

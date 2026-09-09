@@ -72,7 +72,7 @@ class KimiAdapter(AgentAdapter):
         # If acting as Executor
         if self.config.get("role") == "executor" or "task_description" in task_payload:
             desc = task_payload.get("task_description", "")
-            criteria = task_payload.get("success_criteria", {})
+            criteria = task_payload.get("acceptance_criteria") or task_payload.get("success_criteria") or []
             prompt = (
                 f"TASK: {desc}\n"
                 f"Acceptance Criteria: {criteria}\n"

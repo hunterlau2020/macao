@@ -4,7 +4,7 @@
 - **申请日期 (Date)**: 2026-09-09
 - **申请人 (Author)**: MACAO Architecture & Engineering Team
 - **目标定级 (Target Level)**: **L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审**
-- **当前受审提交 (Checkpoint Ref)**: `e06d44c`（完整 SHA：`e06d44c77c688bb715bb997a3cf556bc91f6920f`）
+- **当前受审提交 (Checkpoint Ref)**: `e06d44c`（完整 SHA：`e06d44cb31a0dbcbe199e6bb124430e9701e087f`）
 - **合并审计范围 (Review Range)**: `7bc8d70..e06d44c`（涵盖提交 `972e0d0`、`080720c`、`e06d44c`）
 - **评审轮次 (Review Round)**: `Round 4`（`7bc8d70` 专家评审全员否决后的 P1/P2 全面闭环复审）
 - **关联任务 ID (Task ID)**: `task-20260909-checkpoint-antiforgery-adopt-e1-provider-support`

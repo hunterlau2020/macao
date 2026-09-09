@@ -1,0 +1,43 @@
+CKPT zero_hash: advanced=False trigger=None state=CODING
+CKPT missing_path: advanced=False trigger=None state=CODING
+CKPT empty_sha: advanced=False trigger=None state=CODING
+CKPT wrong_id: advanced=False trigger=None state=CODING
+CKPT wrong_cli: advanced=False trigger=None state=CODING
+CKPT tampered: advanced=False trigger=None state=CODING
+CKPT outside_path: advanced=False trigger=None state=CODING
+CKPT empty_evidence: advanced=True trigger=E1_PRODUCED state=READY_FOR_REVIEW
+CKPT missing_evidence: advanced=False trigger=None state=CODING
+CKPT unbound_evidence: advanced=False trigger=None state=CODING
+CKPT good: advanced=True trigger=E1_PRODUCED state=READY_FOR_REVIEW
+CKPT prefix_escape: advanced=True trigger=E1_PRODUCED state=READY_FOR_REVIEW
+ADOPT deadbeef: rc=1 e1=True success=False
+ADOPT deadbeef active=None
+ADOPT real: rc=0 out_ok=True
+ADOPT real state=WAITING_REVIEW audit=['TASK_ADOPTED', 'STATE_TRANSITION_E2_ADOPT']
+DOCTOR missing yaml: rc=2
+DISPATCHER acceptance_criteria wired=True
+L4 live_runner mock_cli+auto_signoff=True
+F26 claude no-cwd sessions=[]
+---- RESULTS ----
+OK zero_hash: actual=False expected=False
+OK missing_path: actual=False expected=False
+OK empty_sha: actual=False expected=False
+OK wrong_id: actual=False expected=False
+OK wrong_cli: actual=False expected=False
+OK tampered: actual=False expected=False
+OK outside_path: actual=False expected=False
+FAIL empty_evidence: actual=True expected=False
+OK missing_evidence: actual=False expected=False
+OK unbound_evidence: actual=False expected=False
+OK good: actual=True expected=True
+FAIL prefix_escape: actual=True expected=False
+OK adopt_deadbeef_blocked: actual=True expected=True
+OK adopt_deadbeef_no_active: actual=True expected=True
+OK adopt_real_waiting: actual=True expected=True
+OK adopt_fsm_e2: actual=True expected=True
+OK doctor_missing_yaml_nonzero: actual=True expected=True
+OK dispatcher_acceptance_in_payload: actual=True expected=True
+OK l4_still_mock: actual=True expected=True
+OK f26_claude_no_cwd: actual=True expected=True
+MISMATCH
+bad=empty_evidence,prefix_escape

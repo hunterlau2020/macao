@@ -70,6 +70,21 @@ class GitManager:
         code, stdout, _ = self._run("diff", f"{base_commit}..{head_commit}")
         return stdout if code == 0 else ""
 
+    def get_file_bytes_at_commit(self, commit: str, rel_path: str) -> Optional[bytes]:
+        """Returns raw bytes of a file at a specific git commit, or None if not found."""
+        try:
+            res = subprocess.run(
+                ["git", "show", f"{commit}:{rel_path}"],
+                cwd=str(self.repo_path),
+                capture_output=True,
+                check=False
+            )
+            if res.returncode == 0:
+                return res.stdout
+            return None
+        except Exception:
+            return None
+
     def get_diff_summary(self, base_commit: str, head_commit: str) -> Tuple[int, int, int]:
 
         """Returns (files_changed, insertions, deletions)."""

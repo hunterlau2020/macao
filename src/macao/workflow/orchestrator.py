@@ -89,9 +89,6 @@ class Orchestrator:
         self.vote_aggregator = VoteAggregator(str(self.root))
         self.merge_controller = MergeController(self.store, str(self.root))
 
-        self.executor = executor_adapter
-        self.reviewers = reviewer_adapters or []
-
         # Normalized configuration extraction (Single Truth)
         raw_config = config
         if raw_config is None and (self.root / "macao.yaml").exists():
@@ -100,6 +97,18 @@ class Orchestrator:
             except Exception:
                 raw_config = {}
         raw_config = raw_config or {}
+
+        if executor_adapter is not None:
+            self.executor = executor_adapter
+        elif raw_config and isinstance(raw_config.get("team"), dict):
+            exec_cfg = raw_config["team"].get("executor")
+            if exec_cfg and isinstance(exec_cfg, dict):
+                from macao.workflow.live_dispatcher import LiveAgentDispatcher
+                self.executor = LiveAgentDispatcher.get_adapter_for_executor(exec_cfg, str(self.root))
+        else:
+            self.executor = None
+
+        self.reviewers = reviewer_adapters or []
         policy = raw_config.get("policy", {})
 
         merge_policy = raw_config.get("merge", {})
@@ -396,21 +405,38 @@ class Orchestrator:
         if not doc_path_str or not doc_sha:
             return None
 
-        if evidence_commit and evidence_commit != latest_commit:
+        if not evidence_commit or evidence_commit != latest_commit:
             return None
 
         if not re.match(r"^[0-9a-fA-F]{64}$", str(doc_sha)) or str(doc_sha).lower() == "0" * 64:
             return None
 
         doc_path = (self.root / doc_path_str).resolve()
-        if not str(doc_path).startswith(str(self.root.resolve())):
+        try:
+            rel_doc_path = doc_path.relative_to(self.root.resolve())
+        except ValueError:
             return None
+
+        if not doc_path.is_relative_to(self.root.resolve()):
+            return None
+
         if not doc_path.exists() or not doc_path.is_file():
             return None
 
         calc_sha = hashlib.sha256(doc_path.read_bytes()).hexdigest()
         if calc_sha.lower() != str(doc_sha).lower():
             return None
+
+        # If file exists in git at evidence_commit, verify its blob content matches doc_sha
+        if self.git and self.git.is_git_repository():
+            rel_posix = rel_doc_path.as_posix()
+            code, _, _ = self.git._run("cat-file", "-e", f"{latest_commit}:{rel_posix}")
+            if code == 0:
+                blob_bytes = self.git.get_file_bytes_at_commit(latest_commit, rel_posix)
+                if blob_bytes is not None:
+                    calc_blob_sha = hashlib.sha256(blob_bytes).hexdigest()
+                    if calc_blob_sha.lower() != str(doc_sha).lower():
+                        return None
 
         # 4. Validate executor attribution (Codex P1-04 / Claude P1-1 / Qwen P1-1)
         exec_info = data.get("executor")
