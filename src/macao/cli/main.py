@@ -188,7 +188,12 @@ def get_orchestrator(project_root: str = ".") -> Orchestrator:
         exec_cfg = config_dict["team"].get("executor")
         if exec_cfg and isinstance(exec_cfg, dict):
             from macao.workflow.live_dispatcher import LiveAgentDispatcher
-            executor_adapter = LiveAgentDispatcher.get_adapter_for_executor(exec_cfg, project_root)
+            try:
+                executor_adapter = LiveAgentDispatcher.get_adapter_for_executor(exec_cfg, project_root)
+            except ValueError as e:
+                console.print(f"[bold red]Configuration Error:[/bold red] {e}")
+                click.echo(f"Configuration Error: {e}")
+                sys.exit(1)
 
     return Orchestrator(
         project_root=project_root,
@@ -732,6 +737,11 @@ def task_checkpoint(auto: bool, review: bool, timeout: float, test_cmd: Optional
         req_doc.parent.mkdir(parents=True, exist_ok=True)
         if not req_doc.exists():
             req_doc.write_text(f"# Review Request: {active.get('title', task_id)}\n\nCommit: {head_commit}\n", encoding="utf-8")
+
+        if git.is_git_repository():
+            git._run("add", str(req_doc))
+            git._run("commit", "-m", f"docs(reviews): auto-commit review request for {task_id}")
+            head_commit = git.get_head_commit()
 
         raw_exec_cfg = orchestrator.raw_config.get("team", {}).get("executor", {}) if isinstance(orchestrator.raw_config.get("team"), dict) else {}
         exec_id = raw_exec_cfg.get("id") or orchestrator.config.get("executor_id", "dev-claude")

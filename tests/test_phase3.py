@@ -188,14 +188,14 @@ timeouts:
             t_id = task["task_id"]
 
             (proj / "code.py").write_text("print(1)", encoding="utf-8")
-            subprocess.run(["git", "add", "code.py"], cwd=str(proj), check=True)
-            subprocess.run(["git", "commit", "-m", "add code"], cwd=str(proj), check=True, capture_output=True)
-            head = daemon.orchestrator.git.get_head_commit()
-
             (proj / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
             doc_file = proj / "docs" / "reviews" / "req.md"
             doc_file.write_text("# Review Request\n", encoding="utf-8")
             doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
+
+            subprocess.run(["git", "add", "code.py", "docs/reviews/req.md"], cwd=str(proj), check=True)
+            subprocess.run(["git", "commit", "-m", "add code and review req"], cwd=str(proj), check=True, capture_output=True)
+            head = daemon.orchestrator.git.get_head_commit()
             (proj / ".macao").mkdir(parents=True, exist_ok=True)
             (proj / ".macao" / ".dev.yml").write_text(yaml.safe_dump({
                 "version": "1.0", "status": "ready_for_review", "signal": "EXPLICIT",
@@ -392,14 +392,14 @@ opinion:
 
             subprocess.run(["git", "checkout", "-b", "feat/test"], cwd=str(proj), check=True, capture_output=True)
             (proj / "file.txt").write_text("new content", encoding="utf-8")
-            subprocess.run(["git", "add", "file.txt"], cwd=str(proj), check=True)
-            subprocess.run(["git", "commit", "-m", "feat: file"], cwd=str(proj), check=True, capture_output=True)
-            dev_commit = orch.git.get_head_commit()
-
             (proj / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
             doc_file = proj / "docs" / "reviews" / "req.md"
             doc_file.write_text("# Review Request\n", encoding="utf-8")
             doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
+
+            subprocess.run(["git", "add", "file.txt", "docs/reviews/req.md"], cwd=str(proj), check=True)
+            subprocess.run(["git", "commit", "-m", "feat: file and review req"], cwd=str(proj), check=True, capture_output=True)
+            dev_commit = orch.git.get_head_commit()
             (proj / ".macao").mkdir(parents=True, exist_ok=True)
             (proj / ".macao" / ".dev.yml").write_text(yaml.safe_dump({
                 "version": "1.0", "status": "ready_for_review", "signal": "EXPLICIT",
@@ -607,14 +607,14 @@ security:
             # Development commit on branch
             subprocess.run(["git", "checkout", "-b", "feature/ops"], cwd=tmpdir, check=True, capture_output=True)
             (Path(tmpdir) / "ops.txt").write_text("ops data\n")
-            subprocess.run(["git", "add", "ops.txt"], cwd=tmpdir, check=True)
-            subprocess.run(["git", "commit", "-m", "feat: ops commit"], cwd=tmpdir, check=True)
-            dev_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
-
             (Path(tmpdir) / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
             doc_file = Path(tmpdir) / "docs" / "reviews" / "req.md"
             doc_file.write_text("# Review Request\n", encoding="utf-8")
             doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
+
+            subprocess.run(["git", "add", "ops.txt", "docs/reviews/req.md"], cwd=tmpdir, check=True)
+            subprocess.run(["git", "commit", "-m", "feat: ops commit and review req"], cwd=tmpdir, check=True)
+            dev_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"

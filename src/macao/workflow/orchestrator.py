@@ -427,16 +427,18 @@ class Orchestrator:
         if calc_sha.lower() != str(doc_sha).lower():
             return None
 
-        # If file exists in git at evidence_commit, verify its blob content matches doc_sha
+        # In a git repository, the document MUST exist at evidence_commit and its blob content MUST match doc_sha (Codex P1-bdc177e-01 / Fail-closed)
         if self.git and self.git.is_git_repository():
             rel_posix = rel_doc_path.as_posix()
             code, _, _ = self.git._run("cat-file", "-e", f"{latest_commit}:{rel_posix}")
-            if code == 0:
-                blob_bytes = self.git.get_file_bytes_at_commit(latest_commit, rel_posix)
-                if blob_bytes is not None:
-                    calc_blob_sha = hashlib.sha256(blob_bytes).hexdigest()
-                    if calc_blob_sha.lower() != str(doc_sha).lower():
-                        return None
+            if code != 0:
+                return None
+            blob_bytes = self.git.get_file_bytes_at_commit(latest_commit, rel_posix)
+            if blob_bytes is None:
+                return None
+            calc_blob_sha = hashlib.sha256(blob_bytes).hexdigest()
+            if calc_blob_sha.lower() != str(doc_sha).lower():
+                return None
 
         # 4. Validate executor attribution (Codex P1-04 / Claude P1-1 / Qwen P1-1)
         exec_info = data.get("executor")

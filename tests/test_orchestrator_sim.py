@@ -50,7 +50,11 @@ class TestOrchestratorSimulation(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _make_commit(self, msg: str = "feat: test commit") -> str:
-        subprocess.run(["git", "commit", "--allow-empty", "-m", msg], cwd=self.tmpdir, check=True, capture_output=True)
+        doc_dir = Path(self.tmpdir) / "docs" / "reviews"
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        (doc_dir / "req.md").write_text(f"# Review Request: {msg}\n", encoding="utf-8")
+        subprocess.run(["git", "add", "docs/reviews/req.md"], cwd=self.tmpdir, check=True)
+        subprocess.run(["git", "commit", "-m", msg], cwd=self.tmpdir, check=True, capture_output=True)
         res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.tmpdir, capture_output=True, text=True, check=True)
         return res.stdout.strip()
 

@@ -151,17 +151,34 @@ class MockAgentAdapter(AgentAdapter):
         if not effective_task_id:
             effective_task_id = "task-mock"
 
-        # Create real mock review document so full_document exists and SHA matches
-        doc_dir = Path(project_root) / "docs" / "reviews"
-        doc_dir.mkdir(parents=True, exist_ok=True)
-        doc_file = doc_dir / f"review-request-{checkpoint_ref[:8]}.md"
-        if not doc_file.exists():
-            doc_file.write_text(f"# Mock Review Request: {checkpoint_ref}\n\nCommit: {checkpoint_ref}\n", encoding="utf-8")
-        doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
-        try:
-            rel_doc_path = str(doc_file.relative_to(Path(project_root).resolve()))
-        except Exception:
-            rel_doc_path = f"docs/reviews/{doc_file.name}"
+        # Check if there is an existing committed review document at checkpoint_ref in a git repository
+        rel_doc_path = None
+        doc_file = None
+        doc_sha = None
+        if (Path(project_root) / ".git").exists() and checkpoint_ref:
+            import subprocess
+            res = subprocess.run(
+                ["git", "ls-tree", "-r", "--name-only", checkpoint_ref, "docs/reviews/"],
+                cwd=project_root, capture_output=True, text=True
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                rel_doc_path = res.stdout.strip().splitlines()[0]
+                doc_file = Path(project_root) / rel_doc_path
+                if doc_file.exists():
+                    doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
+
+        if not rel_doc_path or not doc_sha:
+            # Create real mock review document so full_document exists and SHA matches
+            doc_dir = Path(project_root) / "docs" / "reviews"
+            doc_dir.mkdir(parents=True, exist_ok=True)
+            doc_file = doc_dir / f"review-request-{checkpoint_ref[:8]}.md"
+            if not doc_file.exists():
+                doc_file.write_text(f"# Mock Review Request: {checkpoint_ref}\n\nCommit: {checkpoint_ref}\n", encoding="utf-8")
+            doc_sha = hashlib.sha256(doc_file.read_bytes()).hexdigest()
+            try:
+                rel_doc_path = str(doc_file.relative_to(Path(project_root).resolve()))
+            except Exception:
+                rel_doc_path = f"docs/reviews/{doc_file.name}"
 
         data: Dict[str, Any] = {
             "version": "1.0",

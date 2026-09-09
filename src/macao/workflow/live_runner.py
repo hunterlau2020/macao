@@ -98,16 +98,16 @@ class LiveWorkflowRunner:
         src_file.parent.mkdir(parents=True, exist_ok=True)
         src_file.write_text("def add(a, b):\n    return a + b\n\ndef multiply(a, b):\n    return a * b\n", encoding="utf-8")
 
-        subprocess.run(["git", "add", "src/math_lib.py"], cwd=str(self.workspace), check=True)
-        subprocess.run(["git", "commit", "-m", "feat: implement math operations"], cwd=str(self.workspace), capture_output=True, text=True, check=True)
-        dev_commit = self.git.get_head_commit()
-        steps_log.append({"step": "2. Development Commit", "details": f"commit={dev_commit[:8]}, branch=feature/calc-live", "status": "OK"})
-
         # Create valid physical review request document and valid .dev.yml (Codex P1-04)
         req_doc = self.workspace / "docs" / "reviews" / "req.md"
         req_doc.parent.mkdir(parents=True, exist_ok=True)
-        req_doc.write_text(f"# Review Request: Live Cycle {task_id}\n\nEvidence Commit: {dev_commit}\n", encoding="utf-8")
+        req_doc.write_text(f"# Review Request: Live Cycle {task_id}\n\nEvidence Commit: feature/calc-live\n", encoding="utf-8")
+
+        subprocess.run(["git", "add", "src/math_lib.py", "docs/reviews/req.md"], cwd=str(self.workspace), check=True)
+        subprocess.run(["git", "commit", "-m", "feat: implement math operations and review request"], cwd=str(self.workspace), capture_output=True, text=True, check=True)
+        dev_commit = self.git.get_head_commit()
         req_sha256 = hashlib.sha256(req_doc.read_bytes()).hexdigest()
+        steps_log.append({"step": "2. Development Commit", "details": f"commit={dev_commit[:8]}, branch=feature/calc-live", "status": "OK"})
 
         dev_manifest = {
             "version": "1.0",

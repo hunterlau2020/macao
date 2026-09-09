@@ -169,8 +169,13 @@ merge:
             encoding="utf-8"
         )
 
+        # Prepare review request document for checkpoint
+        doc_dir = self.repo_dir / "docs" / "reviews"
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        (doc_dir / "req.md").write_text("# Review Request: Implement add and subtract\n", encoding="utf-8")
+
         # Commit code to produce checkpoint_ref
-        subprocess.run(["git", "add", "src/", "tests/"], cwd=str(self.repo_dir), check=True)
+        subprocess.run(["git", "add", "src/", "tests/", "docs/reviews/req.md"], cwd=str(self.repo_dir), check=True)
         subprocess.run(["git", "commit", "-m", "feat: implement add and subtract functions with unit tests"], cwd=str(self.repo_dir), check=True)
 
         res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.repo_dir), capture_output=True, text=True, check=True)

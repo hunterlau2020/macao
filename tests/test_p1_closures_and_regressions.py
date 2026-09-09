@@ -596,6 +596,8 @@ class TestP1ClosuresAndRegressions(unittest.TestCase):
 
         from macao.utils.git_utils import GitManager
         git = GitManager(".")
+        git._run("add", str(req_file))
+        git._run("commit", "-m", "docs: add req")
         head = git.get_head_commit()
 
         # Tampered SHA256 -> check_development_checkpoint returns None
@@ -653,6 +655,8 @@ class TestP1ClosuresAndRegressions(unittest.TestCase):
         true_sha = hashlib.sha256(req_file.read_bytes()).hexdigest()
 
         git = GitManager(".")
+        git._run("add", str(req_file))
+        git._run("commit", "-m", "docs: add real_doc")
         head = git.get_head_commit()
 
         dev_yml = Path(".macao/.dev.yml")
@@ -935,6 +939,141 @@ class TestP1ClosuresAndRegressions(unittest.TestCase):
                 sent_prompt = mock_session.write_input.call_args[0][0]
                 self.assertIn("MUST_PASS_CRITERION_ALPHA", sent_prompt, f"{adapter.__class__.__name__} failed to include acceptance_criteria")
                 self.assertIn("MUST_PASS_CRITERION_BETA", sent_prompt, f"{adapter.__class__.__name__} failed to include acceptance_criteria")
+
+    def test_checkpoint_uncommitted_or_untracked_evidence_rejected(self):
+        """Verify check_development_checkpoint rejects untracked documents or documents missing from declared commit (Codex P1-bdc177e-01)."""
+        import yaml
+        self._init_git_repo()
+        self._write_config()
+        orch = Orchestrator(".", config={"version": "2.5", "team": {"executor": {"id": "dev-mock", "cli": "mock-cli"}, "reviewers": [{"id": "rev-mock", "cli": "mock-cli"}]}})
+        task = orch.start_task("Untracked Doc Test", "Verify untracked doc rejected")
+        t_id = task["task_id"]
+
+        from macao.utils.git_utils import GitManager
+        git = GitManager(".")
+        head1 = git.get_head_commit()
+
+        # 1. Untracked file created on disk after HEAD1
+        untracked = Path("docs/reviews/untracked_evidence.md")
+        untracked.parent.mkdir(parents=True, exist_ok=True)
+        untracked.write_text("# Untracked Evidence\nNot committed yet.\n", encoding="utf-8")
+        untracked_sha = hashlib.sha256(untracked.read_bytes()).hexdigest()
+
+        manifest = {
+            "version": "1.0",
+            "task_id": t_id,
+            "checkpoint_ref": head1,
+            "full_document": {
+                "path": "docs/reviews/untracked_evidence.md",
+                "evidence_commit": head1,
+                "sha256": untracked_sha,
+            },
+            "status": "ready_for_review",
+            "signal": "EXPLICIT",
+            "review_round": 1,
+            "executor": {"id": "dev-mock", "cli": "mock-cli"},
+            "development": {
+                "quality_metrics": {"tests_passed": True},
+                "git": {"latest_commit": head1}
+            }
+        }
+        dev_yml = Path(".macao/.dev.yml")
+        dev_yml.parent.mkdir(parents=True, exist_ok=True)
+        dev_yml.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+        # Untracked document must be rejected: stays in CODING
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+        self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CODING.value)
+
+        # 2. Document committed in subsequent commit (HEAD2), but manifest declares HEAD1
+        git._run("add", str(untracked))
+        git._run("commit", "-m", "docs: commit evidence in HEAD2")
+        head2 = git.get_head_commit()
+        self.assertNotEqual(head1, head2)
+
+        # Evidence document does not exist at HEAD1 -> must be rejected
+        manifest["checkpoint_ref"] = head1
+        manifest["full_document"]["evidence_commit"] = head1
+        manifest["development"]["git"]["latest_commit"] = head1
+        dev_yml.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+        self.assertIsNone(orch.check_development_checkpoint(t_id))
+        self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.CODING.value)
+
+        # 3. Document correctly exists at declared evidence_commit (HEAD2) with matching SHA
+        manifest["checkpoint_ref"] = head2
+        manifest["full_document"]["evidence_commit"] = head2
+        manifest["development"]["git"]["latest_commit"] = head2
+        dev_yml.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+        res = orch.check_development_checkpoint(t_id)
+        self.assertIsNotNone(res)
+        self.assertEqual(res.to_state, AgentState.READY_FOR_REVIEW)
+        self.assertEqual(orch.store.get_task(t_id)["state"], AgentState.READY_FOR_REVIEW.value)
+
+    def test_task_create_no_probe_unknown_executor_fails_closed(self):
+        """Verify task create --no-probe with unknown executor fails fast and produces zero state mutations (Codex P1-bdc177e-02)."""
+        import yaml
+        from click.testing import CliRunner
+        from macao.cli.main import cli
+        from macao.storage.db import reset_db_manager
+
+        from macao.cli.main import DEFAULT_CONFIG_TEMPLATE
+        self._init_git_repo()
+        cfg = DEFAULT_CONFIG_TEMPLATE.replace('cli: "claude-code"', 'cli: "completely-unknown-cli-xyz"', 1)
+        Path("macao.yaml").write_text(cfg, encoding="utf-8")
+        reset_db_manager()
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["task", "create", "--no-probe", "--title", "Unknown Exec Task", "--acceptance", "req"])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("completely-unknown-cli-xyz", result.output)
+
+        # Verify 0 tasks created in state.db
+        db_path = Path(".macao/state.db")
+        if db_path.exists():
+            from macao.storage.store import StateStore
+            st = StateStore(str(db_path))
+            self.assertIsNone(st.get_active_task())
+
+    def test_all_adapters_reviewer_prompt_includes_acceptance_criteria(self):
+        """Verify all 7 AI CLI adapters include acceptance criteria in REVIEW_REQUEST prompts (Grok P2-3)."""
+        from macao.adapter.claude import ClaudeCodeAdapter
+        from macao.adapter.codex import CodexAdapter
+        from macao.adapter.opencode import OpenCodeAdapter
+        from macao.adapter.antigravity import AntigravityAdapter
+        from macao.adapter.kimi import KimiAdapter
+        from macao.adapter.cursor import CursorAgentAdapter
+        from macao.adapter.pi import PiAdapter
+
+        adapters = [
+            ClaudeCodeAdapter(agent_id="claude-rev", config={"role": "reviewer", "isolated_worktree_path": "/tmp/wt"}),
+            CodexAdapter(agent_id="codex-rev", config={"role": "reviewer", "isolated_worktree_path": "/tmp/wt"}),
+            OpenCodeAdapter(agent_id="opencode-rev", config={"role": "reviewer", "isolated_worktree_path": "/tmp/wt"}),
+            AntigravityAdapter(agent_id="agy-rev", config={"role": "reviewer", "isolated_worktree_path": "/tmp/wt"}),
+            KimiAdapter(agent_id="kimi-rev", config={"role": "reviewer", "isolated_worktree_path": "/tmp/wt"}),
+            CursorAgentAdapter(agent_id="cursor-rev", config={"role": "reviewer", "isolated_worktree_path": "/tmp/wt"}),
+            PiAdapter(agent_id="pi-rev", config={"role": "reviewer", "isolated_worktree_path": "/tmp/wt"}),
+        ]
+
+        review_payload = {
+            "checkpoint_ref": "c1a2b3c4d5",
+            "review_round": 1,
+            "acceptance_criteria": ["REV_CRITERION_ALPHA", "REV_CRITERION_BETA"],
+            "diff": "+line added\n-line removed"
+        }
+
+        for adapter in adapters:
+            with self.subTest(adapter=adapter.__class__.__name__):
+                mock_session = MagicMock()
+                adapter.session = mock_session
+                adapter.is_running = True
+                ok = adapter.inject_task(review_payload)
+                self.assertTrue(ok)
+                mock_session.write_input.assert_called_once()
+                sent_prompt = mock_session.write_input.call_args[0][0]
+                self.assertIn("REVIEW_REQUEST:", sent_prompt)
+                self.assertIn("Acceptance Criteria:", sent_prompt)
+                self.assertIn("REV_CRITERION_ALPHA", sent_prompt, f"{adapter.__class__.__name__} failed to include acceptance_criteria in review prompt")
+                self.assertIn("REV_CRITERION_BETA", sent_prompt, f"{adapter.__class__.__name__} failed to include acceptance_criteria in review prompt")
 
 
 if __name__ == "__main__":

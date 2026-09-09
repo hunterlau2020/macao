@@ -84,7 +84,8 @@ class TestP0P1Rectification(unittest.TestCase):
             subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "README.md").write_text("# Test\n")
-            subprocess.run(["git", "add", "README.md"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
 
@@ -96,7 +97,6 @@ class TestP0P1Rectification(unittest.TestCase):
             t_id = task["task_id"]
 
             # Simulate dev manifest & dispatch
-            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -183,7 +183,8 @@ development:
             subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "README.md").write_text("# Test\n")
-            subprocess.run(["git", "add", "README.md"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
 
@@ -194,7 +195,6 @@ development:
             task = orch.start_task("Timeout 3Rev Task", "Test 3Rev Timeout Handling")
             t_id = task["task_id"]
 
-            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -281,7 +281,8 @@ development:
             subprocess.run(["git", "config", "user.name", "Bot"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "bot@test.dev"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "README.md").write_text("# Test\n")
-            subprocess.run(["git", "add", "README.md"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.strip()
 
@@ -292,7 +293,6 @@ development:
             task = orch.start_task("Poll Overflow Task", "Test Robust Query")
             t_id = task["task_id"]
 
-            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1021,7 +1021,8 @@ merge:
             subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
-            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -1036,7 +1037,6 @@ merge:
             t_id = task["task_id"]
 
             # Dispatch generation 1
-            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1132,7 +1132,8 @@ development:
             subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
-            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -1146,7 +1147,6 @@ development:
             task = orch.start_task("E9 Repeated Timeout Task", "Testing repeated timeout detection")
             t_id = task["task_id"]
 
-            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1203,7 +1203,8 @@ development:
             subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
-            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -1211,7 +1212,6 @@ development:
             task = orch.start_task("Multi-Gen Archive Task", "Testing non-destructive archiving")
             t_id = task["task_id"]
 
-            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1314,7 +1314,8 @@ development:
             subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
-            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -1322,7 +1323,6 @@ development:
             task = orch.start_task("Clean Vote File Task", "Testing active vote_result cleanup")
             t_id = task["task_id"]
 
-            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1367,7 +1367,8 @@ development:
             subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
-            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -1375,7 +1376,6 @@ development:
             task = orch.start_task("Idempotency Task", "Testing LATE_REVIEW_ISOLATED idempotency")
             t_id = task["task_id"]
 
-            doc_sha = _setup_review_doc(tmpdir)
             (Path(tmpdir) / ".macao").mkdir(parents=True, exist_ok=True)
             (Path(tmpdir) / ".macao" / ".dev.yml").write_text(f"""version: "1.0"
 task_id: "{t_id}"
@@ -1431,7 +1431,8 @@ development:
             subprocess.run(["git", "config", "user.name", "TestUser"], cwd=tmpdir, check=True)
             subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, check=True)
             (Path(tmpdir) / "init.txt").write_text("initial commit\n", encoding="utf-8")
-            subprocess.run(["git", "add", "init.txt"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True, capture_output=True)
             head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -1612,7 +1613,8 @@ development:
             head_r0 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
 
             (Path(tmpdir) / "r1.txt").write_text("round 1 code\n", encoding="utf-8")
-            subprocess.run(["git", "add", "r1.txt"], cwd=tmpdir, check=True)
+            doc_sha = _setup_review_doc(tmpdir)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "feat: round 1 code"], cwd=tmpdir, check=True, capture_output=True)
             head_r1 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
             self.assertNotEqual(head_r0, head_r1)
@@ -1625,7 +1627,6 @@ development:
             dev_path = Path(tmpdir) / ".macao" / ".dev.yml"
 
             # Round 1: produce dev.yml and dispatch reviews
-            doc_sha = _setup_review_doc(tmpdir)
             dev_path.write_text(f"""version: "1.0"
 task_id: "{t_id}"
 checkpoint_ref: "{head_r1}"
@@ -1799,6 +1800,7 @@ development:
             subprocess.run(["git", "config", "user.name", "Macao Test"], cwd=tmpdir, check=True)
             init_file = Path(tmpdir) / "README.md"
             init_file.write_text("initial", encoding="utf-8")
+            doc_sha = _setup_review_doc(tmpdir)
             subprocess.run(["git", "add", "."], cwd=tmpdir, check=True)
             subprocess.run(["git", "commit", "-m", "init"], cwd=tmpdir, check=True)
             head_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmpdir, check=True, capture_output=True, text=True).stdout.strip()
@@ -1824,7 +1826,6 @@ development:
             task = orch.start_task("Issue Triage Task", "Testing E4 disposition guard")
             t_id = task["task_id"]
 
-            doc_sha = _setup_review_doc(tmpdir)
             dev_dir = Path(tmpdir) / ".macao"
             dev_dir.mkdir(parents=True, exist_ok=True)
             (dev_dir / ".dev.yml").write_text(f"""version: "1.0"

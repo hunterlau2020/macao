@@ -281,7 +281,7 @@ class LiveAgentDispatcher:
             from macao.adapter.kimi import KimiAdapter
             return KimiAdapter(agent_id=agent_id, config=adapter_config)
         else:
-            return None
+            raise ValueError(f"Unknown or unsupported CLI executor type: '{cli_type}' (Fail-closed)")
 
     def dispatch_review_in_worktree(
         self,
