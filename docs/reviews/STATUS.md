@@ -3,27 +3,28 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-10（登记 Commit `bdc177e` 第 5 轮处置单 `2026-09-10-disposition-bdc177e.md` 与 4 份专家评审报告，总计结论类 **163 份**（159 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **46 份**、处置单 **5 份**，总计 215 份，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-10（提请 Commit `51fa456` 第 6 轮终审申请 [`2026-09-10-review-request-51fa456.md`](2026-09-10-review-request-51fa456.md)，登记 Commit `bdc177e` 第 5 轮处置单 `2026-09-10-disposition-bdc177e.md` 与 4 份专家评审报告，总计结论类 **163 份**（159 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **47 份**、处置单 **5 份**，总计 216 份，双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **综合编排与探活轨（`bdc177e` 轮返工整改完成，发起 Round 6 终审；173 项测试全绿）**：
-    1. [`2026-09-10-disposition-bdc177e.md`](2026-09-10-disposition-bdc177e.md) → 本轮处置与闭环报告（受审提交 **`bdc177e`**，彻底闭环 Git Blob 严格归档防伪、未知 executor CLI 组合根拦截与全适配器验收准则透传）
-    2. [`2026-09-09-review-request-bdc177e.md`](2026-09-09-review-request-bdc177e.md) → 前序复审申请（受审提交 **`bdc177e`**）
-    3. 前序四方独立评审结论（共识仲裁：待返工 REWORK / 3 票批准，1 票否决，遵循 Fail-Closed 原则闭环）：
+  - **综合编排与探活轨（`51fa456` 轮 Round 6 终审提请中；173 项测试全绿）**：
+    1. [`2026-09-10-review-request-51fa456.md`](2026-09-10-review-request-51fa456.md) → 最新复审申请（受审提交 **`51fa456`**，闭环未提交证据强校验、组合根 Fail-Closed 与全审查员准则透传）
+    2. [`2026-09-10-disposition-bdc177e.md`](2026-09-10-disposition-bdc177e.md) → 本轮处置与闭环报告（受审提交 **`bdc177e`**，彻底闭环 Git Blob 严格归档防伪、未知 executor CLI 组合根拦截与全适配器验收准则透传）
+    3. [`2026-09-09-review-request-bdc177e.md`](2026-09-09-review-request-bdc177e.md) → 前序复审申请（受审提交 **`bdc177e`**）
+    4. 前序四方独立评审结论（共识仲裁：待返工 REWORK / 3 票批准，1 票否决，遵循 Fail-Closed 原则闭环）：
        - [`2026-09-09-review-result-bdc177e-claude.md`](2026-09-09-review-result-bdc177e-claude.md) → **YES_APPROVE**（0 P0, 0 P1, 1 P2；未跟踪证据已在本次整改彻底闭环）
        - [`2026-09-09-review-result-bdc177e-grok.md`](2026-09-09-review-result-bdc177e-grok.md) → **YES_APPROVE**（0 P0, 0 P1, 3 P2；未跟踪证据、未知 CLI、审查员准则已彻底闭环）
        - [`2026-09-09-review-result-bdc177e-pi-qwen.md`](2026-09-09-review-result-bdc177e-pi-qwen.md) → **YES_APPROVE**（0 P0, 0 P1，附 2 项绑定条件；已知简化已在本文完整登记，未提交证据已在代码彻底闭环）
        - [`2026-09-10-review-result-bdc177e-codex.md`](2026-09-10-review-result-bdc177e-codex.md) → **REJECT**（2 项 P1：未存在于 evidence_commit 的正文仍可推进、未知 executor 静默降级为 None 且 --no-probe 创建 CODING 任务；均已通过代码与回归测试彻底闭环）
-    4. [`2026-09-09-disposition-e06d44c.md`](2026-09-09-disposition-e06d44c.md) → 历史处置报告（受审提交 **`e06d44c`**）
-    5. [`2026-09-09-review-request-e06d44c.md`](2026-09-09-review-request-e06d44c.md) → 历史复审申请（受审提交 **`e06d44c`**）
-    6. [`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md) → 历史处置报告（`7bc8d70`）
-    7. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 历史复审申请（`7bc8d70`）
-    8. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 历史处置报告（`961bcfe`）
-    9. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 历史复审申请（`961bcfe`）
-    10. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`）
+    5. [`2026-09-09-disposition-e06d44c.md`](2026-09-09-disposition-e06d44c.md) → 历史处置报告（受审提交 **`e06d44c`**）
+    6. [`2026-09-09-review-request-e06d44c.md`](2026-09-09-review-request-e06d44c.md) → 历史复审申请（受审提交 **`e06d44c`**）
+    7. [`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md) → 历史处置报告（`7bc8d70`）
+    8. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 历史复审申请（`7bc8d70`）
+    9. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 历史处置报告（`961bcfe`）
+    10. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 历史复审申请（`961bcfe`）
+    11. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`）
   - **文档轨（前序申请）**：[`2026-09-04-review-request-95b7b35.md`](2026-09-04-review-request-95b7b35.md)（目标 L1 / PG-0，被审提交 `95b7b35`）
   - **历史代码轨（已被本轮合并涵盖）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md)（目标 L4 / PG-3，被审提交 `42b5c07`）
 - **当前定级状态**：
-  - **综合编排与代码轨**：维持既有编排引擎 **L3 SCENARIO-VERIFIED / PG-2**（`4e38ed6` 轮）；`bdc177e` 轮共识仲裁为 **REWORK**，经本次整改彻底闭环所有阻断项，测试增至 173 项全绿，提请 Round 6 终审认证。
+  - **综合编排与代码轨**：维持既有编排引擎 **L3 SCENARIO-VERIFIED / PG-2**（`4e38ed6` 轮）；`bdc177e` 轮共识仲裁为 **REWORK**，经 `51fa456` 彻底闭环所有阻断项，测试增至 173 项全绿，提请 Round 6 终审认证。
   - **文档体系定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
 
 ---
@@ -38,6 +39,26 @@
 | `ci_gate_command: null` | `macao.yaml` 策略配置中 CI 门禁命令允许配置为 `null`（不强制配置外部 CI） | 当前本地离线单机运行环境无常驻外部 CI Runner，测试依赖本地单元测试探针与验证命令 | Round 2 (`961bcfe`) | 本地内置轻量门禁探针或标准容器化测试执行器兜底 | `v2.6.0-rc1` |
 | `immutable=1` 陈旧读 (Stale Read under Live WAL) | `probe` SQLite 只读连接使用 `immutable=1` 规避 sidecar，写者持有未 checkpoint WAL 期间静默读到旧快照 | 探活为严格只读诊断，杜绝生成 `-wal`/`-shm` 物理副作用文件；决策路径与写入均使用标准 RW 连接，不影响系统状态一致性 | Round 5 (`bdc177e`) | 增加 WAL 存在性与未 checkpoint 状态检测，发现时标注 `state_store: STALE(WAL_PRESENT)` 或安全复制临时库读取 | `v2.6.0` |
 | `task checkpoint --auto` 辅助草稿生成边界 | `macao task checkpoint --auto` 命令由 CLI 辅助生成最小 review request 骨架与 `.dev.yml` 模板并自动提交 | 供开发演练与自动化测试快速闭环；正式环境应由执行者 CLI 自主撰写全文与提交 | Round 5 (`bdc177e`) | 将 `--auto` 生成的草稿默认标记 `signal: IMPLICIT` 或草稿态，要求人工或执行者显式确认后方可触发 E1 状态转移 | `v2.6.0` |
+
+---
+
+### 综合编排轨：检查点强归档防伪、组合根 Fail-Closed 与全适配器准则透传（`51fa456` 轮，Round 6 复审中）
+
+- **受审提交**：`51fa456`（涵盖提交 `51fa456`，基线 `bdc177e`，完整 SHA：`51fa456ada474818a1107f1a11b061661dab1063`）
+- **申请入口**：[`2026-09-10-review-request-51fa456.md`](2026-09-10-review-request-51fa456.md)
+- **前序处置报告**：[`2026-09-10-disposition-bdc177e.md`](2026-09-10-disposition-bdc177e.md)
+- **目标定级**：L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审
+- **本轮整改与特性清单（详见申请单与处置单）**：
+  1. **检查点正文与声明 Git Commit 强制强归档绑定（闭环 Codex P1-01、Claude P2-1、Grok P2-1、Pi-Qwen 条件②）**：在 Git 仓库环境下，`full_document` 必须通过 `git cat-file -e` 真实存在于声明的 `evidence_commit` 中，且 blob 内容 SHA-256 必须与工作树及 manifest 逐字节一致，未跟踪或事后未提交文件一律阻断；
+  2. **未知 executor CLI Fail-Closed 拦截（闭环 Codex P1-02、Grok P2-2）**：`get_adapter_for_executor()` 抛出 `ValueError`，组合根 `main.py get_orchestrator()` 捕获并以状态码 1 退出，禁止创建无适配器的 CODING 任务；
+  3. **七款适配器审查员提示词验收准则透传（闭环 Grok P2-3）**：全部 7 款适配器（Claude/Codex/OpenCode/Antigravity/Kimi/Pi/Cursor）统一注入验收准则；
+  4. **全量 173 项测试全绿**：新增 3 项针对性回归测试（覆盖未提交证据拒止、未知 CLI 阻断、全审查员准则透传），总测试数增至 173 项（100% PASS）。
+- **机验与质量门禁最新状态**：
+  - 自动化单元与集成测试：**173/173 PASS**（`Ran 173 tests in 71s, OK`）；
+  - 回归测试套件：`test_p1_closures_and_regressions.py` $\rightarrow$ **29/29 PASS**；
+  - Python 编译：`python3 -m compileall -q src tests` $\rightarrow$ `0 Errors`；
+  - 提交洁净度：`git show --check 51fa456ada474818a1107f1a11b061661dab1063` $\rightarrow$ `0 Errors`；
+  - 专家证据探针验证：Codex 归档复现脚本执行验证阻断生效（保持 `CODING`，拒绝越权推进）。
 
 ---
 
