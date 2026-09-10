@@ -18,8 +18,10 @@ import logging
 import os
 import shutil
 import sqlite3
+import subprocess
 import tempfile
 import unittest
+import yaml
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
@@ -1074,6 +1076,132 @@ class TestP1ClosuresAndRegressions(unittest.TestCase):
                 self.assertIn("Acceptance Criteria:", sent_prompt)
                 self.assertIn("REV_CRITERION_ALPHA", sent_prompt, f"{adapter.__class__.__name__} failed to include acceptance_criteria in review prompt")
                 self.assertIn("REV_CRITERION_BETA", sent_prompt, f"{adapter.__class__.__name__} failed to include acceptance_criteria in review prompt")
+
+    def test_checkpoint_symlink_evidence_rejected_fail_closed(self):
+        """Verify untracked symlinks, committed symlinks, and parent dir symlinks are rejected (Codex P1-51fa456-01)."""
+        from macao.core.types import AgentState
+        from macao.utils.git_utils import GitManager
+        from macao.workflow.orchestrator import Orchestrator
+
+        repo_dir = Path(tempfile.mkdtemp(prefix="macao-symlink-reg-"))
+        try:
+            subprocess.run(["git", "init", "-q", "-b", "main", str(repo_dir)], check=True)
+            subprocess.run(["git", "config", "user.name", "tester"], cwd=repo_dir, check=True)
+            subprocess.run(["git", "config", "user.email", "tester@example.com"], cwd=repo_dir, check=True)
+
+            # Setup real committed document
+            real_doc = repo_dir / "docs" / "reviews" / "real_doc.md"
+            real_doc.parent.mkdir(parents=True, exist_ok=True)
+            real_doc.write_text("# Legitimate Evidence\n", encoding="utf-8")
+            subprocess.run(["git", "add", "docs/reviews/real_doc.md"], cwd=repo_dir, check=True)
+
+            # Setup committed symlink (mode 120000)
+            committed_sym = repo_dir / "docs" / "reviews" / "committed_sym.md"
+            committed_sym.symlink_to("real_doc.md")
+            subprocess.run(["git", "add", "docs/reviews/committed_sym.md"], cwd=repo_dir, check=True)
+
+            # Setup parent dir symlink
+            outside_dir = repo_dir / "docs" / "outside"
+            outside_dir.mkdir(parents=True, exist_ok=True)
+            (outside_dir / "target.md").write_text("# Inside outside\n", encoding="utf-8")
+            parent_sym = repo_dir / "docs" / "reviews" / "sym_dir"
+            parent_sym.symlink_to("../outside")
+            subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+            subprocess.run(["git", "commit", "-qm", "initial repo state"], cwd=repo_dir, check=True)
+
+            head = GitManager(str(repo_dir)).get_head_commit()
+            real_sha = hashlib.sha256(real_doc.read_bytes()).hexdigest()
+
+            # Setup untracked symlink pointing to real_doc.md
+            untracked_sym = repo_dir / "docs" / "reviews" / "untracked_alias.md"
+            untracked_sym.symlink_to("real_doc.md")
+
+            config = {
+                "version": "2.5",
+                "team": {
+                    "executor": {"id": "dev", "cli": "mock-cli"},
+                    "reviewers": [{"id": "reviewer", "cli": "mock-cli"}],
+                },
+            }
+            orchestrator = Orchestrator(str(repo_dir), config=config)
+
+            # 1. Untracked symlink -> REJECT
+            t1 = orchestrator.start_task("untracked symlink test", "desc", force=True)
+            m1 = {
+                "version": "1.0",
+                "task_id": t1["task_id"],
+                "checkpoint_ref": head,
+                "review_round": 1,
+                "signal": "EXPLICIT",
+                "status": "ready_for_review",
+                "executor": {"id": "dev", "cli": "mock-cli"},
+                "full_document": {
+                    "path": "docs/reviews/untracked_alias.md",
+                    "evidence_commit": head,
+                    "sha256": real_sha,
+                },
+                "development": {
+                    "quality_metrics": {"tests_passed": True},
+                    "git": {"latest_commit": head},
+                },
+            }
+            (repo_dir / ".macao" / ".dev.yml").write_text(yaml.safe_dump(m1), encoding="utf-8")
+            ch1 = orchestrator.check_development_checkpoint(t1["task_id"])
+            self.assertIsNone(ch1, "Untracked symlink must be rejected")
+            self.assertEqual(orchestrator.store.get_task(t1["task_id"])["state"], AgentState.CODING.value)
+
+            # 2. Committed symlink -> REJECT
+            t2 = orchestrator.start_task("committed symlink test", "desc", force=True)
+            m2 = dict(m1)
+            m2["task_id"] = t2["task_id"]
+            m2["full_document"] = {
+                "path": "docs/reviews/committed_sym.md",
+                "evidence_commit": head,
+                "sha256": real_sha,
+            }
+            (repo_dir / ".macao" / ".dev.yml").write_text(yaml.safe_dump(m2), encoding="utf-8")
+            ch2 = orchestrator.check_development_checkpoint(t2["task_id"])
+            self.assertIsNone(ch2, "Committed symlink must be rejected")
+            self.assertEqual(orchestrator.store.get_task(t2["task_id"])["state"], AgentState.CODING.value)
+
+            # 3. Parent dir symlink -> REJECT
+            t3 = orchestrator.start_task("parent dir symlink test", "desc", force=True)
+            m3 = dict(m1)
+            m3["task_id"] = t3["task_id"]
+            m3["full_document"] = {
+                "path": "docs/reviews/sym_dir/target.md",
+                "evidence_commit": head,
+                "sha256": hashlib.sha256((outside_dir / "target.md").read_bytes()).hexdigest(),
+            }
+            (repo_dir / ".macao" / ".dev.yml").write_text(yaml.safe_dump(m3), encoding="utf-8")
+            ch3 = orchestrator.check_development_checkpoint(t3["task_id"])
+            self.assertIsNone(ch3, "Parent directory symlink must be rejected")
+            self.assertEqual(orchestrator.store.get_task(t3["task_id"])["state"], AgentState.CODING.value)
+
+            # 4. Legitimate regular committed file -> ADVANCE
+            t4 = orchestrator.start_task("regular file test", "desc", force=True)
+            m4 = dict(m1)
+            m4["task_id"] = t4["task_id"]
+            m4["full_document"] = {
+                "path": "docs/reviews/real_doc.md",
+                "evidence_commit": head,
+                "sha256": real_sha,
+            }
+            (repo_dir / ".macao" / ".dev.yml").write_text(yaml.safe_dump(m4), encoding="utf-8")
+            ch4 = orchestrator.check_development_checkpoint(t4["task_id"])
+            self.assertIsNotNone(ch4, "Legitimate committed regular file must advance")
+            self.assertEqual(orchestrator.store.get_task(t4["task_id"])["state"], AgentState.READY_FOR_REVIEW.value)
+        finally:
+            shutil.rmtree(repo_dir, ignore_errors=True)
+
+    def test_live_runner_passes_acceptance_criteria_to_dispatcher(self):
+        """Verify LiveWorkflowRunner forwards acceptance_criteria to dispatch_review_in_worktree (Claude P3-1)."""
+        import inspect
+        from macao.workflow.live_runner import LiveWorkflowRunner
+        src = inspect.getsource(LiveWorkflowRunner.run_live_cycle)
+        call_site = src[src.index("dispatch_review_in_worktree("):]
+        call_site = call_site[:call_site.index(")")+1]
+        self.assertIn("acceptance_criteria=", call_site, "LiveWorkflowRunner must pass acceptance_criteria to dispatcher")
 
 
 if __name__ == "__main__":

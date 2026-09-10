@@ -192,7 +192,6 @@ def get_orchestrator(project_root: str = ".") -> Orchestrator:
                 executor_adapter = LiveAgentDispatcher.get_adapter_for_executor(exec_cfg, project_root)
             except ValueError as e:
                 console.print(f"[bold red]Configuration Error:[/bold red] {e}")
-                click.echo(f"Configuration Error: {e}")
                 sys.exit(1)
 
     return Orchestrator(

@@ -1,4 +1,5 @@
 import os
+import stat
 import re
 import json
 import uuid
@@ -411,28 +412,79 @@ class Orchestrator:
         if not re.match(r"^[0-9a-fA-F]{64}$", str(doc_sha)) or str(doc_sha).lower() == "0" * 64:
             return None
 
-        doc_path = (self.root / doc_path_str).resolve()
+        # Path validation without resolving symlinks (Codex P1-51fa456-01 / Fail-closed)
+        norm_str = os.path.normpath(str(doc_path_str).strip())
+        if not norm_str or norm_str == "." or norm_str.startswith(".."):
+            return None
+
+        # Disallow absolute paths outside self.root, or obtain relative path
+        if os.path.isabs(norm_str):
+            p = Path(norm_str)
+            try:
+                rel_doc_path = p.relative_to(self.root)
+            except ValueError:
+                return None
+        else:
+            rel_doc_path = Path(norm_str)
+
+        # Disallow any traversal parts
+        if ".." in rel_doc_path.parts:
+            return None
+
+        doc_path = self.root / rel_doc_path
+
+        # Boundary check: ensure it stays within self.root
+        if not doc_path.is_relative_to(self.root):
+            return None
+
+        # Disallow symlinks: neither the target file nor any parent directory down from self.root may be a symlink
+        curr = doc_path
+        while curr != self.root and curr != curr.parent:
+            if curr.is_symlink():
+                return None
+            curr = curr.parent
+        if curr != self.root:
+            return None
+
+        # File must physically exist and be a regular file (os.lstat + O_NOFOLLOW to avoid following symlinks)
         try:
-            rel_doc_path = doc_path.relative_to(self.root.resolve())
-        except ValueError:
+            st = os.lstat(doc_path)
+        except OSError:
             return None
 
-        if not doc_path.is_relative_to(self.root.resolve()):
+        if not stat.S_ISREG(st.st_mode):
             return None
 
-        if not doc_path.exists() or not doc_path.is_file():
+        try:
+            fd = os.open(doc_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            with open(fd, "rb", closefd=True) as f:
+                file_bytes = f.read()
+        except OSError:
             return None
 
-        calc_sha = hashlib.sha256(doc_path.read_bytes()).hexdigest()
+        calc_sha = hashlib.sha256(file_bytes).hexdigest()
         if calc_sha.lower() != str(doc_sha).lower():
             return None
 
-        # In a git repository, the document MUST exist at evidence_commit and its blob content MUST match doc_sha (Codex P1-bdc177e-01 / Fail-closed)
+        # In a git repository:
+        # 1. The document MUST exist at evidence_commit and its blob content MUST match doc_sha (Codex P1-bdc177e-01 / Fail-closed)
+        # 2. In git tree, the object MUST be a regular blob (mode 100644 or 100755), not a symlink (mode 120000) (Codex P1-51fa456-01)
         if self.git and self.git.is_git_repository():
             rel_posix = rel_doc_path.as_posix()
             code, _, _ = self.git._run("cat-file", "-e", f"{latest_commit}:{rel_posix}")
             if code != 0:
                 return None
+
+            code, out, _ = self.git._run("ls-tree", latest_commit, rel_posix)
+            if code != 0 or not out:
+                return None
+            parts = out.strip().split()
+            if len(parts) < 2 or parts[1] != "blob":
+                return None
+            mode = parts[0]
+            if mode not in ("100644", "100755"):
+                return None
+
             blob_bytes = self.git.get_file_bytes_at_commit(latest_commit, rel_posix)
             if blob_bytes is None:
                 return None

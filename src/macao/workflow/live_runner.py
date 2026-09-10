@@ -149,6 +149,16 @@ class LiveWorkflowRunner:
         diff_txt = self.git.get_diff("main", dev_commit)
         dispatched_results = []
 
+        crit = task.get("acceptance_criteria") or ["unit_tests_pass"]
+        if isinstance(crit, dict):
+            crit_list = [f"{k}: {v}" for k, v in crit.items()]
+        elif isinstance(crit, list):
+            crit_list = [str(x) for x in crit]
+        elif isinstance(crit, str):
+            crit_list = [crit]
+        else:
+            crit_list = [str(crit)]
+
         for r_cfg in reviewers:
             r_id = r_cfg["id"]
             res = self.dispatcher.dispatch_review_in_worktree(
@@ -157,7 +167,8 @@ class LiveWorkflowRunner:
                 checkpoint_ref=dev_commit,
                 review_round=1,
                 diff_context=diff_txt,
-                timeout_sec=15.0
+                timeout_sec=15.0,
+                acceptance_criteria=crit_list
             )
             if res.get("status") != "SUCCESS":
                 raise RuntimeError(f"Review dispatch failed for {r_id}: {res.get('error')}")

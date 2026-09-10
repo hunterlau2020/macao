@@ -1,0 +1,77 @@
+CKPT zero_hash: advanced=False trigger=None state=CODING
+CKPT missing_path: advanced=False trigger=None state=CODING
+CKPT empty_sha: advanced=False trigger=None state=CODING
+CKPT wrong_id: advanced=False trigger=None state=CODING
+CKPT wrong_cli: advanced=False trigger=None state=CODING
+CKPT tampered: advanced=False trigger=None state=CODING
+CKPT outside_path: advanced=False trigger=None state=CODING
+CKPT empty_evidence: advanced=False trigger=None state=CODING
+CKPT missing_evidence: advanced=False trigger=None state=CODING
+CKPT unbound_evidence: advanced=False trigger=None state=CODING
+CKPT good_tracked: advanced=True trigger=E1_PRODUCED state=READY_FOR_REVIEW
+CKPT prefix_escape: advanced=False trigger=None state=CODING
+CKPT sibling_underscore: advanced=False trigger=None state=CODING
+CKPT blob_tamper: advanced=False trigger=None
+CKPT untracked: advanced=False git_cat_file_rc=128 trigger=None
+CKPT later_file_vs_head1: advanced=False head2=bded492f
+CKPT later_file_vs_head2: advanced=True
+WIRE mock-cli executor type=MockAgentAdapter id=dev-mock
+UNKNOWN factory raises=True msg="Unknown or unsupported CLI executor type: 'unknown-executor' (Fail-closed)"
+Configuration Error: Unknown or unsupported CLI executor type:
+'unknown-executor' (Fail-closed)
+Configuration Error: Unknown or unsupported CLI executor type: 'unknown-executor' (Fail-closed)
+UNKNOWN get_orchestrator SystemExit=True code=1
+UNKNOWN Orchestrator.__init__ ValueError=True
+UNKNOWN --no-probe rc=1 active=None out_has_cli=True
+UNKNOWN default --probe rc=1
+MISSING executor attr=True hasattr=False val='NOATTR'
+CRITERIA executor_all=True reviewer_all=True
+EXAMPLE validate_dev_manifest ok=True err=None
+L4 live_runner mock_cli+auto_signoff=True
+F26 claude no-cwd sessions=[]
+Pi cwd fallback still present=True
+SCHEMA sha256={'type': 'string'} evidence_commit={'type': 'string'}
+ADOPT dry-run rc=0
+UC11 adopt ghost rc=1 out="Cannot adopt task: Failed to parse macao.yaml: Invalid macao.yaml schema: \nValidation failed at 'team.reviewers': [{'adapter': 'pty-wrapper', 'cli': \n'mock-cli', 'id': 'r1', 'vote_weight': 1}] is too short\n"
+DOCTOR missing yaml rc=2
+---- RESULTS ----
+OK zero_hash: actual=False expected=False
+OK missing_path: actual=False expected=False
+OK empty_sha: actual=False expected=False
+OK wrong_id: actual=False expected=False
+OK wrong_cli: actual=False expected=False
+OK tampered: actual=False expected=False
+OK outside_path: actual=False expected=False
+OK empty_evidence: actual=False expected=False
+OK missing_evidence: actual=False expected=False
+OK unbound_evidence: actual=False expected=False
+OK good_tracked: actual=True expected=True
+OK prefix_escape: actual=False expected=False
+OK sibling_underscore: actual=False expected=False
+OK blob_tamper_tracked: actual=True expected=True
+OK untracked_not_in_git: actual=True expected=True
+OK untracked_blocked: actual=True expected=True
+OK later_file_declared_head1_blocked: actual=True expected=True
+OK later_file_declared_head2_ok: actual=True expected=True
+OK composition_root_wires_mock: actual=True expected=True
+OK unknown_executor_factory_raises: actual=True expected=True
+OK unknown_reviewer_raises: actual=True expected=True
+OK unknown_get_orchestrator_exits: actual=True expected=True
+OK unknown_orchestrator_init_raises: actual=True expected=True
+OK unknown_noprobe_nonzero: actual=True expected=True
+OK unknown_noprobe_no_active_task: actual=True expected=True
+OK unknown_noprobe_mentions_cli: actual=True expected=True
+OK unknown_probe_blocks: actual=True expected=True
+OK missing_executor_leaves_attr_unset: actual=True expected=True
+OK executor_criteria_in_prompt: actual=True expected=True
+OK reviewer_criteria_in_prompt: actual=True expected=True
+OK example_manifest_schema: actual=True expected=True
+OK l4_still_mock: actual=True expected=True
+OK f26_claude_no_cwd: actual=True expected=True
+OK pi_cwd_fallback_present: actual=True expected=True
+OK schema_sha256_still_unpatterned: actual=True expected=True
+OK schema_evidence_commit_still_unpatterned: actual=True expected=True
+OK uc11_e1_ghost_nonzero: actual=True expected=True
+OK doctor_missing_yaml_rc2: actual=True expected=True
+ALL_MATCH
+bad=

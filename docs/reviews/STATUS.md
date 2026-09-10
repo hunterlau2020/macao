@@ -42,23 +42,28 @@
 
 ---
 
-### 综合编排轨：检查点强归档防伪、组合根 Fail-Closed 与全适配器准则透传（`51fa456` 轮，Round 6 复审中）
+### 综合编排轨：检查点强归档防伪、组合根 Fail-Closed 与全适配器准则透传（`51fa456` 轮，共识仲裁：REWORK，已完成闭环处置）
 
 - **受审提交**：`51fa456`（涵盖提交 `51fa456`，基线 `bdc177e`，完整 SHA：`51fa456ada474818a1107f1a11b061661dab1063`）
 - **申请入口**：[`2026-09-10-review-request-51fa456.md`](2026-09-10-review-request-51fa456.md)
-- **前序处置报告**：[`2026-09-10-disposition-bdc177e.md`](2026-09-10-disposition-bdc177e.md)
+- **处置报告**：[`2026-09-10-disposition-51fa456.md`](2026-09-10-disposition-51fa456.md)
 - **目标定级**：L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审
-- **本轮整改与特性清单（详见申请单与处置单）**：
-  1. **检查点正文与声明 Git Commit 强制强归档绑定（闭环 Codex P1-01、Claude P2-1、Grok P2-1、Pi-Qwen 条件②）**：在 Git 仓库环境下，`full_document` 必须通过 `git cat-file -e` 真实存在于声明的 `evidence_commit` 中，且 blob 内容 SHA-256 必须与工作树及 manifest 逐字节一致，未跟踪或事后未提交文件一律阻断；
-  2. **未知 executor CLI Fail-Closed 拦截（闭环 Codex P1-02、Grok P2-2）**：`get_adapter_for_executor()` 抛出 `ValueError`，组合根 `main.py get_orchestrator()` 捕获并以状态码 1 退出，禁止创建无适配器的 CODING 任务；
-  3. **七款适配器审查员提示词验收准则透传（闭环 Grok P2-3）**：全部 7 款适配器（Claude/Codex/OpenCode/Antigravity/Kimi/Pi/Cursor）统一注入验收准则；
-  4. **全量 173 项测试全绿**：新增 3 项针对性回归测试（覆盖未提交证据拒止、未知 CLI 阻断、全审查员准则透传），总测试数增至 173 项（100% PASS）。
+- **四方独立评审结论（4 份报告 / 4 位专家）**：**待返工（REWORK / 3 票批准，1 票否决，遵循 Fail-Closed 原则闭环）**
+  - **Claude**：[`2026-09-10-review-result-51fa456-claude.md`](2026-09-10-review-result-51fa456-claude.md) → **YES_APPROVE**（0 项 P0, 0 项 P1, 0 项 P2, 1 项 P3：`live_runner.py` 演示调用点未转发 `acceptance_criteria`；已闭环）
+  - **Grok**：[`2026-09-10-review-result-51fa456-grok.md`](2026-09-10-review-result-51fa456-grok.md) → **YES_APPROVE**（0 项 P0, 0 项 P1, 0 项 P2, P3s：旧归档复现脚本断言旧漏洞、L4 OPS 维持）
+  - **Muse**：[`2026-09-10-review-result-51fa456-muse.md`](2026-09-10-review-result-51fa456-muse.md) → **YES_APPROVE**（0 项 P0, 0 项 P1, 1 项 P2：`mock.py` 演练回退说明；P3s：旧复现脚本断言、双重错误打印；已闭环）
+  - **Codex**：[`2026-09-10-review-result-51fa456-codex.md`](2026-09-10-review-result-51fa456-codex.md) → **REJECT**（1 项 P1：P1-51fa456-01 解析符号链接后校验 Git blob，未提交的声明路径仍可借用已提交正文放行；1 项 P2：P2-51fa456-02 申请引用的“专家复现脚本机验”非修复验证脚本；已彻底闭环）
+- **处置闭环状态（详见 [`2026-09-10-disposition-51fa456.md`](2026-09-10-disposition-51fa456.md)）**：
+  1. **禁止符号链接路径解析与 Git 树普通 Blob 强校验（闭环 Codex P1-51fa456-01）**：保留未解析词法相对路径，沿祖先目录严格检查禁止任何符号链接（`is_symlink()`）；使用 `os.lstat` + `O_NOFOLLOW` 强校验常规物理文件 (`stat.S_ISREG`)；通过 `git ls-tree` 严格断言模式必须为普通 blob（`100644`/`100755`），禁止符号链接（`120000`）；
+  2. **正向修复验证探针落地（闭环 Codex P2-51fa456-02、Grok P3-1、Muse A-2）**：在 `evidence/2026-09-10-51fa456-codex/verify_p1_51fa456_01_closed.py` 固化正向断言脚本（未跟踪、已提交、父目录符号链接均保持 CODING，常规文件放行，退出码 0）；
+  3. **`live_runner.py` 演示流程验收准则透传（闭环 Claude P3-1）**：`run_live_cycle` 显式转发 `acceptance_criteria=crit_list`；
+  4. **终端日志去重与 mock 演练说明补充（闭环 Muse A-1、Muse A-3）**：消除 `main.py` 组合根未知 CLI 报错双重打印；在 `mock.py` 明确注释说明回退创建仅限演练夹具简化；
+  5. **全量 175 项测试全绿**：新增 2 项针对性测试（符号链接多场景拒止、演示流程准则转发），总测试数增至 175 项（100% PASS）。
 - **机验与质量门禁最新状态**：
-  - 自动化单元与集成测试：**173/173 PASS**（`Ran 173 tests in 71s, OK`）；
-  - 回归测试套件：`test_p1_closures_and_regressions.py` $\rightarrow$ **29/29 PASS**；
+  - 自动化单元与集成测试：**175/175 PASS**（`Ran 175 tests in 69s, OK`）；
+  - 回归测试套件：`test_p1_closures_and_regressions.py` $\rightarrow$ **31/31 PASS**；
   - Python 编译：`python3 -m compileall -q src tests` $\rightarrow$ `0 Errors`；
-  - 提交洁净度：`git show --check 51fa456ada474818a1107f1a11b061661dab1063` $\rightarrow$ `0 Errors`；
-  - 专家证据探针验证：Codex 归档复现脚本执行验证阻断生效（保持 `CODING`，拒绝越权推进）。
+  - 独立验证探针运行：`verify_p1_51fa456_01_closed.py` $\rightarrow$ `ALL PASSED` (rc=0)。
 
 ---
 

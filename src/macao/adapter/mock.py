@@ -169,6 +169,9 @@ class MockAgentAdapter(AgentAdapter):
 
         if not rel_doc_path or not doc_sha:
             # Create real mock review document so full_document exists and SHA matches
+            # Note (Muse A-1 / Simulation Fallback): In mock simulation tests without pre-committed
+            # review documents, create a disk fixture. Production workflow strictly requires
+            # pre-committed evidence documents in Git (Fail-Closed).
             doc_dir = Path(project_root) / "docs" / "reviews"
             doc_dir.mkdir(parents=True, exist_ok=True)
             doc_file = doc_dir / f"review-request-{checkpoint_ref[:8]}.md"
