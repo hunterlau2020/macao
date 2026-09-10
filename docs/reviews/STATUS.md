@@ -3,30 +3,32 @@
 > 依据 `docs/MACAO_REVIEW_GUIDELINES.md` 维护；本文件是唯一允许记录实时门禁状态的位置。
 > 治理规则（P1-3 确立，已固化）：**每轮申请复审前，STATUS 必须与 `reviews/` 目录全量对账**，不得以 STATUS 登记子集为闭环核验边界。
 
-- **最新更新时间**：2026-09-10（提请 Commit `b90a40b` 第 7 轮终审申请 [`2026-09-10-review-request-b90a40b.md`](2026-09-10-review-request-b90a40b.md)，登记 Commit `51fa456` 第 6 轮处置单 `2026-09-10-disposition-51fa456.md` 与 4 份专家评审报告，总计结论类 **167 份**（163 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **48 份**、处置单 **6 份**，总计 222 份，双向对账 100% 吻合）
+- **最新更新时间**：2026-09-10（登记 Commit `b90a40b` 第 7 轮专家评审结论：Codex、Muse 均出具 `YES_APPROVE` 且零阻断，共识批准；正式授予并确认综合编排与代码轨 **L3 SCENARIO-VERIFIED / PG-2** 全量认证！总计结论类 **169 份**（165 `review-result-*` + 2 `review-2.5-*` + 2 `REVIEW_METHODOLOGY_*`）、申请类 **48 份**、处置单 **6 份**，总计 224 份，双向对账 100% 吻合）
 - **当前并行评审轨道**：
-  - **综合编排与探活轨（`b90a40b` 轮 Round 7 终审提请中；175 项测试全绿）**：
-    1. [`2026-09-10-review-request-b90a40b.md`](2026-09-10-review-request-b90a40b.md) → 最新复审申请（受审提交 **`b90a40b`**，闭环符号链接绝对阻断、Git 普通 Blob 强校验与演示准则透传）
-    2. [`2026-09-10-disposition-51fa456.md`](2026-09-10-disposition-51fa456.md) → 本轮处置与闭环报告（受审提交 **`51fa456`**，彻底闭环符号链接路径借壳逃逸、落真正向绿灯验证探针与演示调用点准则转发）
-    3. [`2026-09-10-review-request-51fa456.md`](2026-09-10-review-request-51fa456.md) → 前序复审申请（受审提交 **`51fa456`**）
-    4. 前序四方独立评审结论（共识仲裁：待返工 REWORK / 3 票批准，1 票否决，遵循 Fail-Closed 原则闭环）：
+  - **综合编排与探活轨（`b90a40b` 轮 Round 7 复审通过，L3 / PG-2 正式授予；175 项测试全绿）**：
+    1. [`2026-09-10-review-result-b90a40b-codex.md`](2026-09-10-review-result-b90a40b-codex.md) → **YES_APPROVE**（0 项 P0, 0 项 P1, 0 项 P2, 0 项 P3；确认 P1-51fa456-01 闭环，175/175 测试通过，授予 L3 / PG-2；L4 待 §7.2 十项 OPS 矩阵与实机演练）
+    2. [`2026-09-10-review-result-b90a40b-muse.md`](2026-09-10-review-result-b90a40b-muse.md) → **YES_APPROVE**（0 项 P0, 0 项 P1, 0 项 P2, 2 项 P3 建议项；确认前序阻断项全量闭环，授予 L3 / PG-2；L4 待 OPS 矩阵及人工代签演练）
+    3. [`2026-09-10-review-request-b90a40b.md`](2026-09-10-review-request-b90a40b.md) → 复审申请（受审提交 **`b90a40b`**，闭环符号链接绝对阻断、Git 普通 Blob 强校验与演示准则透传）
+    4. [`2026-09-10-disposition-51fa456.md`](2026-09-10-disposition-51fa456.md) → 前序处置与闭环报告（受审提交 **`51fa456`**）
+    5. [`2026-09-10-review-request-51fa456.md`](2026-09-10-review-request-51fa456.md) → 历史复审申请（受审提交 **`51fa456`**）
+    6. 前序四方独立评审结论（共识仲裁：待返工 REWORK / 3 票批准，1 票否决，遵循 Fail-Closed 原则闭环）：
        - [`2026-09-10-review-result-51fa456-claude.md`](2026-09-10-review-result-51fa456-claude.md) → **YES_APPROVE**（0 P0, 0 P1, 0 P2, 1 P3；演示调用点准则透传已在本次整改闭环）
        - [`2026-09-10-review-result-51fa456-grok.md`](2026-09-10-review-result-51fa456-grok.md) → **YES_APPROVE**（0 P0, 0 P1, 0 P2, P3s；正向断言探针已落地）
        - [`2026-09-10-review-result-51fa456-muse.md`](2026-09-10-review-result-51fa456-muse.md) → **YES_APPROVE**（0 P0, 0 P1, 1 P2；mock 说明与日志双重打印已闭环）
        - [`2026-09-10-review-result-51fa456-codex.md`](2026-09-10-review-result-51fa456-codex.md) → **REJECT**（1 项 P1：符号链接解析后借壳校验 Git blob；已彻底闭环）
-    5. [`2026-09-10-disposition-bdc177e.md`](2026-09-10-disposition-bdc177e.md) → 历史处置报告（受审提交 **`bdc177e`**）
-    6. [`2026-09-09-review-request-bdc177e.md`](2026-09-09-review-request-bdc177e.md) → 历史复审申请（受审提交 **`bdc177e`**）
-    7. [`2026-09-09-disposition-e06d44c.md`](2026-09-09-disposition-e06d44c.md) → 历史处置报告（受审提交 **`e06d44c`**）
-    8. [`2026-09-09-review-request-e06d44c.md`](2026-09-09-review-request-e06d44c.md) → 历史复审申请（受审提交 **`e06d44c`**）
-    9. [`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md) → 历史处置报告（`7bc8d70`）
-    10. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 历史复审申请（`7bc8d70`）
-    11. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 历史处置报告（`961bcfe`）
-    12. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 历史复审申请（`961bcfe`）
-    13. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`）
+    7. [`2026-09-10-disposition-bdc177e.md`](2026-09-10-disposition-bdc177e.md) → 历史处置报告（受审提交 **`bdc177e`**）
+    8. [`2026-09-09-review-request-bdc177e.md`](2026-09-09-review-request-bdc177e.md) → 历史复审申请（受审提交 **`bdc177e`**）
+    9. [`2026-09-09-disposition-e06d44c.md`](2026-09-09-disposition-e06d44c.md) → 历史处置报告（受审提交 **`e06d44c`**）
+    10. [`2026-09-09-review-request-e06d44c.md`](2026-09-09-review-request-e06d44c.md) → 历史复审申请（受审提交 **`e06d44c`**）
+    11. [`2026-09-08-disposition-7bc8d70.md`](2026-09-08-disposition-7bc8d70.md) → 历史处置报告（`7bc8d70`）
+    12. [`2026-09-08-review-request-7bc8d70.md`](2026-09-08-review-request-7bc8d70.md) → 历史复审申请（`7bc8d70`）
+    13. [`2026-09-07-disposition-961bcfe.md`](2026-09-07-disposition-961bcfe.md) → 历史处置报告（`961bcfe`）
+    14. [`2026-09-07-review-request-961bcfe.md`](2026-09-07-review-request-961bcfe.md) → 历史复审申请（`961bcfe`）
+    15. [`2026-09-07-disposition-d042395.md`](2026-09-07-disposition-d042395.md) → 历史处置报告（`d042395`）
   - **文档轨（前序申请）**：[`2026-09-04-review-request-95b7b35.md`](2026-09-04-review-request-95b7b35.md)（目标 L1 / PG-0，被审提交 `95b7b35`）
   - **历史代码轨（已被本轮合并涵盖）**：[`2026-09-01-review-request-Phase3-PG3-L4-Certification.md`](2026-09-01-review-request-Phase3-PG3-L4-Certification.md)（目标 L4 / PG-3，被审提交 `42b5c07`）
 - **当前定级状态**：
-  - **综合编排与代码轨**：维持既有编排引擎 **L3 SCENARIO-VERIFIED / PG-2**（`4e38ed6` 轮）；`51fa456` 轮共识仲裁为 **REWORK**，经 `b90a40b` 彻底闭环所有阻断项，测试增至 175 项全绿，提请 Round 7 终审认证。
+  - **综合编排与代码轨**：**正式授予并确认 L3 SCENARIO-VERIFIED / PG-2 全量认证**（在 `b90a40b` 轮经 Codex 与 Muse 独立复审，历史 P0/P1/P2 阻断项全部彻底闭环清零，自动化测试 175 项全绿，正向断言探针机验通过）；L4 RELEASE-READY / PG-3 暂不准入（保持 UNKNOWN，待按 Guidelines §7.2 补齐 10 项 OPS 矩阵与真实人工接管实机演练）。
   - **文档体系定级**：维持 **PRD v2.3.1 的 L1 / PG-0**。
 
 ---
@@ -44,12 +46,15 @@
 
 ---
 
-### 综合编排轨：符号链接绝对阻断、Git 树普通 Blob 强校验与演示准则透传（`b90a40b` 轮，Round 7 复审中）
+### 综合编排轨：符号链接绝对阻断、Git 树普通 Blob 强校验与演示准则透传（`b90a40b` 轮，Round 7 复审通过，L3 SCENARIO-VERIFIED / PG-2 正式授予）
 
 - **受审提交**：`b90a40b`（涵盖提交 `b90a40b`，基线 `51fa456`，完整 SHA：`b90a40b6a59fc3e35bad38e5f77d2324f3453845`）
 - **申请入口**：[`2026-09-10-review-request-b90a40b.md`](2026-09-10-review-request-b90a40b.md)
 - **前序处置报告**：[`2026-09-10-disposition-51fa456.md`](2026-09-10-disposition-51fa456.md)
-- **目标定级**：L3 SCENARIO-VERIFIED / PG-2 全量认证，并提请 L4 RELEASE-READY / PG-3 准入评审
+- **目标定级与裁决结果**：**授予 L3 SCENARIO-VERIFIED / PG-2 全量认证**；L4 RELEASE-READY / PG-3 暂不准入（保持 UNKNOWN，待后续按 §7.2 开展 10 项 OPS 矩阵与人工接管实机演练）。
+- **两方独立复审结论（2 份报告 / 2 位专家）**：**全票一致批准（YES_APPROVE × 2，0 项 P0, 0 项 P1, 0 项 P2，零阻断项）**
+  - **Codex**：[`2026-09-10-review-result-b90a40b-codex.md`](2026-09-10-review-result-b90a40b-codex.md) → **YES_APPROVE**（0 项 P0, 0 项 P1, 0 项 P2, 0 项 P3；确认 P1-51fa456-01 闭环，175/175 与 31/31 测试通过，独立正向探针通过；授予 L3 / PG-2；L4 待 §7.2 矩阵补齐）
+  - **Muse**：[`2026-09-10-review-result-b90a40b-muse.md`](2026-09-10-review-result-b90a40b-muse.md) → **YES_APPROVE**（0 项 P0, 0 项 P1, 0 项 P2, 2 项 P3 建议项：A-1 词法 root 注记，A-2 L4 存续项；确认前序阻断项全部闭环，授予 L3 / PG-2）
 - **本轮整改与特性清单（详见申请单与处置单）**：
   1. **符号链接绝对阻断与 Git 树普通 Blob 强校验（闭环 Codex P1-51fa456-01）**：保留未解析词法相对路径，严格检查路径自身及其祖先目录禁止任何符号链接；通过 `os.lstat` + `O_NOFOLLOW` 强校验常规物理文件；通过 `git ls-tree` 严格断言模式必须为普通 blob（`100644`/`100755`），禁止符号链接（`120000`）；
   2. **正向修复验证探针落地（闭环 Codex P2-51fa456-02、Grok P3-1、Muse A-2）**：在 `evidence/2026-09-10-51fa456-codex/verify_p1_51fa456_01_closed.py` 固化正向断言脚本（未跟踪、已提交、父目录符号链接均保持 CODING，常规文件放行，退出码 0）；
