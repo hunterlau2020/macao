@@ -287,7 +287,7 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
     )
     rev_table.add_column("Agent ID", style="bold cyan")
     rev_table.add_column("CLI & Model (Weight & Sess)", style="yellow")
-    rev_table.add_column("Status", style="bold")
+    rev_table.add_column("CLI Status", style="bold")
     rev_table.add_column("Worktree (Sandbox / Repo)", style="white")
     rev_table.add_column("Review Progress & Verdict", style="bold")
 
@@ -343,9 +343,23 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
             model_spec = ""
         r_cli_display = f"{r.get('cli')}{model_spec} (w:{r.get('weight', 1.0)})"
 
+        r_sess = r.get("session")
+        if r_sess:
+            r_sid_short = str(r_sess.get("session_id", ""))[:8]
+            r_s_name = r_sess.get("session_name")
+            r_tot = r_sess.get("total_sessions", 1)
+            r_tot_suffix = f" [1 of {r_tot}]" if r_tot > 1 else ""
+            if r_s_name and r_s_name != r_sid_short:
+                r_sess_line = f"sess: {r_s_name} ({r_sid_short}...){r_tot_suffix}"
+            else:
+                r_sess_line = f"sess: {r_sid_short}...{r_tot_suffix}"
+            r_sess_cell = f"{r_cli_display}\n[dim cyan]{r_sess_line}[/dim cyan]\n[dim]({r_sess.get('last_active', 'active')})[/dim]"
+        else:
+            r_sess_cell = f"{r_cli_display}\n[dim]no session[/dim]"
+
         rev_table.add_row(
             str(r.get("id")),
-            f"{r_cli_display}\n[dim]{(r.get('session') or {}).get('session_name') or 'no session'}[/dim]",
+            r_sess_cell,
             rst_text,
             wt_cell,
             r_prog_disp
@@ -402,7 +416,8 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
 
     q_achieve = quorum.get("achievable", False)
     q_str = f"{quorum.get('ready_count')}/{quorum.get('total_configured')} seats ({quorum.get('total_effective_weight', 0.0):.1f}w) [Req: min {min_w} win, {seat_q} seat-q, {weight_q:.1f} wt-q]"
-    summary_table.add_row("Consensus Quorum", q_str, "[bold green]ACHIEVABLE[/bold green]" if q_achieve else "[bold red]BLOCKED[/bold red]")
+    achieve_disp = "[bold green]ACHIEVABLE (达到法定仲裁席位)[/bold green]" if q_achieve else "[bold red]BLOCKED (可用席位不足)[/bold red]"
+    summary_table.add_row("Consensus Quorum", q_str, achieve_disp)
 
     console.print(summary_table)
 
@@ -414,11 +429,17 @@ def render_team_probe_report(probe: Dict[str, Any], dry_run: bool = False) -> No
         if not active:
             if phys_reviews.get("has_pending_request"):
                 missing = phys_reviews.get("missing_reviewers", [])
-                missing_str = f" Awaiting: {', '.join(missing)}." if missing else ""
-                console.print(
-                    f"  [cyan]• Detected pending review request: '{phys_reviews.get('latest_request_file')}' (Baseline: {phys_reviews.get('latest_request_baseline', '')[:8]}).{missing_str}[/cyan]\n"
-                    "  [dim]• Run 'macao task adopt' to adopt this in-flight review into MACAO without resetting state.[/dim]\n"
-                )
+                if missing:
+                    missing_str = f" Awaiting: {', '.join(missing)}."
+                    console.print(
+                        f"  [cyan]• Detected pending review request: '{phys_reviews.get('latest_request_file')}' (Baseline: {phys_reviews.get('latest_request_baseline', '')[:8]}).{missing_str}[/cyan]\n"
+                        "  [dim]• Run 'macao task adopt' to adopt this in-flight review into MACAO without resetting state.[/dim]\n"
+                    )
+                else:
+                    console.print(
+                        f"  [cyan]• Detected completed review request: '{phys_reviews.get('latest_request_file')}' (Baseline: {phys_reviews.get('latest_request_baseline', '')[:8]}). All {len(phys_reviews.get('submitted_reviewers', []))} reviewer(s) submitted.[/cyan]\n"
+                        "  [dim]• Run 'macao task adopt' to adopt into MACAO and evaluate consensus.[/dim]\n"
+                    )
             elif not git.get("is_clean", True):
                 console.print(
                     f"  [yellow]• Note: Detected active development in working tree ({git.get('modified_files_count', 0)} uncommitted files).[/yellow]\n"
@@ -470,3 +491,58 @@ def render_task_adopt_plan(plan: Dict[str, Any], dry_run: bool = False) -> None:
     table.add_row("Review Dispatch Policy", "Dispatch to missing reviewers" if plan.get("review") else "Deferred (--no-review)")
 
     console.print(table)
+
+    rev_details = plan.get("reviewers_detail", [])
+    if rev_details:
+        rtable = Table(title="Reviewers Adoption & Session Status", border_style="blue")
+        rtable.add_column("Reviewer ID", style="bold cyan")
+        rtable.add_column("CLI & Model", style="yellow")
+        rtable.add_column("Session (ID & Active)", style="white")
+        rtable.add_column("CLI Status", style="bold")
+        rtable.add_column("Progress & Verdict", style="bold")
+
+        for rd in rev_details:
+            rst_color = "green" if rd.get("status") == "READY" else "red"
+            rst_text = f"[{rst_color}]{rd.get('status', 'READY')}[/{rst_color}]"
+
+            m_spec = f" ({rd.get('model')})" if rd.get("model") else ""
+            cli_col = f"{rd.get('cli')}{m_spec}"
+
+            sid = rd.get("session_id")
+            sname = rd.get("session_name")
+            lact = rd.get("last_active")
+            if sid:
+                sid_short = str(sid)[:8]
+                if sname and sname != sid_short:
+                    sess_text = f"{sname} ({sid_short}...)\n[dim]({lact or 'active'})[/dim]"
+                else:
+                    sess_text = f"{sid_short}...\n[dim]({lact or 'active'})[/dim]"
+            else:
+                sess_text = "[dim]no session[/dim]"
+
+            prog = rd.get("progress", "IDLE")
+            vote = rd.get("vote")
+            if prog == "COMPLETED":
+                if vote == "YES_APPROVE":
+                    prog_text = "[bold green]COMPLETED (APPROVED)[/bold green]"
+                elif vote == "NO_APPROVE":
+                    prog_text = "[bold red]COMPLETED (CHANGES_REQ)[/bold red]"
+                elif vote == "ABSTAIN":
+                    prog_text = "[yellow]COMPLETED (ABSTAINED)[/yellow]"
+                else:
+                    prog_text = f"[bold green]COMPLETED ({vote})[/bold green]"
+            elif prog == "IN_PROGRESS":
+                prog_text = "[bold yellow]IN_PROGRESS (Reviewing...)[/bold yellow]"
+            elif prog == "AWAITING_REVIEW":
+                prog_text = "[bold cyan]AWAITING_REVIEW[/bold cyan]"
+            else:
+                prog_text = f"[dim]{prog}[/dim]"
+
+            rtable.add_row(
+                str(rd.get("id")),
+                cli_col,
+                sess_text,
+                rst_text,
+                prog_text
+            )
+        console.print(rtable)

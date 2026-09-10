@@ -235,11 +235,8 @@ class TeamProber:
                             stem_lower = rf.stem.lower()
                             if configured_reviewers:
                                 for r in configured_reviewers:
-                                    r_id = (r.get("id") or "").lower()
-                                    r_cli = (r.get("cli") or "").lower()
-                                    if r_id and (r_id in stem_lower or stem_lower.endswith(f"-{r_id}")):
-                                        submitted_reviewers.add(r.get("id"))
-                                    elif r_cli and (r_cli in stem_lower or stem_lower.endswith(f"-{r_cli}")):
+                                    cand_tokens = self._get_reviewer_candidate_tokens(r)
+                                    if self._matches_reviewer_tokens(stem_lower, cand_tokens):
                                         submitted_reviewers.add(r.get("id"))
 
                     info["matching_results"] = matching
@@ -249,13 +246,16 @@ class TeamProber:
                         all_ids = [r.get("id") for r in configured_reviewers if r.get("id")]
                         missing = [rid for rid in all_ids if rid not in submitted_reviewers]
                         info["missing_reviewers"] = missing
-                        info["has_pending_request"] = (len(missing) > 0)
+                        info["has_pending_request"] = True
+                        info["all_reviewers_submitted"] = (len(missing) == 0 and len(submitted_reviewers) > 0)
                     else:
                         info["missing_reviewers"] = []
-                        info["has_pending_request"] = (len(matching) == 0)
+                        info["has_pending_request"] = True
+                        info["all_reviewers_submitted"] = (len(matching) > 0)
                 else:
                     info["has_pending_request"] = True
                     info["missing_reviewers"] = [r.get("id") for r in (configured_reviewers or []) if r.get("id")]
+                    info["all_reviewers_submitted"] = False
 
         return info
 
@@ -413,6 +413,150 @@ class TeamProber:
                     return True
             except Exception:
                 pass
+        return False
+
+    @staticmethod
+    def _get_reviewer_candidate_tokens(r: Dict[str, Any]) -> List[str]:
+        """Extracts candidate search tokens for matching reviewer result files."""
+        r_id = (r.get("id") or "").lower()
+        r_cli = (r.get("cli") or "").lower()
+        r_model = (r.get("model") or "").lower()
+        tokens = set()
+
+        if r_id:
+            tokens.add(r_id)
+            for prefix in ("rev-", "dev-", "reviewer-", "rev_", "dev_"):
+                if r_id.startswith(prefix):
+                    core = r_id[len(prefix):]
+                    if core:
+                        tokens.add(core)
+
+        if r_cli:
+            tokens.add(r_cli)
+            for sub in r_cli.replace("_", "-").split("-"):
+                if len(sub) >= 2:
+                    tokens.add(sub)
+
+        # Cross-CLI / Model / Vendor mappings
+        if any(t in tokens for t in ("cursor", "agent")):
+            tokens.update(["cursor", "agent", "grok"])
+        if any(t in tokens for t in ("claude", "claude-code")):
+            tokens.update(["claude", "sonnet", "anthropic"])
+        if any(t in tokens for t in ("codex", "openai")):
+            tokens.update(["codex", "gpt", "openai", "o3", "o1"])
+        if any(t in tokens for t in ("pi", "glm")):
+            tokens.update(["pi", "qwen", "glm", "muse"])
+        if any(t in tokens for t in ("kimi", "moonshot")):
+            tokens.update(["kimi", "moonshot"])
+        if any(t in tokens for t in ("opencode",)):
+            tokens.update(["opencode"])
+        if any(t in tokens for t in ("agy", "antigravity")):
+            tokens.update(["agy", "antigravity", "gemini"])
+
+        if r_model:
+            import re
+            words = re.findall(r"[a-zA-Z]{3,}", r_model)
+            tokens.update(w.lower() for w in words)
+
+        return list(tokens)
+
+    @staticmethod
+    def _matches_reviewer_tokens(filename_or_stem: str, tokens: List[str]) -> bool:
+        """Checks if a review file matches reviewer tokens."""
+        import re
+        fname = filename_or_stem.lower()
+        parts = set(re.split(r"[-_.]+", fname))
+        for t in tokens:
+            if t in parts:
+                return True
+            if f"-{t}" in fname or f"_{t}" in fname or f"{t}-" in fname:
+                return True
+            if fname.endswith(f"-{t}.md") or fname.endswith(f"_{t}.md"):
+                return True
+        return False
+
+    @staticmethod
+    def _extract_vote_from_file(file_path: Path) -> Tuple[str, str]:
+        """Extracts vote verdict and summary from a physical markdown review file."""
+        if not file_path.exists():
+            return "SUBMITTED", ""
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return "SUBMITTED", ""
+
+        import re
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
+        for i, line in enumerate(lines):
+            line_l = line.lower()
+            if "verdict:" in line_l or "decision:" in line_l or "vote:" in line_l:
+                if any(w in line_l for w in ("yes_approve", "approve", "approved", "lgtm", "pass")):
+                    return "YES_APPROVE", line
+                elif any(w in line_l for w in ("no_approve", "reject", "changes_requested", "changes_req", "fail")):
+                    return "NO_APPROVE", line
+                elif "abstain" in line_l:
+                    return "ABSTAIN", line
+
+            if re.search(r"结论[：:]\s*\*{0,2}不通过", line):
+                return "NO_APPROVE", line
+            if re.search(r"结论[：:]\s*\*{0,2}通过", line):
+                return "YES_APPROVE", line
+            if re.match(r"^#+\s*结论", line):
+                for nxt in lines[i+1:i+4]:
+                    if "**不通过" in nxt or "不通过" in nxt:
+                        return "NO_APPROVE", nxt
+                    if "**通过" in nxt or "通过" in nxt:
+                        return "YES_APPROVE", nxt
+
+        for line in lines:
+            if line.startswith("**不通过") or line.startswith("> 结论：**不通过") or line.startswith("结论：**不通过"):
+                return "NO_APPROVE", line
+            if line.startswith("**通过") or line.startswith("> 结论：**通过") or line.startswith("结论：**通过"):
+                return "YES_APPROVE", line
+
+        for line in reversed(lines):
+            if "**不通过**" in line or "不通过。" in line:
+                return "NO_APPROVE", line
+            if "**通过**" in line or "**通过。**" in line:
+                return "YES_APPROVE", line
+
+        return "SUBMITTED", lines[0] if lines else ""
+
+    @staticmethod
+    def _is_session_recently_active(session: Optional[Dict[str, Any]], max_age_seconds: float = 1800.0) -> bool:
+        """Checks if a session has recent activity within max_age_seconds."""
+        if not session:
+            return False
+        import time
+        from datetime import datetime
+
+        if "mtime" in session:
+            try:
+                if time.time() - float(session["mtime"]) <= max_age_seconds:
+                    return True
+            except Exception:
+                pass
+
+        sfile = session.get("session_file")
+        if sfile:
+            try:
+                sf = Path(sfile)
+                if sf.exists() and (time.time() - sf.stat().st_mtime) <= max_age_seconds:
+                    return True
+            except Exception:
+                pass
+
+        last_act = session.get("last_active")
+        if last_act:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S.%f"):
+                try:
+                    dt = datetime.strptime(last_act.split("+")[0], fmt)
+                    age = (datetime.now() - dt).total_seconds()
+                    if 0 <= age <= max_age_seconds:
+                        return True
+                    break
+                except ValueError:
+                    continue
         return False
 
     def probe(self) -> Dict[str, Any]:
@@ -676,12 +820,14 @@ class TeamProber:
                 base_sha = review_facts["latest_request_baseline"]
                 reviews_dir = self.project_root / "docs" / "reviews"
                 if reviews_dir.exists():
-                    for res_file in reviews_dir.glob(f"*{base_sha}*.md"):
+                    cand_tokens = self._get_reviewer_candidate_tokens(r)
+                    for res_file in sorted(reviews_dir.glob(f"*{base_sha}*.md"), key=lambda f: f.stat().st_mtime, reverse=True):
                         fname = res_file.name.lower()
-                        if r_id.lower() in fname or r_cli.lower() in fname:
+                        if self._matches_reviewer_tokens(fname, cand_tokens):
                             manifest_found = True
-                            vote = "SUBMITTED"
-                            summary = f"Physical review submitted: {res_file.name}"
+                            extracted_vote, vote_sum = self._extract_vote_from_file(res_file)
+                            vote = extracted_vote
+                            summary = vote_sum or f"Physical review submitted: {res_file.name}"
                             try:
                                 mf_path = str(res_file.relative_to(self.project_root))
                             except Exception:
@@ -692,6 +838,8 @@ class TeamProber:
             r_status_display = "IDLE"
             r_details = "Standby (Awaiting task dispatch)"
 
+            has_recent_sess = self._is_session_recently_active(r_session) or self._has_recent_reviewer_session(r_id)
+
             if manifest_found and vote:
                 r_progress = "COMPLETED"
                 r_status_display = f"COMPLETED ({vote})"
@@ -699,16 +847,14 @@ class TeamProber:
             elif active_task:
                 t_state = active_task.get("state", "IDLE")
                 if t_state in ("WAITING_REVIEW", "IN_REVIEW"):
-                    if r_wt_exists and r_wt_status == "ACTIVE":
-                        has_recent = self._has_recent_reviewer_session(r_id)
-                        if has_recent:
-                            r_progress = "IN_PROGRESS"
-                            r_status_display = "IN_PROGRESS (Reviewing...)"
-                            r_details = "Active review CLI session running in isolated worktree"
-                        else:
-                            r_progress = "IN_PROGRESS"
-                            r_status_display = "IN_PROGRESS"
-                            r_details = "Worktree allocated; waiting for review completion"
+                    if has_recent_sess:
+                        r_progress = "IN_PROGRESS"
+                        r_status_display = "IN_PROGRESS (Reviewing...)"
+                        r_details = "Active review CLI session running"
+                    elif r_wt_exists and r_wt_status == "ACTIVE":
+                        r_progress = "IN_PROGRESS"
+                        r_status_display = "IN_PROGRESS"
+                        r_details = "Worktree allocated; waiting for review completion"
                     else:
                         r_progress = "PENDING"
                         r_status_display = "PENDING (Queued)"
@@ -727,9 +873,14 @@ class TeamProber:
                     r_details = f"Task in state {t_state}"
             elif review_facts.get("has_pending_request"):
                 base_disp = (review_facts.get("latest_request_baseline") or "HEAD")[:8]
-                r_progress = "AWAITING_REVIEW"
-                r_status_display = f"AWAITING_REVIEW (@ {base_disp})"
-                r_details = f"Review requested for commit {base_disp}; ready to review"
+                if has_recent_sess:
+                    r_progress = "IN_PROGRESS"
+                    r_status_display = "IN_PROGRESS (Reviewing...)"
+                    r_details = f"Active review CLI session running for {base_disp}"
+                else:
+                    r_progress = "AWAITING_REVIEW"
+                    r_status_display = f"AWAITING_REVIEW (@ {base_disp})"
+                    r_details = f"Review requested for commit {base_disp}; ready to review"
 
             r_info = {
                 "id": r_id,

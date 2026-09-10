@@ -16,8 +16,16 @@ class TestCleanAndRollback(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix="macao_test_clean_")
         self.project_root = Path(self.tmpdir)
+        self.old_agmsg = os.environ.get("AGMSG_DIR")
+        self.test_agmsg = Path(self.tmpdir) / "agmsg"
+        self.test_agmsg.mkdir(parents=True, exist_ok=True)
+        os.environ["AGMSG_DIR"] = str(self.test_agmsg)
 
     def tearDown(self):
+        if self.old_agmsg is not None:
+            os.environ["AGMSG_DIR"] = self.old_agmsg
+        else:
+            os.environ.pop("AGMSG_DIR", None)
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_init_and_init_flag_alias(self):
@@ -203,10 +211,12 @@ class TestCleanAndRollback(unittest.TestCase):
             try:
                 # Provide inputs:
                 # 1. Project name: enter (default)
-                # 2. Executor: enter (default)
-                # 3. Reviewers: "1,2,3,4"
-                # 4. Git confirm: enter (default)
-                res = runner.invoke(cli, ["init", "--force"], input="\n\n1,2,3,4\n\n")
+                # 2. Team name: enter (default)
+                # 3. AGMSG create choice: enter (default [1]) if agmsg present
+                # 4. Executor: enter (default)
+                # 5. Reviewers: "1,2,3,4"
+                # 6. Git confirm: enter (default)
+                res = runner.invoke(cli, ["init", "--force"], input="\n\n\n\n1,2,3,4\n\n")
                 self.assertEqual(res.exit_code, 0, f"Init failed: {res.output}")
 
                 content = Path("macao.yaml").read_text(encoding="utf-8")

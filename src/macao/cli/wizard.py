@@ -287,7 +287,8 @@ def format_annotated_macao_yaml(
     default_branch: str,
     executor: Dict[str, Any],
     reviewers: List[Dict[str, Any]],
-    ci_gate_command: Optional[str] = None
+    ci_gate_command: Optional[str] = None,
+    team_name: Optional[str] = None
 ) -> str:
     """Formats a macao.yaml document with rich Chinese inline comments for every field."""
     rev_count = len(reviewers)
@@ -303,16 +304,19 @@ def format_annotated_macao_yaml(
         r_w = r.get("vote_weight", 1)
         r_model = r.get("model")
         model_comment = f"\n      # model: \"{r_model}\"" if r_model else ""
+        agmsg_line = f"\n      agmsg_member_id: \"{r['agmsg_member_id']}\"" if r.get("agmsg_member_id") else ""
         rev_entries.append(f"""    - id: "{r_id}"            # 审查员席位唯一标识符 (rev-<cli>)
       cli: "{r_cli}"               # 调用的底层 AI 命令行工具
       adapter: "{r_adp}"     # 隔离适配器类型 (pty-wrapper 伪终端隔离)
-      vote_weight: {r_w}             # 审查席位投票权重{model_comment}""")
+      vote_weight: {r_w}             # 审查席位投票权重{agmsg_line}{model_comment}""")
 
     reviewers_yaml_str = "\n\n".join(rev_entries)
 
     ci_repr = f'"{ci_gate_command}"' if ci_gate_command else "null"
     remote_repr = f'"{remote_name}"' if remote_name else "null"
     exec_model_line = f'\n    # model: "{executor["model"]}"' if executor.get("model") else ""
+    exec_agmsg_line = f'\n    agmsg_member_id: "{executor["agmsg_member_id"]}"' if executor.get("agmsg_member_id") else ""
+    team_name_line = f'  # 团队名称标识符（对齐 agmsg 消息总线与团队成员拓扑）\n  name: "{team_name}"\n\n' if team_name else ""
 
     content = f"""# ==============================================================================
 # MACAO 多 Agent 协同编排配置文件 (macao.yaml)
@@ -340,11 +344,11 @@ project:
 # 2. 多 Agent 团队配置（开发执行者与独立审查团）
 # ------------------------------------------------------------------------------
 team:
-  # 主开发执行者：负责根据任务需求编写代码、运行自测并提交就绪检查点
+{team_name_line}  # 主开发执行者：负责根据任务需求编写代码、运行自测并提交就绪检查点
   executor:
     id: "{executor['id']}"             # 执行者唯一标识符（统一命名: dev-<cli>）
     cli: "{executor['cli']}"           # 调用的底层 AI 命令行工具
-    adapter: "{executor['adapter']}"   # 通信适配器类型 (claude-hook / pty-wrapper){exec_model_line}
+    adapter: "{executor['adapter']}"   # 通信适配器类型 (claude-hook / pty-wrapper){exec_agmsg_line}{exec_model_line}
 
   # 独立审查团：在隔离工作树（Git Worktree）中并发独立审查代码并投票
   reviewers:
@@ -452,7 +456,8 @@ def generate_smart_config(
     executor_cli: Optional[str] = None,
     executor_model: Optional[str] = None,
     reviewers: Optional[List[Dict[str, Any]]] = None,
-    detected_clis: Optional[List[Dict[str, Any]]] = None
+    detected_clis: Optional[List[Dict[str, Any]]] = None,
+    team_name: Optional[str] = None
 ) -> Dict[str, Any]:
     """Generates a valid, customized macao.yaml dictionary based on detected environment."""
     git_info = detect_git_context(project_root)
@@ -509,6 +514,13 @@ def generate_smart_config(
     for r in reviewers:
         r.setdefault("vote_weight", 1)
 
+    team_cfg = {
+        "executor": exec_info,
+        "reviewers": reviewers
+    }
+    if team_name:
+        team_cfg["name"] = team_name
+
     config_data = {
         "version": "2.5",
         "project": {
@@ -519,10 +531,7 @@ def generate_smart_config(
                 "default_branch": git_info["branch"]
             }
         },
-        "team": {
-            "executor": exec_info,
-            "reviewers": reviewers
-        },
+        "team": team_cfg,
         "policy": {
             "consensus_rule": "weighted_2/3_v1",
             "dictator_cap_enabled": True,
@@ -566,7 +575,8 @@ def run_interactive_init(
     non_interactive: bool = False,
     force: bool = False,
     custom_executor: Optional[str] = None,
-    custom_model: Optional[str] = None
+    custom_model: Optional[str] = None,
+    custom_team: Optional[str] = None
 ) -> Dict[str, Any]:
     """Interactive & intelligent setup wizard to configure macao.yaml with Chinese comments."""
     console.print(Panel.fit(
@@ -597,7 +607,56 @@ def run_interactive_init(
     else:
         proj_name = click.prompt("1. 请输入项目名称", default=default_name)
 
-    # 2. Probe AI Agent CLIs
+    # 2. Team Name & AGMSG Discovery
+    from macao.utils.agmsg_bridge import (
+        get_agmsg_dir,
+        get_agmsg_teams,
+        load_agmsg_team,
+        find_team_for_project,
+        map_team_members_by_cli,
+        register_agmsg_member,
+        resolve_agmsg_type
+    )
+
+    agmsg_available = (get_agmsg_dir() is not None)
+    detected_team = find_team_for_project(project_root) if agmsg_available else None
+    avail_teams = get_agmsg_teams() if agmsg_available else []
+
+    if custom_team:
+        selected_team = custom_team.strip()
+    elif non_interactive:
+        selected_team = detected_team or proj_name
+    else:
+        console.print("\n[bold green]2. 团队标识与消息总线配置 (Team & AGMSG):[/bold green]")
+        if avail_teams:
+            console.print(f"  • agmsg 已有团队列表: [cyan]{', '.join(avail_teams)}[/cyan]")
+        if detected_team:
+            console.print(f"  • 探查到当前项目关联团队: [bold green]{detected_team}[/bold green]")
+        default_team = detected_team or proj_name
+        selected_team = click.prompt("   请输入团队名称 (Team Name)", default=default_team).strip()
+
+    team_data = load_agmsg_team(selected_team) if agmsg_available else None
+    team_members_map = {}
+    should_register_agmsg = False
+
+    if team_data:
+        console.print(f"  [green]✓ 识别到已有 agmsg 团队 '{selected_team}'，将读取团队配置并自动对齐各席位成员 ID[/green]")
+        team_members_map = map_team_members_by_cli(team_data, project_root)
+    else:
+        if agmsg_available and not non_interactive:
+            console.print(f"\n  [yellow]提示: agmsg 中不存在团队 '{selected_team}'。[/yellow]")
+            choice = click.prompt(
+                "   请选择: [1] 在 agmsg 中自动创建该团队并注册成员 (默认)  [2] 取消并退出初始化",
+                default="1"
+            ).strip()
+            if choice == "2":
+                console.print("[yellow]已取消初始化，保持现有配置不变。[/yellow]")
+                return {}
+            should_register_agmsg = True
+        elif agmsg_available:
+            should_register_agmsg = True
+
+    # 3. Probe AI Agent CLIs
     detected_clis = probe_available_clis()
     console.print(f"\n[bold green]✓ 探查到本机已安装 {len(detected_clis)} 款 AI Agent CLI 工具:[/bold green]")
     for idx, c in enumerate(detected_clis, 1):
@@ -613,7 +672,7 @@ def run_interactive_init(
             {"id": "kimi", "cli": "kimi", "version": "0.41.0", "binary": "kimi"}
         ]
 
-    # 3. Choose Executor
+    # 4. Choose Executor
     if custom_executor:
         exec_cand = next((c for c in detected_clis if c["id"] == custom_executor or c["cli"] == custom_executor), {"id": custom_executor, "cli": custom_executor})
     elif non_interactive:
@@ -624,7 +683,7 @@ def run_interactive_init(
             if c["id"] in ("claude-code", "claude"):
                 default_idx = str(idx)
                 break
-        choice_idx = click.prompt(f"\n2. 请选择主开发执行者 (Executor) 序号 [1-{len(detected_clis)}]", default=default_idx)
+        choice_idx = click.prompt(f"\n3. 请选择主开发执行者 (Executor) 序号 [1-{len(detected_clis)}]", default=default_idx)
         try:
             sel_i = int(choice_idx) - 1
             exec_cand = detected_clis[sel_i] if 0 <= sel_i < len(detected_clis) else detected_clis[0]
@@ -634,9 +693,17 @@ def run_interactive_init(
     executor_info = get_canonical_agent_info(exec_cand["id"], role="dev")
     if custom_model:
         executor_info["model"] = custom_model
-    console.print(f"  [cyan]✓ 已选定主开发执行者:[/cyan] [bold]{executor_info['id']}[/bold] (调取命令: {executor_info['cli']}, 适配器: {executor_info['adapter']})")
 
-    # 4. Reviewers
+    exec_agmsg_type = resolve_agmsg_type(executor_info["cli"])
+    if exec_agmsg_type in team_members_map:
+        mapped_id = team_members_map[exec_agmsg_type]
+        executor_info["id"] = mapped_id
+        executor_info["agmsg_member_id"] = mapped_id
+        console.print(f"  [cyan]✓ 主开发执行者自动对齐 agmsg 成员 ID:[/cyan] [bold]{mapped_id}[/bold] (调取命令: {executor_info['cli']}, 适配器: {executor_info['adapter']})")
+    else:
+        console.print(f"  [cyan]✓ 已选定主开发执行者:[/cyan] [bold]{executor_info['id']}[/bold] (调取命令: {executor_info['cli']}, 适配器: {executor_info['adapter']})")
+
+    # 5. Reviewers
     rem_candidates = [c for c in detected_clis if c["id"] != exec_cand["id"]]
     if len(rem_candidates) < 2:
         rem_candidates.append({"id": "codex", "cli": "codex"})
@@ -649,7 +716,7 @@ def run_interactive_init(
     if non_interactive:
         final_reviewers = recommended_reviewers
     else:
-        console.print(f"\n[bold green]3. 独立代码审查团队配置 (Reviewers，共检测到 {len(recommended_reviewers)} 位可用专家席位):[/bold green]")
+        console.print(f"\n[bold green]4. 独立代码审查团队配置 (Reviewers，共检测到 {len(recommended_reviewers)} 位可用专家席位):[/bold green]")
         for idx, r in enumerate(recommended_reviewers, 1):
             console.print(f"  [{idx}] [bold white]{r['id']}[/bold white] (调取命令: {r['cli']}, 适配器: {r['adapter']}, 投票权重: 1)")
 
@@ -667,12 +734,20 @@ def run_interactive_init(
             else:
                 console.print(f"[red]✗ 输入解析后仅识别到 {len(chosen_revs)} 位审查员。根据 Draft-07 仲裁规范，至少需要 2 位审查员才能达成法定仲裁席位，请重新输入。[/red]")
 
-    # 5. Git & CI
+    # Align reviewers with agmsg team members if available
+    for r in final_reviewers:
+        r_agmsg_type = resolve_agmsg_type(r["cli"])
+        if r_agmsg_type in team_members_map:
+            mapped_r_id = team_members_map[r_agmsg_type]
+            r["id"] = mapped_r_id
+            r["agmsg_member_id"] = mapped_r_id
+
+    # 6. Git & CI
     git_info = detect_git_context(project_root)
     ci_cmd = detect_ci_command(project_root)
 
     if not non_interactive:
-        console.print(f"\n[bold green]4. Git 仓库合并主干与远端设置:[/bold green]")
+        console.print(f"\n[bold green]5. Git 仓库合并主干与远端设置:[/bold green]")
         console.print(f"  • 目标主干分支 (default_branch): [bold white]{git_info['branch']}[/bold white]")
         console.print(f"  • Git 远端名称 (remote_name): [bold white]{git_info['remote'] or '无 (null)'}[/bold white]")
         use_git = click.confirm("是否采用探查到的 Git 主干分支与远端设置？", default=True)
@@ -681,7 +756,7 @@ def run_interactive_init(
             user_remote = click.prompt("请输入 Git 远端名称 (若为纯本地仓库请留空)", default=git_info["remote"] or "")
             git_info["remote"] = user_remote.strip() if user_remote.strip() else None
 
-    # 6. Format annotated YAML
+    # 7. Format annotated YAML
     yaml_str = format_annotated_macao_yaml(
         project_name=proj_name,
         workspace_path=".",
@@ -689,28 +764,42 @@ def run_interactive_init(
         default_branch=git_info["branch"],
         executor=executor_info,
         reviewers=final_reviewers,
-        ci_gate_command=ci_cmd
+        ci_gate_command=ci_cmd,
+        team_name=selected_team
     )
 
-    # 7. Validate
+    # 8. Validate
     dict_data = yaml.safe_load(yaml_str)
     is_val, err = validate_config(dict_data)
     if not is_val:
         raise ValueError(f"生成的配置未通过 Draft-07 Schema 校验: {err}")
 
-    # 8. Write file
+    # 9. Write file
     target_file.write_text(yaml_str, encoding="utf-8")
     console.print(f"\n[bold green]✓ 成功生成带详尽中文注释的配置文件: {target_path}[/bold green]")
 
-    # 9. Update .gitignore
+    # 10. Auto-register in agmsg if creating new team
+    if should_register_agmsg and agmsg_available:
+        reg_count = 0
+        s1, _ = register_agmsg_member(selected_team, executor_info["id"], executor_info["cli"], project_root)
+        if s1:
+            reg_count += 1
+        for r in final_reviewers:
+            s2, _ = register_agmsg_member(selected_team, r["id"], r["cli"], project_root)
+            if s2:
+                reg_count += 1
+        console.print(f"[green]✓ 已在 agmsg 中创建团队 '{selected_team}' 并自动注册 {reg_count} 位席位成员！[/green]")
+
+    # 11. Update .gitignore
     isolated = ensure_gitignore_isolation(project_root)
     if isolated:
         console.print("[green]✓ 已向 .gitignore 自动追加 .macao/ 运行时隔离规则[/green]")
 
-    # 10. Summary
+    # 12. Summary
     console.print(Panel.fit(
         f"[bold cyan]MACAO 项目初始化配置完成[/bold cyan]\n\n"
         f"• 项目名称: [bold white]{proj_name}[/bold white]\n"
+        f"• 团队标识: [bold magenta]{selected_team}[/bold magenta]\n"
         f"• 开发执行者: [bold green]{executor_info['id']}[/bold green] (CLI: {executor_info['cli']})\n"
         f"• 独立审查团: [bold yellow]{', '.join(r['id'] for r in final_reviewers)}[/bold yellow] (共 {len(final_reviewers)} 个席位)\n"
         f"• 仲裁机制: [magenta]加权 2/3 共识仲裁 (通过最少需要 {dict_data['policy']['seat_quorum_required']} 票)[/magenta]\n\n"

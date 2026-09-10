@@ -295,11 +295,13 @@ def preflight():
 @click.option("--path", default="macao.yaml", help="Path to create macao.yaml")
 @click.option("-y", "--yes", is_flag=True, help="Non-interactive mode with default settings")
 @click.option("-f", "--force", is_flag=True, help="Force overwrite existing configuration")
-def init_cmd(path: str = "macao.yaml", yes: bool = False, force: bool = False):
+@click.option("-t", "--team", "team_name", default=None, help="Team name (integrates with agmsg)")
+def init_cmd(path: str = "macao.yaml", yes: bool = False, force: bool = False, team_name: Optional[str] = None):
     """Initialize macao.yaml configuration with interactive wizard and Chinese comments."""
     from macao.cli.wizard import run_interactive_init
     project_root = Path(".").resolve()
-    run_interactive_init(project_root=project_root, target_path=path, non_interactive=yes, force=force)
+    run_interactive_init(project_root=project_root, target_path=path, non_interactive=yes, force=force, custom_team=team_name)
+
 
 
 @cli.command()
@@ -562,18 +564,19 @@ def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout
 
     # Scenario C physical state determination
     if has_pending:
-        is_partial = len(submitted_reviewers) > 0
-        phys_st_name = (
-            f"态 3: 在途部分落票审查中 (已出票 {len(submitted_reviewers)}/{len(submitted_reviewers)+len(missing_reviewers)})"
-            if is_partial else
-            "态 2: 在途已提审待落票 (WAITING_REVIEW)"
-        )
+        total_revs = len(submitted_reviewers) + len(missing_reviewers)
+        if len(missing_reviewers) == 0 and len(submitted_reviewers) > 0:
+            phys_st_name = f"态 3: 在途全员已出票 (已出票 {len(submitted_reviewers)}/{total_revs}，可直接仲裁)"
+        elif len(submitted_reviewers) > 0:
+            phys_st_name = f"态 3: 在途部分落票审查中 (已出票 {len(submitted_reviewers)}/{total_revs})"
+        else:
+            phys_st_name = "态 2: 在途已提审待落票 (WAITING_REVIEW)"
         target_st = AgentState.WAITING_REVIEW
         checkpoint_ref = latest_baseline or head_commit
         task_id = f"task-adopt-{checkpoint_ref[:8]}"
         title = latest_title or f"Adopted Review Request @ {checkpoint_ref[:8]}"
         assigned_role = "Reviewers Team"
-        assigned_agents = missing_reviewers
+        assigned_agents = missing_reviewers if missing_reviewers else submitted_reviewers
         executor_status = "STANDBY (Preserved; no coding dispatched)"
     elif not is_clean:
         phys_st_name = f"态 1: 在途编码未提审 ({mod_count} uncommitted file(s))"
@@ -602,6 +605,24 @@ def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout
             )
             sys.exit(1)
 
+    revs_probe = probe_result.get("reviewers", [])
+    reviewers_detail = []
+    for r in revs_probe:
+        reviewers_detail.append({
+            "id": r.get("id"),
+            "cli": r.get("cli"),
+            "model": r.get("model"),
+            "weight": r.get("weight", 1.0),
+            "status": r.get("status", "READY"),
+            "session_id": (r.get("session") or {}).get("session_id"),
+            "session_name": (r.get("session") or {}).get("session_name"),
+            "last_active": (r.get("session") or {}).get("last_active"),
+            "progress": r.get("review", {}).get("progress"),
+            "vote": r.get("review", {}).get("vote"),
+            "summary": r.get("review", {}).get("summary"),
+            "manifest_path": r.get("review", {}).get("manifest_path"),
+        })
+
     adopt_plan = {
         "scenario": "Scenario C (In-Flight Brownfield Adoption / UC-11)",
         "physical_state": phys_st_name,
@@ -614,6 +635,7 @@ def task_adopt(from_request: Optional[str], dry_run: bool, review: bool, timeout
         "executor_status": executor_status,
         "missing_reviewers": missing_reviewers if has_pending else [],
         "submitted_reviewers": submitted_reviewers if has_pending else [],
+        "reviewers_detail": reviewers_detail,
         "review": review
     }
 
